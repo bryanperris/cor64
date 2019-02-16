@@ -1,0 +1,11 @@
+﻿// N64 MIPS vr4300 CPU instruction set
+
+arch(n64_cpu) =
+#include "directives.md"
+#include "mips1.md"
+#include "mips1cop0.md"
+#include "mips1cop1.md"
+#include "mips1divmul.md"
+#include "mips2.md"
+#include "mips3.md"
+;

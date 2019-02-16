@@ -1,0 +1,242 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{587CC6FC-600B-4D2A-9373-68319FF3B943}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>cor64</RootNamespace>
+    <AssemblyName>cor64</AssemblyName>
+    <TargetFrameworkVersion>v4.7.1</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x86'">
+    <DebugSymbols>true</DebugSymbols>
+    <OutputPath>bin\x86\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DebugType>full</DebugType>
+    <PlatformTarget>x86</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x86'">
+    <OutputPath>bin\x86\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Optimize>true</Optimize>
+    <DebugType>pdbonly</DebugType>
+    <PlatformTarget>x86</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
+    <DebugSymbols>true</DebugSymbols>
+    <OutputPath>bin\x64\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DebugType>full</DebugType>
+    <PlatformTarget>x64</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">
+    <OutputPath>bin\x64\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Optimize>true</Optimize>
+    <DebugType>pdbonly</DebugType>
+    <PlatformTarget>x64</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Configuration" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.Numerics" />
+    <Reference Include="System.Runtime.Serialization" />
+    <Reference Include="System.ServiceModel" />
+    <Reference Include="System.Transactions" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Xml" />
+    <Reference Include="NLog">
+      <HintPath>..\packages\NLog.4.5.11\lib\net45\NLog.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="AssemblyTextSource.cs" />
+    <Compile Include="BassSharp\Bass.cs" />
+    <Compile Include="BassSharp\Bass_Analyze.cs" />
+    <Compile Include="BassSharp\Bass_Evaluate.cs" />
+    <Compile Include="BassSharp\Bass_Assemble.cs" />
+    <Compile Include="BassSharp\Bass_Execute.cs" />
+    <Compile Include="BassSharp\Bass_SymFile.cs" />
+    <Compile Include="BassSharp\Bass_Utility.cs" />
+    <Compile Include="BassSharp\Block.cs" />
+    <Compile Include="BassSharp\Constant.cs" />
+    <Compile Include="BassSharp\Define.cs" />
+    <Compile Include="BassSharp\Directives.cs" />
+    <Compile Include="BassSharp\ErrorException.cs" />
+    <Compile Include="BassSharp\Eval\Evaluator.cs" />
+    <Compile Include="BassSharp\Eval\Literalhelper.cs" />
+    <Compile Include="BassSharp\Eval\Node.cs" />
+    <Compile Include="BassSharp\Eval\Parser.cs" />
+    <Compile Include="BassSharp\Instruction.cs" />
+    <Compile Include="BassSharp\ISource.cs" />
+    <Compile Include="BassSharp\ITarget.cs" />
+    <Compile Include="BassSharp\Macro.cs" />
+    <Compile Include="BassSharp\Frame.cs" />
+    <Compile Include="BassSharp\Parameter.cs" />
+    <Compile Include="BassSharp\StringHelper.cs" />
+    <Compile Include="BassSharp\Table\BassTable.cs" />
+    <Compile Include="BassSharp\Table\DirectiveParser.cs" />
+    <Compile Include="BassSharp\Table\Format.cs" />
+    <Compile Include="BassSharp\Table\Opcode.cs" />
+    <Compile Include="BassSharp\Table\Prefix.cs" />
+    <Compile Include="BassSharp\Token.cs" />
+    <Compile Include="BassSharp\Variable.cs" />
+    <Compile Include="BinarySource.cs" />
+    <Compile Include="BootManager.cs" />
+    <Compile Include="GameSerial.cs" />
+    <Compile Include="IO\ByteSwapping.cs" />
+    <Compile Include="IO\BlockDevice.cs" />
+    <Compile Include="IO\CartridgeBlock.cs" />
+    <Compile Include="IO\DmaBlockDevice.cs" />
+    <Compile Include="IO\MemoryBlock.cs" />
+    <Compile Include="IO\MemMappedBuffer.cs" />
+    <Compile Include="IO\N64MemoryController.cs" />
+    <Compile Include="IO\PinnedBuffer.cs" />
+    <Compile Include="IO\PtrHelper.cs" />
+    <Compile Include="IO\Rdram.cs" />
+    <Compile Include="IO\StreamEx.cs" />
+    <Compile Include="IO\UnifiedMemModel.cs" />
+    <Compile Include="Mips\BaseInterpreter.cs" />
+    <Compile Include="Mips\BasicBlock.cs" />
+    <Compile Include="Mips\BinaryInstruction.cs" />
+    <Compile Include="Mips\ArithmeticOp.cs" />
+    <Compile Include="Mips\ChipInterface.cs" />
+    <Compile Include="Mips\Clock.cs" />
+    <Compile Include="Mips\CoreUtils.cs" />
+    <Compile Include="Mips\FpuValueType.cs" />
+    <Compile Include="Mips\DecodedInstruction.cs" />
+    <Compile Include="Mips\BaseDisassembler.cs" />
+    <Compile Include="Mips\ExceptionFlags.cs" />
+    <Compile Include="Mips\IWatchableRegister.cs" />
+    <Compile Include="Mips\DataMemory.cs" />
+    <Compile Include="Mips\MipsException.cs" />
+    <Compile Include="Mips\Opcode.cs" />
+    <Compile Include="Mips\OpcodeFactory.cs" />
+    <Compile Include="Mips\ProcessorMode.cs" />
+    <Compile Include="Mips\R4300I\Cop0RegsterSet.cs" />
+    <Compile Include="Mips\R4300I\CP0\CauseFlags.cs" />
+    <Compile Include="Mips\R4300I\CP0\CauseRegister.cs" />
+    <Compile Include="Mips\R4300I\CP0\Cop0Controller.cs" />
+    <Compile Include="Mips\R4300I\CP0\StatusFlags.cs" />
+    <Compile Include="Mips\R4300I\CP0\StatusRegister.cs" />
+    <Compile Include="Mips\R4300I\CTS.cs" />
+    <Compile Include="Mips\R4300I\Disassembler.cs" />
+    <Compile Include="Mips\ExecutionFlags.cs" />
+    <Compile Include="Mips\R4300I\CP1\FpuInterpreter.cs" />
+    <Compile Include="Mips\R4300I\CP1\SimpleFpu.cs" />
+    <Compile Include="Mips\R4300I\ILRecompiler.cs" />
+    <Compile Include="Mips\R4300I\ILRecompiler_Bridge.cs" />
+    <Compile Include="Mips\R4300I\Interpreter.cs" />
+    <Compile Include="Mips\R4300I\Opcodes.cs" />
+    <Compile Include="BassSharp\Table\Number.cs" />
+    <Compile Include="Mips\R4300I\DecodeTable.cs" />
+    <Compile Include="Mips\R4300I\SimpleInterpreter.cs" />
+    <Compile Include="Mips\RegBoundType.cs" />
+    <Compile Include="Mips\UInt128.cs" />
+    <Compile Include="Mips\VirtualBreakpointException.cs" />
+    <Compile Include="Mips\VMemStream.cs" />
+    <Compile Include="MSIL\CLRValueType.cs" />
+    <Compile Include="MSIL\ILBasicBlock.cs" />
+    <Compile Include="MSIL\ILCodeEmitter.cs" />
+    <Compile Include="N64Assembler.cs" />
+    <Compile Include="N64CTS.cs" />
+    <Compile Include="N64System.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Mips\OperandType.cs" />
+    <Compile Include="Mips\R4300I\ABI.cs" />
+    <Compile Include="Mips\R4300I\Operands.cs" />
+    <Compile Include="RCP\PIMemory.cs" />
+    <Compile Include="RCP\RGBComponent.cs" />
+    <Compile Include="RCP\SerialMemory.cs" />
+    <Compile Include="RCP\SPStatusRegister.cs" />
+    <Compile Include="RCP\Video.cs" />
+    <Compile Include="RegionType.cs" />
+    <Compile Include="IO\DummyMemory.cs" />
+    <Compile Include="Cartridge.cs" />
+    <Compile Include="SecurityChipsetType.cs" />
+    <Compile Include="SingleThreadHost.cs" />
+    <Compile Include="Utils\Crc32HashAlgorithm.cs" />
+    <Compile Include="Utils\CartridgeRomChecksum.cs" />
+    <Compile Include="RCP\SignalProcessorMemory.cs" />
+    <Compile Include="Debugging\NamedMemorySection.cs" />
+    <Compile Include="Debugging\MemoryDebugger.cs" />
+    <Compile Include="IO\PerpherialDevice.cs" />
+    <Compile Include="Mips\Analysis\ProgramTrace.cs" />
+    <Compile Include="Mips\Analysis\InfoBasicBlock.cs" />
+    <Compile Include="Mips\Analysis\InfoBasicBlockInstruction.cs" />
+    <Compile Include="Mips\Analysis\InfoBasicBlockLink.cs" />
+    <Compile Include="Mips\Analysis\BlockOptimizer.cs" />
+    <Compile Include="Mips\ExecutionState.cs" />
+    <Compile Include="PIF\PIFMemory.cs" />
+    <Compile Include="CommonExtensions.cs">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Compile>
+    <Compile Include="RCP\VideoControlReg.cs" />
+    <Compile Include="SpecialRegisterStruct32.cs" />
+    <Compile Include="Mips\R4300I\InstructionHelper.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="BassSharp\Table\n64-cpu.arch" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="BassSharp\Table\directives.md" />
+    <EmbeddedResource Include="BassSharp\Table\mips1-pseudo.md" />
+    <EmbeddedResource Include="BassSharp\Table\mips1.md" />
+    <EmbeddedResource Include="BassSharp\Table\mips1cop0.md" />
+    <EmbeddedResource Include="BassSharp\Table\mips1cop1.md" />
+    <EmbeddedResource Include="BassSharp\Table\mips1divmul.md" />
+    <EmbeddedResource Include="BassSharp\Table\mips2.md" />
+    <EmbeddedResource Include="BassSharp\Table\mips3.md" />
+    <EmbeddedResource Include="BassSharp\Table\n64-rdp.arch" />
+    <EmbeddedResource Include="BassSharp\Table\n64-rsp.arch" />
+  </ItemGroup>
+  <ItemGroup />
+  <ItemGroup />
+  <ItemGroup>
+    <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup />
+  <ItemGroup />
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>
