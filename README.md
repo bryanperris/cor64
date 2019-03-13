@@ -11,5 +11,6 @@ This is a work-in-progress freetime project
  * Mupen64: https://github.com/mupen64plus/mupen64plus-core
  * Cent64: https://github.com/n64dev/cen64
 
-![Alt text](.github/testscreen.png?raw=true "Test Screenshot")
+![Alt text](.github/mandelbrot.png?raw=true "Mandelbrot Test")
 ![Alt text](.github/fputest1.png?raw=true "FPU Add Test")
+![Alt text](.github/testscreen.png?raw=true "Test Screenshot")
