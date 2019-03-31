@@ -120,7 +120,7 @@ namespace RunN64.Forms
                 if (m_SourceBitmap != null)
                     m_SourceBitmap.Dispose();
 
-                m_SourceBitmap = new SKBitmap(m_VideoInterface.Width, m_VideoInterface.Height, SKColorType.Rgba8888, SKAlphaType.Unpremul);
+                m_SourceBitmap = new SKBitmap(m_VideoInterface.Width, m_VideoInterface.Height, SKColorType.Rgba8888, SKAlphaType.Opaque);
             }
         }
 
@@ -136,7 +136,7 @@ namespace RunN64.Forms
                         break;
                     }
                 case VideoControlReg.PIXELMODE_16BPP: ReadRGB555(); break;
-                case VideoControlReg.PIXRLMODE_32BPP: ReadRGBA8888(); break;
+                case VideoControlReg.PIXELMODE_32BPP: ReadRGBA8888(); break;
             }
 
             if (m_SourceBitmap != null)
@@ -178,6 +178,24 @@ namespace RunN64.Forms
             return (int)GuiCommon.HackerPaint.TextSize * text.Length;
         }
 
+        private static float ComputeScaleFactor(float srcW, float srcH, float dstW, float dstH)
+        {
+            float dstRatio = dstW / dstH;
+            float srcRatio = srcW / srcH;
+            float scaleFactor = 0.0f;
+
+            if (dstRatio > srcRatio)
+            {
+                scaleFactor = dstH / srcH;
+            }
+            else
+            {
+                scaleFactor = dstW / srcW;
+            }
+
+            return scaleFactor;
+        }
+
         private void RenderN64Framebuffer(SKCanvas canvas)
         {
             int strPos = 0;
@@ -207,13 +225,13 @@ namespace RunN64.Forms
 
                 DrawString(colorMode, canvas, strPos, 0);
 
-                if (m_SourceBitmap.Width < RES_X || m_SourceBitmap.Height < RES_Y)
-                {
-                    float sf = (float)RES_Y / (float)m_SourceBitmap.Height;
-                    canvas.Scale(sf);
-                }
+                float sf = ComputeScaleFactor(m_SourceBitmap.Width, m_SourceBitmap.Height, RES_X, RES_Y);
 
-                canvas.DrawBitmap(m_FramebufferBitmap, new SKPoint(2, BAR_HEIGHT));
+                canvas.Scale(sf);
+
+                canvas.DrawBitmap(m_FramebufferBitmap, new SKPoint(1, BAR_HEIGHT / sf));
+
+                canvas.ResetMatrix();
             }
 
             canvas.Flush();

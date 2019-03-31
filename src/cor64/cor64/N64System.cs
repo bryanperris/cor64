@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 using NLog;
 using System.IO;
+using cor64.Mips.R4300I;
 
 namespace cor64
 {
@@ -39,8 +40,10 @@ namespace cor64
 
         public N64System CPU(BaseInterpreter interpreter)
         {
-            Log.Info("Using CPU Engine: {0}", interpreter.Description);
+            Log.Info("MIPS R4300I CPU Engine: {0}", interpreter.Description);
+
             m_CPU = interpreter;
+
             interpreter.AttachIStream(m_Memory.CreateMemoryStream());
             interpreter.AttachDStream(m_Memory.CreateMemoryStream());
             interpreter.HookInterface(m_Memory);

@@ -16,5 +16,7 @@ namespace cor64.Tests.Cpu
         void TestExpectations();
 
         void SetProcessorMode(ProcessorMode mode);
+
+        
     }
 }

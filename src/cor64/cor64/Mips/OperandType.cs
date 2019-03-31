@@ -11,15 +11,21 @@ namespace cor64.Mips
         I_TIS,
         I_SI,
         I_FTIS,
+
         Cop0_CT,
         Cop0_TC,
         TLB,
-        BCZ,
+
+        Bc1,
+
         Cop1_DST,
         Cop1_DS,
         Cop1_TS,
         Cop1_TC,
         Cop1_CT,
+        Cop1_FromCtrl,
+        Cop1_ToCtrl,
+
         R_DTA,
         R_DTS,
         R_S,

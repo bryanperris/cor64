@@ -88,19 +88,19 @@ namespace cor64.Tests.Cpu
 
             if (typeof(uint) == type)
             {
-                State.FPR_32[index] = (uint)value;
+                State.FPR.S32[index] = value;
             }
             else if (typeof(ulong) == type)
             {
-                State.FPR_64[index] = (ulong)value;
+                State.FPR.S64[index] = value;
             }
             else if (typeof(float) == type)
             {
-                State.FPR_FLOAT[index] = (float)value;
+                State.FPR.F32[index] = value;
             }
             else if (typeof(double) == type)
             {
-                State.FPR_DOUBLE[index] = (double)value;
+                State.FPR.F64[index] = value;
             }
             else {
                 throw new ArgumentException("invalid type to set fpr value");

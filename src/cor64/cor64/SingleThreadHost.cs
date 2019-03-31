@@ -4,11 +4,14 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using cor64.Mips.R4300I;
+using NLog;
 
 namespace cor64
 {
     public class SingleThreadHost
     {
+        private static readonly Logger Log = LogManager.GetCurrentClassLogger();
         private N64System m_System;
         private bool m_Running;
         private Exception m_Exception;
@@ -28,6 +31,8 @@ namespace cor64
 
             try
             {
+                Log.Debug("CPU execution starting at 0x{0:X8}", ((CoreR4300I)m_System.DeviceCPU).ReadPC());
+
                 while (true)
                 {
                     if (m_Exception != null)

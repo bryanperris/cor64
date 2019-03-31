@@ -38,10 +38,6 @@ namespace cor64.Mips.R4300I
         public static readonly Opcode BGEZAL = Define(Branch, "bgezal", I_STI, ArithmeticOp.GREATER_THAN_OR_EQUAL, Link);
         public static readonly Opcode BLTZALL = Define(Branch, "bltzall", I_STI, ArithmeticOp.LESS_THAN_OR_EQUAL, Link | Likely);
         public static readonly Opcode BGEZALL = Define(Branch, "bgezall", I_STI, ArithmeticOp.GREATER_THAN_OR_EQUAL, Link | Likely);
-        public static readonly Opcode BC1F = Define(BranchFpu, "bc1f", BCZ, ArithmeticOp.FALSE, ExecutionFlags.None, Cp1);
-        public static readonly Opcode BC1T = Define(BranchFpu, "bc1t", BCZ, ArithmeticOp.TRUE, ExecutionFlags.None, Cp1);
-        public static readonly Opcode BC1FL = Define(BranchFpu, "bc1fl", BCZ, ArithmeticOp.FALSE, Likely, Cp1);
-        public static readonly Opcode BC1TL = Define(BranchFpu, "bc1tl", BCZ, ArithmeticOp.TRUE, Likely, Cp1);
 
         /* ALU */
         public static readonly Opcode ADDI = Define(Reg, "addi", I_TSI, Immediate);
@@ -106,8 +102,6 @@ namespace cor64.Mips.R4300I
         public static readonly Opcode LL = Define(Load, "ll", I_TIS, Link | Data32);
         public static readonly Opcode LLD = Define(Load, "lld", I_FTIS, Link | Data64);
         public static readonly Opcode LD = Define(Load, "ld", I_TIS, Data64);
-        public static readonly Opcode LDC1 = Define(LoadFpu, "ldc1", I_FTIS);
-        public static readonly Opcode LWC1 = Define(LoadFpu, "lwc1", I_FTIS);
 
         /* Memory Storing */
         public static readonly Opcode SB = Define(Store, "sb", I_TIS, Data8);
@@ -118,10 +112,14 @@ namespace cor64.Mips.R4300I
         public static readonly Opcode SDR = Define(Store, "sdr", I_TIS, Data64 | Right);
         public static readonly Opcode SWR = Define(Store, "swr", I_TIS, Data32 | Right);
         public static readonly Opcode SD = Define(Store, "sd", I_TIS, Immediate | Data64);
-        public static readonly Opcode SDC1 = Define(StoreFpu, "sdc1", I_FTIS);
-        public static readonly Opcode SWC1 = Define(StoreFpu, "swc1", I_FTIS);
         public static readonly Opcode SCD = Define(Store, "scd", I_TIS, Link | Data64);
         public static readonly Opcode SC = Define(Store, "sc", I_TIS, Link | Data32);
+
+        /* Memory Load/Store for FPU */
+        public static readonly Opcode SDC1 = Define(StoreFpu, "sdc1", I_FTIS, Data64);
+        public static readonly Opcode SWC1 = Define(StoreFpu, "swc1", I_FTIS, Data32);
+        public static readonly Opcode LDC1 = Define(LoadFpu, "ldc1", I_FTIS, Data64);
+        public static readonly Opcode LWC1 = Define(LoadFpu, "lwc1", I_FTIS, Data32);
 
         /* Register to register operations */
         public static readonly Opcode MFC0 = Define(Cop0, "mfc0", Cop0_CT, Cp0, Gpr, Data32);
@@ -130,10 +128,10 @@ namespace cor64.Mips.R4300I
         public static readonly Opcode DMTC0 = Define(Cop0, "dmtc0", Cop0_TC, Gpr, Cp0, Data64);
         public static readonly Opcode MFC1 = Define(Fpu, "mfc1", Cop1_TC, Cp1, Gpr);
         public static readonly Opcode DMFC1 = Define(Fpu, "dmfc1", Cop1_TC, Cp1, Gpr, Data64);
-        public static readonly Opcode CFC1 = Define(Fpu, "cfc1", Cop1_TC, Cp1Ctl, Gpr, Data32);
+        public static readonly Opcode CFC1 = Define(Fpu, "cfc1", Cop1_FromCtrl, Cp1Ctl, Gpr, Data32);
         public static readonly Opcode MTC1 = Define(Fpu, "mtc1", Cop0_CT, Gpr, Cp1, Data32);
         public static readonly Opcode DMTC1 = Define(Fpu, "dmtc1", Cop0_CT, Gpr, Cp1, Data64);
-        public static readonly Opcode CTC1 = Define(Fpu, "ctc1", Cop0_CT, Gpr, Cp1Ctl, Data32);
+        public static readonly Opcode CTC1 = Define(Fpu, "ctc1", Cop1_ToCtrl, Gpr, Cp1Ctl, Data32);
         public static readonly Opcode MFHI = Define(Reg, "mfhi", R_D, Hi, Gpr);
         public static readonly Opcode MTHI = Define(Reg, "mthi", R_D, Gpr, Hi);
         public static readonly Opcode MFLO = Define(Reg, "mflo", R_D, Lo, Gpr);
@@ -175,18 +173,41 @@ namespace cor64.Mips.R4300I
         public static readonly Opcode ABS = Define(Fpu, "abs.fmt", Cop1_DS);
         public static readonly Opcode MOV = Define(Fpu, "mov.fmt", Cop1_DS);
         public static readonly Opcode NEG = Define(Fpu, "neg.fmt", Cop1_DS);
-        public static readonly Opcode ROUND_L = Define(Fpu, "round.l.fmt", Cop1_DS);
-        public static readonly Opcode TRUNC_L = Define(Fpu, "trunc.l.fmt", Cop1_DS);
-        public static readonly Opcode CEIL_L = Define(Fpu, "ceil.l.fmt", Cop1_DS);
-        public static readonly Opcode FLOOR_L = Define(Fpu, "floor.l.fmt", Cop1_DS);
-        public static readonly Opcode ROUND_W = Define(Fpu, "round.w.fmt", Cop1_DS);
-        public static readonly Opcode TRUNC_W = Define(Fpu, "trunc.w.fmt", Cop1_DS);
-        public static readonly Opcode CEIL_W = Define(Fpu, "ceil.w.fmt", Cop1_DS);
-        public static readonly Opcode FLOOR_W = Define(Fpu, "floor.w.fmt", Cop1_DS);
-        public static readonly Opcode CVT_S = Define(Fpu, "cvt.s.fmt", Cop1_DS);
-        public static readonly Opcode CVT_D = Define(Fpu, "cvt.d.fmt", Cop1_DS);
-        public static readonly Opcode CVT_W = Define(Fpu, "cvt.w.fmt", Cop1_DS);
-        public static readonly Opcode CVT_L = Define(Fpu, "cvt.l.fmt", Cop1_DS);
-        public static readonly Opcode C = Define(Fpu, "c.condition.fmt", Cop1_TS);
+        public static readonly Opcode ROUND_L = Define(Fpu, "round.l.fmt", Cop1_DS, Data64);
+        public static readonly Opcode TRUNC_L = Define(Fpu, "trunc.l.fmt", Cop1_DS, Data64);
+        public static readonly Opcode CEIL_L = Define(Fpu, "ceil.l.fmt", Cop1_DS, Data64);
+        public static readonly Opcode FLOOR_L = Define(Fpu, "floor.l.fmt", Cop1_DS, Data64);
+        public static readonly Opcode ROUND_W = Define(Fpu, "round.w.fmt", Cop1_DS, Data32);
+        public static readonly Opcode TRUNC_W = Define(Fpu, "trunc.w.fmt", Cop1_DS, Data32);
+        public static readonly Opcode CEIL_W = Define(Fpu, "ceil.w.fmt", Cop1_DS, Data32);
+        public static readonly Opcode FLOOR_W = Define(Fpu, "floor.w.fmt", Cop1_DS, Data32);
+        public static readonly Opcode CVT_S = Define(Fpu, "cvt.s.fmt", Cop1_DS, DataS);
+        public static readonly Opcode CVT_D = Define(Fpu, "cvt.d.fmt", Cop1_DS, DataD);
+        public static readonly Opcode CVT_W = Define(Fpu, "cvt.w.fmt", Cop1_DS, Data32);
+        public static readonly Opcode CVT_L = Define(Fpu, "cvt.l.fmt", Cop1_DS, Data64);
+
+        /* FPU Branching */
+        public static readonly Opcode BC1F = Define(Branch, "bc1f", Bc1, ArithmeticOp.FALSE, ExecutionFlags.None, Cp1);
+        public static readonly Opcode BC1T = Define(Branch, "bc1t", Bc1, ArithmeticOp.TRUE, ExecutionFlags.None, Cp1);
+        public static readonly Opcode BC1FL = Define(Branch, "bc1fl", Bc1, ArithmeticOp.FALSE, Likely, Cp1);
+        public static readonly Opcode BC1TL = Define(Branch, "bc1tl", Bc1, ArithmeticOp.TRUE, Likely, Cp1);
+
+        /* FPU Condition Opcodes */
+        public static readonly Opcode C_F =    Define(Fpu, "c.f.fmt",    Cop1_TS);                                              // False
+        public static readonly Opcode C_UN =   Define(Fpu, "c.un.fmt",   Cop1_TS, CondUn);                                      // Unordered
+        public static readonly Opcode C_EQ =   Define(Fpu, "c.eq.fmt",   Cop1_TS, CondEq);                                      // Equal
+        public static readonly Opcode C_UEQ =  Define(Fpu, "c.ueq.fmt",  Cop1_TS, CondUn | CondEq);                             // Unordered or Equal
+        public static readonly Opcode C_OLT =  Define(Fpu, "c.olt.fmt",  Cop1_TS, CondLT);                                      // Ordered or Less Than
+        public static readonly Opcode C_ULT =  Define(Fpu, "c.ult.fmt",  Cop1_TS, CondUn | CondLT);                             // Unordered or Less Than
+        public static readonly Opcode C_OLE =  Define(Fpu, "c.ole.fmt",  Cop1_TS, CondLT | CondEq);                             // Ordered or Less Than or Equal
+        public static readonly Opcode C_ULE =  Define(Fpu, "c.ule.fmt",  Cop1_TS, CondUn | CondLT | CondEq);                    // Unordered or Less Than or Equal
+        public static readonly Opcode C_SF =   Define(Fpu, "c.sf.fmt",   Cop1_TS, ArithmeticOp.SIGNALING, CondOrd);             // Signaling False
+        public static readonly Opcode C_NGLE = Define(Fpu, "c.ngle.fmt", Cop1_TS, CondOrd | CondNot | CondLT | CondGT | CondEq);         // Not Greater Than or Less Than or Equal
+        public static readonly Opcode C_SEQ =  Define(Fpu, "c.seq.fmt",  Cop1_TS, ArithmeticOp.SIGNALING, CondEq | CondOrd);    // Signaling Equal
+        public static readonly Opcode C_NGL =  Define(Fpu, "c.ngl.fmt",  Cop1_TS, CondOrd | CondNot | CondGT | CondLT);         // Not Greater Than or Less Than
+        public static readonly Opcode C_LT =   Define(Fpu, "c.lt.fmt",   Cop1_TS, CondOrd | CondLT);                            // Less Than
+        public static readonly Opcode C_NGE =  Define(Fpu, "c.nge.fmt",  Cop1_TS, CondOrd | CondNot | CondGT | CondEq);         // Not Greater Then or Equal
+        public static readonly Opcode C_LE =   Define(Fpu, "c.le.fmt",   Cop1_TS, CondOrd | CondLT | CondEq);                            // Less Than or Equal
+        public static readonly Opcode C_NGT =  Define(Fpu, "c.ngt.fmt",  Cop1_TS, CondOrd | CondNot | CondGT);                  // Not Greater Than
     }
 }

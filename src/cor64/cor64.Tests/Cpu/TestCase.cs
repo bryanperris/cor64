@@ -1,4 +1,5 @@
 ﻿using cor64.Mips;
+using cor64.Mips.R4300I;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -13,6 +14,7 @@ namespace cor64.Tests.Cpu
         private Expectations m_ExpectationFlags;
         private Stream m_Program;
         private ExceptionType m_ExpectedExceptions;
+        private FpuExceptionFlags m_ExpectedFpuExceptions;
         private ulong m_ExpectedLo;
         private ulong m_ExpectedHi;
         private bool m_NoDestReg;
@@ -97,6 +99,20 @@ namespace cor64.Tests.Cpu
             return this;
         }
 
+        public TestCase FpuValues(dynamic a, dynamic b)
+        {
+            SourceA = new KeyValuePair<int, dynamic>(0, a);
+            SourceB = new KeyValuePair<int, dynamic>(2, b);
+            return this;
+        }
+
+        public TestCase FpuValues(dynamic a)
+        {
+            SourceA = new KeyValuePair<int, dynamic>(0, a);
+            SourceB = new KeyValuePair<int, dynamic>(-1, 0);
+            return this;
+        }
+
         public TestCase Values(dynamic a, dynamic b, ulong c)
         {
             SourceA = new KeyValuePair<int, dynamic>(SourceA.Key, a);
@@ -113,8 +129,6 @@ namespace cor64.Tests.Cpu
             return this;
         }
 
-
-
         public TestCase JOffset(uint value)
         {
             JumpOffset = value;
@@ -124,15 +138,17 @@ namespace cor64.Tests.Cpu
         public TestCase Expect(dynamic value)
         {
             m_ExpectationFlags |= Expectations.Result;
-            Result = new KeyValuePair<int, dynamic>(Result.Key, value);
-            return this;
-        }
 
-        public TestCase Expect(FpuValueType type, dynamic value)
-        {
-            m_ExpectationFlags |= Expectations.Result;
-            ExpectedFpuType = type;
-            Result = new KeyValuePair<int, dynamic>(Result.Key, value);
+            if (!m_IsFPU)
+            {
+                Result = new KeyValuePair<int, dynamic>(Result.Key, value);
+            }
+            else
+            {
+                ExpectedFpuType = FpuHelper.ResolveFpuType(value);
+                Result = new KeyValuePair<int, dynamic>(4, value);
+            }
+            
             return this;
         }
 
@@ -213,6 +229,19 @@ namespace cor64.Tests.Cpu
             return this;
         }
 
+        public TestCase Except(FpuExceptionFlags exceptions)
+        {
+            m_ExpectationFlags = Expectations.Exceptions;
+            m_ExpectedFpuExceptions = exceptions;
+            return this;
+        }
+
+        public TestCase CoreOverride(Type type)
+        {
+            CoreTypeOverride = type;
+            return this;
+        }
+
         public TestCase NoDest()
         {
             m_NoDestReg = true;
@@ -238,6 +267,8 @@ namespace cor64.Tests.Cpu
         public String Opcode { get; private set; }
 
         public ExceptionType ExpectedExceptions => m_ExpectedExceptions;
+
+        public FpuExceptionFlags ExpectedFPUExceptions => m_ExpectedFpuExceptions;
 
         internal TestCase WithShift()
         {
@@ -296,6 +327,8 @@ namespace cor64.Tests.Cpu
         public Expectations ExpectationFlags => m_ExpectationFlags;
 
         public FpuValueType ExpectedFpuType { get; set; }
+
+        public Type CoreTypeOverride { get; private set; }
 
         internal void SetProgram(Stream rom)
         {

@@ -13,7 +13,7 @@ using cor64.IO;
 
 namespace cor64.Mips.R4300I
 {
-    public partial class ILRecompiler : Interpreter
+    public partial class ILRecompiler : CoreR4300I
     {
         private class CoreBridge
         {
@@ -67,6 +67,24 @@ namespace cor64.Mips.R4300I
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public void WritebackLo(ulong value)
+            {
+                m_Core.State.Lo = m_Core.IsOperation64 ? value : (uint)value;
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public void WritebackHi(ulong value)
+            {
+                m_Core.State.Hi = m_Core.IsOperation64 ? value : (uint)value;
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public void WritebackCop0(int reg, ulong value)
+            {
+                m_Core.Cop0.Registers.WriteFromGpr(reg, value);
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public void SetExceptionState(ExceptionType t)
             {
                 m_Core.SetExceptionState(t);
@@ -88,6 +106,24 @@ namespace cor64.Mips.R4300I
             public ulong ReadGPR64(int i)
             {
                 return m_Core.ReadGPR64(i);
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public ulong ReadLo()
+            {
+                return m_Core.State.Lo;
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public ulong ReadHi()
+            {
+                return m_Core.State.Hi;
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public ulong ReadCop0Register(int select, bool isDwordInst)
+            {
+                return m_Core.ReadCp0Value(select, isDwordInst);
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -165,11 +201,6 @@ namespace cor64.Mips.R4300I
             public bool GetOperation64()
             {
                 return m_Core.IsOperation64;
-            }
-
-            public uint Debug(uint v)
-            {
-                return v;
             }
         }
     }

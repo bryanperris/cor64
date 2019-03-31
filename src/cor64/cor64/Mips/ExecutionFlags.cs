@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 namespace cor64.Mips
 {
     [Flags]
-    public enum ExecutionFlags : ushort
+    public enum ExecutionFlags : uint
     {
         None =       0b00000000,
         Immediate =  0b1,
@@ -24,7 +24,15 @@ namespace cor64.Mips
         Link       = 0b100000000000,
         Register   = 0b1000000000000,
         Left       = 0b10000000000000,
-        Right      = 0b100000000000000
+        Right      = 0b100000000000000,
+        DataS      = 0b1000000000000000,
+        DataD      = 0b10000000000000000,
+        CondLT     = 0b100000000000000000,
+        CondGT     = 0b1000000000000000000,
+        CondEq     = 0b10000000000000000000,
+        CondUn     = 0b100000000000000000000,
+        CondNot    = 0b1000000000000000000000,
+        CondOrd    = 0b10000000000000000000000  // Indicates that unordered values throws an exception
     }
 
     public static class ExecutionFlagsHelper

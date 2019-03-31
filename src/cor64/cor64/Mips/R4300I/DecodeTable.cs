@@ -55,8 +55,8 @@ namespace cor64.Mips.R4300I
             NULL,    NULL,    NULL,    NULL,    NULL,    NULL,    NULL,   NULL,
             CVT_S,   CVT_D,   NULL,    NULL,    CVT_W,   CVT_L,   NULL,   NULL,
             NULL,    NULL,    NULL,    NULL,    NULL,    NULL,    NULL,   NULL,
-            C,       C,       C,       C,       C,       C,       C,      C,
-            C,       C,       C,       C,       C,       C,       C,      C
+            C_F,     C_UN,    C_EQ,    C_UEQ,   C_OLT,   C_ULT,   C_OLE,  C_ULE,
+            C_SF,    C_NGLE,  C_SEQ,   C_NGL,   C_LT,    C_NGE,   C_LE,   C_NGT
         };
 
         private readonly static Opcode[] RegImmTable = {

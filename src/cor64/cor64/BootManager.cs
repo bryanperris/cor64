@@ -52,21 +52,28 @@ namespace cor64
 
         private void CopyCartBootstrap(Cartridge cartridge)
         {
-            Log.Debug("Boot HLE: Copy cartridge IPL3 bootstrap to RSP DMemory");
+            /* Copies the cartridge header (head + boot) into RSP data memory */
 
-            /* RSP DMEM + 0x40 */
-            /* XXX: Seems like the real IPL copys the cart header + bootrom, since
-             * the boot rom itself starts at offset 0x40 in the cart rom */
+            // NOTE: instead of starting at 0x40, just start at 0 and copy everything
+            // until the end of the bootloader section
 
-            byte[] bootrom = cartridge.DumpBootSection();
+            byte[] romData = new byte[Cartridge.HeaderSize + Cartridge.BootSize];
+
+            /* read from cart into buffer */
+            cartridge.RawStream.Position = 0;
+            cartridge.RawStream.Read(romData, 0, romData.Length);
+            cartridge.RawStream.Position = 0;
+
+            const uint memStart = 0xA4000000;
+            uint memEnd = memStart + (uint)romData.Length;
 
             unsafe
             {
-                fixed (byte* ptr = bootrom)
+                fixed (byte* ptr = romData)
                 {
                     uint* intPtr = (uint*)ptr;
 
-                    for (uint addr = 0xA4000040; addr < (0xA4000040 + bootrom.Length); addr += 4)
+                    for (uint addr = memStart; addr < memEnd; addr += 4)
                     {
                         MWR(addr, *intPtr);
                         intPtr++;
@@ -74,6 +81,9 @@ namespace cor64
                 }
             }
 
+            Log.Debug("Copied cartridge header into signal process data memory");
+
+            // Note: The IPL3 boostrap from the cartridge clears out all RSP memory after bootup is successful
         }
 
         public void BootCartridge(Cartridge cartridge, bool bypassIPL)
@@ -95,7 +105,7 @@ namespace cor64
 
             if (!bypassIPL)
             {
-                Log.Debug("Booting with real IPL3 bootloader");
+                Log.Debug("Booting with real system IPL3 bootloader");
                 PC(0xBFC00000);
                 return;
             }
@@ -103,7 +113,7 @@ namespace cor64
             SecurityChipsetType cicType = cartridge.CICLockoutType;
             RegionType region = cartridge.Region;
 
-            Log.Debug("Using IPL state injection for {1} {0}", cicType.ToString(), region.ToString());
+            Log.Debug("Skipping system bootstrap, using initial startup state for {1}-{0}", cicType.ToString(), region.ToString());
 
             CopyCartBootstrap(cartridge);
 

@@ -32,6 +32,11 @@ namespace cor64.IO
             }
         }
 
+        public void Clear()
+        {
+            Array.Clear(m_Buffer, 0, m_Buffer.Length);
+        }
+
         public IntPtr GetPointer()
         {
             return m_Ptr;

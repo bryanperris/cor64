@@ -32,7 +32,7 @@ namespace cor64.Mips
 
         public static Opcode Define(OperationFamily family, String op, OperandType operandFmt, ArithmeticOp arithmeticOp, ExecutionFlags flags, RegBoundType target)
         {
-            return new Opcode(op, flags, operandFmt, family, arithmeticOp, 0, 0, g_NextId++);
+            return new Opcode(op, flags, operandFmt, family, arithmeticOp, 0, target, g_NextId++);
         }
 
         public static Opcode Define(OperationFamily family, String op, OperandType operandFmt, RegBoundType source, RegBoundType target, ExecutionFlags executionFlags = ExecutionFlags.None)
@@ -58,7 +58,6 @@ namespace cor64.Mips
         Null,   // Unimplemented type of opcode
         Sub,    // jump to another opcode table
         Branch, // Branches and jumps
-        BranchFpu, // Branch based on FPU compare
         Load,   // Load values from memory
         Store,  // Store values to memory
         Reg,    // Register based operations (no memory access)

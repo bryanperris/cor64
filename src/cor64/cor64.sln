@@ -19,6 +19,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "N64AsmConsole", "..\N64AsmC
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RunN64", "..\RunN64\RunN64.csproj", "{1913A2CB-2FB5-415F-8F8B-308CF492DBF1}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "cor64.CFloat", "cor64.CFloat\cor64.CFloat.csproj", "{AF73C458-2ECA-4761-9989-63527E4E6108}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -89,6 +91,18 @@ Global
 		{1913A2CB-2FB5-415F-8F8B-308CF492DBF1}.Release|x64.Build.0 = Release|x64
 		{1913A2CB-2FB5-415F-8F8B-308CF492DBF1}.Release|x86.ActiveCfg = Release|x86
 		{1913A2CB-2FB5-415F-8F8B-308CF492DBF1}.Release|x86.Build.0 = Release|x86
+		{AF73C458-2ECA-4761-9989-63527E4E6108}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AF73C458-2ECA-4761-9989-63527E4E6108}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AF73C458-2ECA-4761-9989-63527E4E6108}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{AF73C458-2ECA-4761-9989-63527E4E6108}.Debug|x64.Build.0 = Debug|Any CPU
+		{AF73C458-2ECA-4761-9989-63527E4E6108}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{AF73C458-2ECA-4761-9989-63527E4E6108}.Debug|x86.Build.0 = Debug|Any CPU
+		{AF73C458-2ECA-4761-9989-63527E4E6108}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AF73C458-2ECA-4761-9989-63527E4E6108}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AF73C458-2ECA-4761-9989-63527E4E6108}.Release|x64.ActiveCfg = Release|Any CPU
+		{AF73C458-2ECA-4761-9989-63527E4E6108}.Release|x64.Build.0 = Release|Any CPU
+		{AF73C458-2ECA-4761-9989-63527E4E6108}.Release|x86.ActiveCfg = Release|Any CPU
+		{AF73C458-2ECA-4761-9989-63527E4E6108}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

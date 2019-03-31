@@ -30,7 +30,7 @@ namespace cor64.Mips
         {
             ulong target = targetOffset;
 
-            if (dwordMode)
+            if (!dwordMode)
             {
                 /* Mask out the upper 32-bits in 32-bit mode */
                 target &= 0xFFFFFFFF;
@@ -41,87 +41,9 @@ namespace cor64.Mips
                 target = (ulong)((long)pc + (long)targetOffset);
             }
 
-            return target + 4;
-        }
+            target += 4;
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static bool ComputeBranchCondition(
-            bool dwordMode, 
-            ulong source, 
-            ulong target, 
-            bool copState, 
-            RegBoundType copSelect, 
-            ArithmeticOp compareOp)
-        {
-            bool condition = false;
-
-            bool EQ_ZERO()
-            {
-                return source == 0;
-            }
-
-            bool GT_ZERO()
-            {
-                if (dwordMode)
-                {
-                    ulong v = source;
-                    return (v >> 63) == 0 && v > 0;
-                }
-                else
-                {
-                    uint v = (uint)source;
-                    return (v >> 31) == 0 && v > 0;
-                }
-            }
-
-            bool LT_ZERO()
-            {
-                if (dwordMode)
-                {
-                    ulong v = source;
-                    return (v >> 63) == 1 && v > 0;
-                }
-                else
-                {
-                    uint v = (uint)source;
-                    return (v >> 31) == 1 && v > 0;
-                }
-            }
-
-            bool COP_ENABLED(bool compare)
-            {
-                switch (copSelect)
-                {
-                    case RegBoundType.Cp1:
-                        {
-                            if (copState)
-                            {
-                                return compare;
-                            }
-                            else
-                            {
-                                return !compare;
-                            }
-                        }
-
-                    default: throw new NotSupportedException("MIPS does not support this kind of unit");
-                }
-            }
-
-            switch (compareOp)
-            {
-                default: throw new NotSupportedException("MIPS does not support this branch operation");
-                case ArithmeticOp.EQUAL: condition = (source == target); break;
-                case ArithmeticOp.NOT_EQUAL: condition = (source != target); break;
-                case ArithmeticOp.GREATER_THAN: condition = GT_ZERO(); break;
-                case ArithmeticOp.LESS_THAN: condition = LT_ZERO(); break;
-                case ArithmeticOp.GREATER_THAN_OR_EQUAL: condition = (EQ_ZERO() || GT_ZERO()); break;
-                case ArithmeticOp.LESS_THAN_OR_EQUAL: condition = (EQ_ZERO() || LT_ZERO()); break;
-                case ArithmeticOp.FALSE: condition = COP_ENABLED(false); break;
-                case ArithmeticOp.TRUE: condition = COP_ENABLED(true); break;
-            }
-
-            return condition;
+            return target;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

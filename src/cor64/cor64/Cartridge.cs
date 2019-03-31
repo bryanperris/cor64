@@ -19,12 +19,14 @@ namespace cor64
 		private Stream m_RomStream;
 		private SecurityChipsetType m_CicType;
 		private uint m_BootChecksum;
+        private byte[] m_BootChecksumMd5;
 
-		private const int BootSize = 4032;
-		private const int HeaderSize = 0x40;
+		public const int BootSize = 4032;
+        public const int HeaderSize = 0x40;
+        const int TitleSize = 20;
 
-		/* Cartridge Header */
-    private uint m_BusConfig;
+        /* Cartridge Header */
+        private uint m_BusConfig;
 		private String m_Name; /* Always 20 chars in length */
 		private uint m_ClockRate;
 		private uint m_EntryPoint;
@@ -55,6 +57,12 @@ namespace cor64
             /* NOTICE: The rom should be read as big-endian format
              *         Some embedded resources could get mangled by forcing little-end
              */
+
+            /*
+             * TODO: Optimize cartridge IO by caching byte-swapped version into memory used for reads greater than 1 byte
+             *       Make all byte reads read from the original big-endian source
+             */
+
             switch (word)
             {
                 case 0x40123780: source = new Swap32Stream(source); break; // Little Endian -> Big Endian
@@ -62,6 +70,10 @@ namespace cor64
                 case 0x37804012: source = new Swap16Stream(source); break; // Middle Endian -> Bid Endian
                 default: source = DetectEndianessAggressive(source); break;
             }
+
+            /* Create a MD5 checksum */
+            // TODO: This is for future use of using MD5 instead of Crc32
+            m_BootChecksumMd5 = GenerateMD5Checksum(source);
 
 
             /* Detect the CIC type (Input must be in big endian) */
@@ -80,6 +92,20 @@ namespace cor64
 
             ReadHeader();
 		}
+
+        private static byte[] GenerateMD5Checksum(Stream stream)
+        {
+            byte[] bootSection = new byte[BootSize];
+            stream.Position = HeaderSize;
+            stream.Read(bootSection, 0, bootSection.Length);
+            stream.Position = 0;
+
+            MD5 md5 = MD5.Create();
+            md5.Initialize();
+            md5.ComputeHash(bootSection);
+
+            return md5.Hash;
+        }
 
 		public int GetAudioRate()
 		{
@@ -101,11 +127,25 @@ namespace cor64
                 return 50;
 		}
 
+        private static String ConvertFromBytes(byte[] buffer, int index, int count)
+        {
+            StringBuilder sb = new StringBuilder();
+
+            for (int i = 0; i < count; i++)
+            {
+                char c = (char)buffer[index + i];
+                sb.Append(c);
+            }
+
+            return sb.ToString();
+        }
+
 		private void ReadHeader()
 		{
 			byte[] header = new byte[HeaderSize];
             byte[] serial = new byte[8];
 
+            /* Swap the rom from big to little */
             var swapped = new Swap32Stream(m_RomStream);
             swapped.Position = 0;
             swapped.Read(header, 0, header.Length);
@@ -122,13 +162,18 @@ namespace cor64
 					m_Crc1 =       _ptr.Offset(16).AsType_32();
 					m_Crc2 =       _ptr.Offset(20).AsType_32();
                     /* 8 bytes of padding */
-					m_Name = ASCIIEncoding.ASCII.GetString(header, 28, 20);
+					// Name (20 bytes)
                     /* 4 bytes of padding */
-                    _ptr.Offset(52).AsBytes(serial);
+                    _ptr.Offset(20 + 8 + TitleSize + 4).AsBytes(serial);
                     m_Serial = new GameSerial(serial);
 				}
 			}
-		}
+
+            /* Read the data in big endian */
+            m_RomStream.Position = 0;
+            m_RomStream.Read(header, 0, header.Length);
+            m_Name = ConvertFromBytes(header, 20 + 8, TitleSize);
+        }
 
         /* Copies the boot section out of the rom */
 		public byte[] DumpBootSection()
@@ -167,23 +212,6 @@ namespace cor64
             }
 
             bootChecksum = alg.CrcValue;
-
-#if DEBUG
-
-			/* For future of converting the bootcode hashcodes to MD5 (should use something better maybe ) */
-            MD5 md5 = MD5.Create();
-            md5.Initialize();
-            md5.ComputeHash(bootSection);
-
-            StringBuilder sb = new StringBuilder();
-            foreach (Byte b in md5.Hash)
-            {
-                sb.AppendFormat("{0:X2}", b);
-            }
-
-			Log.Debug(String.Format("MD5 Checksum for CIC Type ({0}): {1}", type.GetGoodName(), sb.ToString()));
-
-#endif
 
             return type;
         }
@@ -278,5 +306,13 @@ namespace cor64
         public GameSerial Serial => m_Serial;
 
         public uint EntryPoint => m_EntryPoint;
+
+        public Stream RawStream => m_RomStream;
+
+        public uint Crc1 => m_Crc1;
+
+        public uint Crc2 => m_Crc2;
+
+        public byte[] BootChecksumMD5 => m_BootChecksumMd5;
 	}
 }

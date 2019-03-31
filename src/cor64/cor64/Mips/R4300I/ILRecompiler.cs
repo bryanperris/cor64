@@ -22,11 +22,11 @@ using cor64.IO;
 
 namespace cor64.Mips.R4300I
 {
-    public partial class ILRecompiler : Interpreter
+    public partial class ILRecompiler : CoreR4300I
     {
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
         private CoreBridge m_CoreBridge;
-        private Interpreter m_FallbackInterpreter;
+        private CoreR4300I m_FallbackInterpreter;
         private ILCodeEmitter m_Emitter;
         private bool m_EndOfBlock = false;
         private bool m_CompileMode = true;
@@ -42,19 +42,6 @@ namespace cor64.Mips.R4300I
         private const int LOCAL_TYPE_U64_2 = 4;
         private const int LOCAL_TYPE_I64 = 5;
 
-        private readonly static String READ_GPR_32 = "ReadGPR32";
-        private readonly static String READ_GPR_64 = "ReadGPR64";
-        private readonly static String WB_32 = "Writeback32";
-        private readonly static String WB_64 = "Writeback64";
-        private readonly static String EXCEPTION = "SetExceptionState";
-        private readonly static String WB_128_32 = "WritebackHiLo32";
-        private readonly static String WB_128_64 = "WritebackHiLo64";
-        private readonly static String WB_128_128 = "WritebackHiLo64_U128";
-        private readonly static String MULT_64_S = "Multiply64Signed";
-        private readonly static String MULT_64_UN = "Multiply64Unsigned";
-        private readonly static String IS_OP64 = "GetOperation64";
-        private readonly static String WB_DYN = "WritebackDyn";
-
         private readonly MethodInfo METHOD_READ_GPR_32;
         private readonly MethodInfo METHOD_READ_GPR_64;
         private readonly MethodInfo METHOD_WB_32;
@@ -67,6 +54,9 @@ namespace cor64.Mips.R4300I
         private readonly MethodInfo METHOD_MULT_64_UN;
         private readonly MethodInfo METHOD_IS_OP64;
         private readonly MethodInfo METHOD_WB_DYN;
+        private readonly MethodInfo METHOD_WB_128_LO;
+        private readonly MethodInfo METHOD_WB_128_HI;
+        private readonly MethodInfo METHOD_WB_COP0;
 
         public ILRecompiler(bool debug) :
             base(new Disassembler("o32", debug ? BaseDisassembler.Mode.Debug : BaseDisassembler.Mode.Fast))
@@ -74,21 +64,29 @@ namespace cor64.Mips.R4300I
             m_CoreBridge = new CoreBridge(this);
             m_Emitter = new ILCodeEmitter();
 
-            METHOD_READ_GPR_32 = m_CoreBridge.GetType().GetMethod(READ_GPR_32);
-            METHOD_READ_GPR_64 = m_CoreBridge.GetType().GetMethod(READ_GPR_64);
-            METHOD_WB_32 = m_CoreBridge.GetType().GetMethod(WB_32);
-            METHOD_WB_64 = m_CoreBridge.GetType().GetMethod(WB_64);
-            METHOD_EXCEPTION = m_CoreBridge.GetType().GetMethod(EXCEPTION);
-            METHOD_WB_128_32 = m_CoreBridge.GetType().GetMethod(WB_128_32);
-            METHOD_WB_128_64 = m_CoreBridge.GetType().GetMethod(WB_128_64);
-            METHOD_WB_128_128 = m_CoreBridge.GetType().GetMethod(WB_128_128);
-            METHOD_MULT_64_S = m_CoreBridge.GetType().GetMethod(MULT_64_S);
-            METHOD_MULT_64_UN = m_CoreBridge.GetType().GetMethod(MULT_64_UN);
-            METHOD_IS_OP64 = m_CoreBridge.GetType().GetMethod(IS_OP64);
-            METHOD_WB_DYN = m_CoreBridge.GetType().GetMethod(WB_DYN);
+            METHOD_READ_GPR_32 = _BM("ReadGPR32");
+            METHOD_READ_GPR_64 = _BM("ReadGPR64");
+            METHOD_WB_32 =       _BM("Writeback32");
+            METHOD_WB_64 =       _BM("Writeback64");
+            METHOD_EXCEPTION =   _BM("SetExceptionState");
+            METHOD_WB_128_32 =   _BM("WritebackHiLo32");
+            METHOD_WB_128_64 =   _BM("WritebackHiLo64");
+            METHOD_WB_128_128 =  _BM("WritebackHiLo64_U128");
+            METHOD_MULT_64_S =   _BM("Multiply64Signed");
+            METHOD_MULT_64_UN =  _BM("Multiply64Unsigned");
+            METHOD_IS_OP64 =     _BM("GetOperation64");
+            METHOD_WB_DYN =      _BM("WritebackDyn");
+            METHOD_WB_128_LO =   _BM("WritebackLo");
+            METHOD_WB_128_HI =   _BM("WritebackHi");
+            METHOD_WB_COP0 =     _BM("WritebackCop0");
         }
 
-        public override string Description => "The MIPS IL Recompiler";
+        public override string Description => "IL Recompiler";
+
+        private MethodInfo _BM(String name)
+        {
+            return m_CoreBridge.GetType().GetMethod(name);
+        }
 
         protected override bool Execute()
         {
@@ -106,7 +104,7 @@ namespace cor64.Mips.R4300I
             return base.Execute();
         }
 
-        public void SetFallbackInterpreter(Interpreter interpreter)
+        public void SetFallbackInterpreter(CoreR4300I interpreter)
         {
             m_FallbackInterpreter = interpreter;
             interpreter.OverrideIStream(new StreamEx.Wrapper(IMemoryStream));
@@ -115,6 +113,9 @@ namespace cor64.Mips.R4300I
             interpreter.OverrideCop0(Cop0);
             interpreter.BypassMMU = BypassMMU;
         }
+
+        // TODO: Since the FPU is seperate, we need a way to catch 
+        //       outside opcodes, so their calls are compiled into the block
 
         private int GetOpcodeReservedType(Opcode op)
         {
@@ -148,7 +149,7 @@ namespace cor64.Mips.R4300I
         {
             if (m_FallbackInterpreter == null)
             {
-                SetFallbackInterpreter(new SimpleInterpreter(DebugMode));
+                SetFallbackInterpreter(new Interpreter(DebugMode));
             }
 
             ILBasicBlock codeBlock = null;
@@ -255,18 +256,24 @@ namespace cor64.Mips.R4300I
         private void EmitReadGPRSignedExtended(MethodInfo methodInfo, int reg, CLRValueType signType)
         {
             EmitReadGPR(methodInfo, reg);
+            m_Emitter.SignedConvert(signType);
+        }
 
-            if (signType == CLRValueType.UINT_64)
+        private void EmitSignedImmedate32(DecodedInstruction inst, CLRValueType valueType)
+        {
+            int imm = (int)inst.Immediate;
+
+            if (valueType == CLRValueType.UINT_32)
             {
-                m_Emitter.SignedConvert(CLRValueType.INT_64);
+                m_Emitter.Constant32((uint)imm, true);
             }
             else
             {
-                m_Emitter.SignedConvert(CLRValueType.INT_32);
+                m_Emitter.Constant64((ulong)imm, true);
             }
         }
 
-        private void EmitSignedImmediate(DecodedInstruction inst, CLRValueType valueType)
+        private void EmitSignedImmediate16(DecodedInstruction inst, CLRValueType valueType)
         {
             short imm = (short)inst.Immediate;
 
@@ -297,6 +304,15 @@ namespace cor64.Mips.R4300I
             });
         }
 
+        private void EmitCop0Writeback(MethodInfo methodInfo, int destReg, int resultLocal)
+        {
+            m_Emitter.BridgeMethodCall(methodInfo, () =>
+            {
+                m_Emitter.Constant32(destReg);
+                m_Emitter.LoadFromLocalVariable(resultLocal);
+            });
+        }
+
         private void Emit128Writeback(MethodInfo info, int hiLocal, int loLocal)
         {
             m_Emitter.BridgeMethodCall(info, () =>
@@ -304,6 +320,20 @@ namespace cor64.Mips.R4300I
                 m_Emitter.LoadFromLocalVariable(hiLocal);
                 m_Emitter.LoadFromLocalVariable(loLocal);
             });
+        }
+
+        private void Emit128WritebackSingle(MethodInfo info, int local)
+        {
+            m_Emitter.BridgeMethodCall(info, () =>
+            {
+                m_Emitter.LoadFromLocalVariable(local);
+            });
+        }
+
+        private void EmitRuntime64Jump(Label label)
+        {
+            m_Emitter.BridgeMethodCall(METHOD_IS_OP64);
+            m_Emitter.RawEmitter.Emit(IL.Brtrue_S, label);
         }
 
         private void EmitAddition(DecodedInstruction inst, CLRValueType valueType)
@@ -334,7 +364,7 @@ namespace cor64.Mips.R4300I
 
                 if (inst.IsImmediate())
                 {
-                    EmitSignedImmediate(inst, valueType);
+                    EmitSignedImmediate16(inst, valueType);
                     _DEST_GPR = inst.Target;
                 }
                 else
@@ -691,6 +721,8 @@ namespace cor64.Mips.R4300I
             int         _DEST_GPR  = 0;
             ILGenerator _CG        = m_Emitter.RawEmitter;
 
+            //EmitReserveCheck(inst);
+
             EmitReadGPR(_GPR_READ, inst.Source);
 
             if (inst.IsImmediate())
@@ -716,6 +748,148 @@ namespace cor64.Mips.R4300I
             m_Emitter.StoreToLocalVariable(_LOCAL);
 
             EmitGPRWriteback(_WRITEBACK, _DEST_GPR, _LOCAL);
+
+            EmitUpdatePC();
+        }
+
+        private void EmitLessThan(DecodedInstruction inst)
+        {
+            int          _LOCAL = LOCAL_TYPE_U64;
+            MethodInfo   _GPR_READ = METHOD_READ_GPR_64;
+            MethodInfo   _WRITEBACK = METHOD_WB_DYN;
+            int          _DEST_GPR = 0;
+            ILGenerator  _CG = m_Emitter.RawEmitter;
+            Label        _LBL64 = _CG.DefineLabel();
+            Label        _LBL_WB = _CG.DefineLabel();
+
+            //EmitReserveCheck(inst);
+
+            EmitRuntime64Jump(_LBL64);
+
+            /* 32-bit path */
+
+            if (inst.IsUnsigned())
+            {
+                EmitReadGPR(METHOD_READ_GPR_32, inst.Source);
+
+                if (inst.IsImmediate())
+                {
+                    EmitSignedImmedate32(inst, CLRValueType.UINT_32);
+                    _DEST_GPR = inst.Target;
+                }
+                else
+                {
+                    EmitReadGPR(METHOD_READ_GPR_32, inst.Target);
+                    _DEST_GPR = inst.Destination;
+                }
+
+                _CG.Emit(IL.Clt_Un);
+            }
+            else
+            {
+                EmitReadGPRSignedExtended(METHOD_READ_GPR_32, inst.Source, CLRValueType.INT_32);
+
+                if (inst.IsImmediate())
+                {
+                    EmitSignedImmedate32(inst, CLRValueType.UINT_32);
+                    _DEST_GPR = inst.Target;
+                }
+                else
+                {
+                    EmitReadGPRSignedExtended(METHOD_READ_GPR_32, inst.Target, CLRValueType.INT_32);
+                    _DEST_GPR = inst.Destination;
+                }
+
+                _CG.Emit(IL.Clt);
+            }
+
+            _CG.Emit(IL.Br_S, _LBL_WB);
+
+            /* 64-bit path */
+
+            _CG.MarkLabel(_LBL64);
+
+            if (inst.IsUnsigned())
+            {
+                EmitReadGPR(METHOD_READ_GPR_64, inst.Source);
+
+                if (inst.IsImmediate())
+                {
+                    EmitSignedImmedate32(inst, CLRValueType.UINT_64);
+                    _DEST_GPR = inst.Target;
+                }
+                else
+                {
+                    EmitReadGPR(METHOD_READ_GPR_64, inst.Target);
+                    _DEST_GPR = inst.Destination;
+                }
+
+                _CG.Emit(IL.Clt_Un);
+            }
+            else
+            {
+                EmitReadGPRSignedExtended(METHOD_READ_GPR_64, inst.Source, CLRValueType.INT_64);
+
+                if (inst.IsImmediate())
+                {
+                    EmitSignedImmedate32(inst, CLRValueType.UINT_64);
+                    _DEST_GPR = inst.Target;
+                }
+                else
+                {
+                    EmitReadGPRSignedExtended(METHOD_READ_GPR_64, inst.Target, CLRValueType.INT_64);
+                    _DEST_GPR = inst.Destination;
+                }
+
+                _CG.Emit(IL.Clt);
+            }
+
+
+            _CG.MarkLabel(_LBL_WB);
+
+            m_Emitter.UnsignedConvert(CLRValueType.UINT_64);
+            m_Emitter.StoreToLocalVariable(_LOCAL);
+
+            EmitGPRWriteback(METHOD_WB_64, _DEST_GPR, _LOCAL);
+
+            EmitUpdatePC();
+        }
+
+        private void EmitRegXfer(DecodedInstruction inst)
+        {
+            switch (inst.Op.XferSource)
+            {
+                case RegBoundType.Lo: m_Emitter.BridgeMethodCall("ReadLo"); break;
+                case RegBoundType.Hi: m_Emitter.BridgeMethodCall("ReadHi"); break;
+                case RegBoundType.Gpr: EmitReadGPR(METHOD_READ_GPR_64, inst.Source); break;
+
+                case RegBoundType.Cp0:
+                    {
+                        /* Just safely assume cop0 is always enabled */
+                        int flag = inst.IsData32() ? 1 : 0;
+
+                        m_Emitter.BridgeMethodCall("ReadCop0Register", () =>
+                        {
+                            m_Emitter.Constant32(inst.Destination);
+                            m_Emitter.Constant32(flag);
+                        });
+
+                        break;
+                    }
+
+                default: throw new NotImplementedException("Xfer Source: " + inst.Op.XferSource.ToString());
+            }
+
+            m_Emitter.StoreToLocalVariable(LOCAL_TYPE_U64);
+
+            switch (inst.Op.XferTarget)
+            {
+                case RegBoundType.Gpr: EmitGPRWriteback(METHOD_WB_DYN, inst.Destination, LOCAL_TYPE_U64); break;
+                case RegBoundType.Lo: Emit128WritebackSingle(METHOD_WB_128_LO, LOCAL_TYPE_U64); break;
+                case RegBoundType.Hi: Emit128WritebackSingle(METHOD_WB_128_HI, LOCAL_TYPE_U64); break;
+                case RegBoundType.Cp0: EmitCop0Writeback(METHOD_WB_COP0, inst.Destination, LOCAL_TYPE_U64); break;
+                default: throw new NotImplementedException("Xfer Target: " + inst.Op.XferTarget.ToString());
+            }
 
             EmitUpdatePC();
         }
@@ -781,12 +955,12 @@ namespace cor64.Mips.R4300I
 
         protected sealed override void SetOnLessThan(DecodedInstruction inst)
         {
-            EmitFallbackOp(inst);
+            EmitLessThan(inst);
         }
 
         protected sealed override void TransferReg(DecodedInstruction inst)
         {
-            EmitFallbackOp(inst);
+            EmitRegXfer(inst);
         }
 
         protected sealed override void Branch(DecodedInstruction inst)
@@ -817,6 +991,86 @@ namespace cor64.Mips.R4300I
         }
 
         protected sealed override void Sync(DecodedInstruction inst)
+        {
+            EmitFallbackOp(inst);
+        }
+
+        protected override void FloatLoad(DecodedInstruction inst)
+        {
+            EmitFallbackOp(inst);
+        }
+
+        protected override void FloatStore(DecodedInstruction inst)
+        {
+            EmitFallbackOp(inst);
+        }
+
+        protected override void Add(DecodedInstruction inst)
+        {
+            EmitFallbackOp(inst);
+        }
+
+        protected override void Subtract(DecodedInstruction inst)
+        {
+            EmitFallbackOp(inst);
+        }
+
+        protected override void Multiply(DecodedInstruction inst)
+        {
+            EmitFallbackOp(inst);
+        }
+
+        protected override void Divide(DecodedInstruction inst)
+        {
+            EmitFallbackOp(inst);
+        }
+
+        protected override void SqrRoot(DecodedInstruction inst)
+        {
+            EmitFallbackOp(inst);
+        }
+
+        protected override void Abs(DecodedInstruction inst)
+        {
+            EmitFallbackOp(inst);
+        }
+
+        protected override void Mov(DecodedInstruction inst)
+        {
+            EmitFallbackOp(inst);
+        }
+
+        protected override void Neg(DecodedInstruction inst)
+        {
+            EmitFallbackOp(inst);
+        }
+
+        protected override void Round(DecodedInstruction inst)
+        {
+            EmitFallbackOp(inst);
+        }
+
+        protected override void Truncate(DecodedInstruction inst)
+        {
+            EmitFallbackOp(inst);
+        }
+
+        protected override void Ceil(DecodedInstruction inst)
+        {
+            EmitFallbackOp(inst);
+        }
+
+        protected override void Floor(DecodedInstruction inst)
+        {
+            EmitFallbackOp(inst);
+        }
+
+        protected override void Convert(DecodedInstruction inst)
+        {
+            EmitFallbackOp(inst);
+        }
+
+        protected override void Condition(DecodedInstruction inst)
         {
             EmitFallbackOp(inst);
         }

@@ -28,7 +28,15 @@ namespace cor64.Mips
 
         public Opcode Op => m_Opcode;
 
-        public bool IsBranch => Op.Family == OperationFamily.Branch || Op.Family == OperationFamily.BranchFpu;
+        public bool IsBranch => Op.Family == OperationFamily.Branch;
+
+        public FpuValueType Format => m_Inst.fmtType;
+
+        public int FloatSource => m_Inst.fs;
+
+        public int FloatTarget => m_Inst.ft;
+
+        public int FloatDest => m_Inst.fd;
 
         public ulong Address => m_Address;
 
@@ -40,6 +48,8 @@ namespace cor64.Mips
         public bool EmulatorNop => m_NoOp;
 
         public bool LastOne => m_LastInst;
+
+        public bool IsFloatingType => Format == FpuValueType.FSingle || Format == FpuValueType.FDouble;
 
         public bool IsBranchConditional
         {
@@ -60,24 +70,6 @@ namespace cor64.Mips
                     case ArithmeticOp.TRUE: return true;
                 }
             }
-        }
-
-        public ulong GetStaticJumpTarget()
-        {
-            uint target = m_Inst.target << 2;       // (32-bit) Word-align target
-            uint jumpAddress = (uint)m_Address + 4; // (32-bit) next instuction address
-            jumpAddress &= 0xF0000000;            // Leave only the 4 most signficant bits
-            jumpAddress |= (target & 0x0FFFFFFF); // Concat the target to PC address
-            return jumpAddress;
-        }
-
-        public ulong GetStaticBranchTarget()
-        {
-            int offset = (short)m_Inst.imm;        // Sign extend to 32-bit
-            offset <<= 2;                        // Word-align offset
-            int target = (int)m_Address + 4; // Get the 32-bit PC address
-            target += offset;                    // Add offset to PC
-            return (uint)target;
         }
 
         public int Source => m_Inst.rs;

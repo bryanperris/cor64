@@ -55,7 +55,7 @@ namespace cor64.Mips
             fd = sa;
             tc = (ushort)(imm >> 6);
 
-            switch (rd) {
+            switch (rs) {
                 case 16: fmtType = FpuValueType.FSingle; break;
                 case 17: fmtType = FpuValueType.FDouble; break;
                 case 20: fmtType = FpuValueType.Word; break;

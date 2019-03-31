@@ -4,6 +4,7 @@
     <StartAction>Project</StartAction>
     <ExternalConsole>true</ExternalConsole>
     <ConsolePause>true</ConsolePause>
+    <MonoLlvm>false</MonoLlvm>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(RunConfiguration)' == 'NoVideo' ">
     <StartAction>Project</StartAction>
@@ -11,5 +12,11 @@
     <EnvironmentVariables>
       <Variable name="NOVIDEO" value="" />
     </EnvironmentVariables>
+    <MonoLlvm>false</MonoLlvm>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(RunConfiguration)' == 'Clang' ">
+    <MonoLlvm>true</MonoLlvm>
+    <StartAction>Project</StartAction>
+    <ExternalConsole>true</ExternalConsole>
   </PropertyGroup>
 </Project>

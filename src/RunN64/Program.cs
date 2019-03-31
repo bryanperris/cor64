@@ -1,28 +1,23 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.IO.Compression;
-using System.Linq;
-using System.Text;
-using System.Text.RegularExpressions;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Windows.Forms;
 using cor64;
-using cor64.Mips;
 using cor64.Mips.R4300I;
+using Newtonsoft.Json;
 using NLog;
 using NLog.Config;
 using NLog.Targets;
 using RunN64.Forms;
-using Newtonsoft.Json;
-using NLog.Conditions;
+using System;
+using System.IO;
+using System.Threading;
+using System.Windows.Forms;
 
 namespace RunN64
 {
     class Program
     {
         private static ILRecompiler m_Interpreter = new ILRecompiler(true);
+        //private static SimpleInterpreter m_Interpreter = new SimpleInterpreter(true);
+        //private static CFloatInterpreter m_Interpreter = new CFloatInterpreter(true);
+
         private static N64System m_System;
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
 
@@ -32,9 +27,15 @@ namespace RunN64
 
             String layout = @"${date:format=HH\:mm\:ss} ${message}";
 
-            ColoredConsoleTarget consoleTarget = new ColoredConsoleTarget()
+            //ColoredConsoleTarget consoleTarget = new ColoredConsoleTarget()
+            //{
+            //    Layout = layout,
+
+            //};
+
+            ConsoleTarget consoleTarget = new ConsoleTarget()
             {
-                Layout = layout,
+                Layout = layout
             };
 
             //ConsoleRowHighlightingRule phaseColorRule = new ConsoleRowHighlightingRule(
@@ -62,7 +63,7 @@ namespace RunN64
             LogManager.Flush();
         }
 
-        private static Stream GetCartRom(String path)
+        private static Cartridge GetCartRom(String path)
         {
             if (!File.Exists(path))
             {
@@ -74,19 +75,29 @@ namespace RunN64
                 throw new ArgumentException("no rom file to use!");
             }
 
-            Console.ForegroundColor = ConsoleColor.Magenta;
-            Console.WriteLine("Cart ROM: {0}", path);
-            Console.ResetColor();
-
             using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read))
             {
                 MemoryStream rom = new MemoryStream();
-               // GZipStream gZipStream = new GZipStream(rom, CompressionMode.Compress);
                 fs.Position = 0;
                 fs.CopyTo(rom);
-                // return new GZipStream(gZipStream, CompressionMode.Decompress);
-                return rom;
-                // Turns out gzip streams are not seekable.
+
+                var cart = new Cartridge(rom);
+
+                Console.ForegroundColor = ConsoleColor.Magenta;
+
+                Console.WriteLine("Title:         {0}", cart.Name);
+                Console.WriteLine("Filename:      {0}", Path.GetFileName(path));
+                Console.WriteLine("Entry Point:   0x{0:X8}", cart.EntryPoint);
+                Console.WriteLine("Checksum:      0x{0:X8}{1:X8}", cart.Crc1, cart.Crc2);
+
+                Console.Write("Cart IPL3 MD5: 0x");
+                foreach (Byte b in cart.BootChecksumMD5)
+                {
+                    Console.Write("{0:X2}", b);
+                }
+                Console.WriteLine();
+
+                return cart;
             }
         }
 
@@ -109,8 +120,13 @@ namespace RunN64
         private static void PhaseMsg(String msg)
         {
             Console.ForegroundColor = ConsoleColor.Cyan;
-            Console.WriteLine("--- Phase: {0} ---", msg);
-            Console.ResetColor();
+            Console.WriteLine("\n--- {0} ---", msg);
+            Console.ForegroundColor = ConsoleColor.Green;
+        }
+
+        private static void CicHash(Cartridge cart)
+        {
+
         }
 
         static void Main(string[] args)
@@ -122,24 +138,21 @@ namespace RunN64
 
             InitLogging();
 
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.Write("N");
-            Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.Write("64");
             Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine(" Emulator");
-            Console.WriteLine("```````````````");
-            Console.ResetColor();
+            Console.WriteLine("****************************************");
+            Console.WriteLine("* COR64 - A N64 emulator written in C# *");
+            Console.WriteLine("****************************************");
 
             try
             {
-                PhaseMsg("Load Cartridge");
+                PhaseMsg("Insert Cartridge");
 
-                Stream romStream = GetCartRom(config.RomFilepath);
+                var cart = GetCartRom(config.RomFilepath);
 
-                var cart = new Cartridge(romStream);
 
-                PhaseMsg("Core Setup");
+                Console.ForegroundColor = ConsoleColor.Green;
+
+                PhaseMsg("System Initialization");
 
                 m_System = new N64System();
                 m_System.DebugMode();
@@ -157,7 +170,7 @@ namespace RunN64
                 gfxThread.Start();
 
 
-                PhaseMsg("Execution");
+                PhaseMsg("System Execution Start");
 
                 SingleThreadHost host = new SingleThreadHost(m_System);
 

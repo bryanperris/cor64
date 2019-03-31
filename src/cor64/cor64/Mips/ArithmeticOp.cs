@@ -22,6 +22,7 @@ namespace cor64.Mips
         GREATER_THAN,
         LESS_THAN,
         TRUE,
-        FALSE
+        FALSE,
+        SIGNALING
     }
 }

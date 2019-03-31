@@ -49,9 +49,6 @@ namespace cor64.BassSharp
 
         private bool BlockAction(BlockOp op, Instruction inst, String type, BlockMatchType matchMethod, params String[] args)
         {
-            if (inst.statement.Contains("while"))
-                Console.ResetColor();
-
             String statement = inst.statement;
 
             switch (matchMethod)

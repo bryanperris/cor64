@@ -101,8 +101,8 @@ namespace cor64.Tests.Cpu
                     opcode = BypassFpu(opcode);
                     result = BypassFpu(result);
 
-                    if (opcode.StartsWith("c.f"))
-                        opcode = opcode.Replace("c.f", "c.c");
+                    //if (opcode.StartsWith("c.f"))
+                    //    opcode = opcode.Replace("c.f", "c.c");
                 }
 
                 if (result == "nop")

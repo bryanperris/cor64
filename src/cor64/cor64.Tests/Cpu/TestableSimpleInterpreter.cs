@@ -8,14 +8,15 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Xunit;
+using System.Runtime.Remoting;
 
 namespace cor64.Tests.Cpu
 {
-    internal sealed class TestableSimpleInterpreter : SimpleInterpreter, ITestableCore
+    internal sealed class TestableSimpleInterpreter : Interpreter, ITestableCore
     {
         private TestCase m_TestCase;
         private bool m_UseWords;
-		private MemoryStream m_DataMemory = new MemoryStream();
+		private MemoryStream m_TestDataMemory = new MemoryStream();
 
         public TestableSimpleInterpreter() : base(true)
         {
@@ -27,12 +28,12 @@ namespace cor64.Tests.Cpu
 
             BypassMMU = true;
             AttachIStream(new StreamEx.Wrapper(tester.GetProgram()));
-			AttachDStream(new StreamEx.Wrapper(m_DataMemory));
+			AttachDStream(new StreamEx.Wrapper(m_TestDataMemory));
 
             /* Inject zeros into data memory */
             for (int i = 0; i < 16; i++)
             {
-                m_DataMemory.WriteByte(0);
+                m_TestDataMemory.WriteByte(0);
             }
 
             if (m_TestCase.IsXfer)
@@ -43,7 +44,7 @@ namespace cor64.Tests.Cpu
 
             if (m_TestCase.IsLoadStore && m_TestCase.InjectDMem)
             {
-                Stream s = m_DataMemory;
+                Stream s = m_TestDataMemory;
 
                 //switch (m_TestCase.ExpectedBytes.Length)
                 //{
@@ -88,19 +89,19 @@ namespace cor64.Tests.Cpu
 
             if (typeof(uint) == type)
             {
-                State.FPR_32[index] = (uint)value;
+                State.FPR.S32[index] = value;
             }
             else if (typeof(ulong) == type)
             {
-                State.FPR_64[index] = (ulong)value;
+                State.FPR.S64[index] = value;
             }
             else if (typeof(float) == type)
             {
-                State.FPR_FLOAT[index] = (float)value;
+                State.FPR.F32[index] = value;
             }
             else if (typeof(double) == type)
             {
-                State.FPR_DOUBLE[index] = (double)value;
+                State.FPR.F64[index] = value;
             }
             else {
                 throw new ArgumentException("invalid type to set fpr value");
@@ -182,12 +183,26 @@ namespace cor64.Tests.Cpu
         {
             if ((m_TestCase.ExpectationFlags & TestCase.Expectations.Exceptions) == TestCase.Expectations.Exceptions)
             {
-                Assert.Equal(m_TestCase.ExpectedExceptions, Exceptions);
+                if (!m_TestCase.IsFpuTest)
+                {
+                    Assert.Equal(m_TestCase.ExpectedExceptions, Exceptions);
+                }
+                else
+                {
+                    // TODO: Should test that cop0 will contain an exception for FPU
+                    Assert.Equal(m_TestCase.ExpectedFPUExceptions, State.FCR.Cause);
+                }
+
                 return;
             }
             else
             {
                 Assert.Equal(ExceptionType.Interrupt, Exceptions);
+
+                if (m_TestCase.IsFpuTest)
+                {
+                    Assert.Equal(FpuExceptionFlags.None, State.FCR.Cause);
+                }
             }
 
             // TODO: Xfer source is GPR, does it affect this part?
@@ -292,7 +307,7 @@ namespace cor64.Tests.Cpu
             {
                 if ((m_TestCase.ExpectationFlags & TestCase.Expectations.DMemStore) == TestCase.Expectations.DMemStore)
                 {
-                    Assert.True(AssertStreamBytes(m_DataMemory, m_TestCase.ExepectedBytesOffset, m_TestCase.ExpectedBytes));
+                    Assert.True(AssertStreamBytes(m_TestDataMemory, m_TestCase.ExepectedBytesOffset, m_TestCase.ExpectedBytes));
                 }
             }
         }
@@ -308,14 +323,50 @@ namespace cor64.Tests.Cpu
             }
         }
 
+        private String F(float value)
+        {
+            return value.ToString("G");
+        }
+
+        private String D(double value)
+        {
+            return value.ToString("G");
+        }
+
         private void TestFPRExpectations()
         {
+            var v = m_TestCase.Result.Value;
+
             switch (m_TestCase.ExpectedFpuType) {
                 case FpuValueType.Reserved: throw new ArgumentException("cannot test with reserved fpu types");
-                case FpuValueType.Word: Assert.IsType(m_TestCase.Result.Value.GetType(), typeof(uint)); break;
-                case FpuValueType.Doubleword: Assert.IsType(m_TestCase.Result.Value.GetType(), typeof(ulong)); break;
-                case FpuValueType.FSingle: Assert.IsType(m_TestCase.Result.Value.GetType(), typeof(float)); break;
-                case FpuValueType.FDouble: Assert.IsType(m_TestCase.Result.Value.GetType(), typeof(double)); break;
+
+                case FpuValueType.Word:
+                    {
+                        Assert.IsType<uint>(v);
+                        Assert.Equal(I(v), I(State.FPR.S32[m_TestCase.Result.Key]));
+                        break;
+                    }
+
+                case FpuValueType.Doubleword:
+                    {
+                        Assert.IsType<ulong>(v);
+                        Assert.Equal(L(v), L(State.FPR.S64[m_TestCase.Result.Key]));
+                        break;
+                    }
+
+                case FpuValueType.FSingle:
+                    {
+                        Assert.IsType<float>(v);
+                        Assert.Equal(F(v), F(State.FPR.F32[m_TestCase.Result.Key]));
+                        break;
+                    }
+
+                case FpuValueType.FDouble:
+                    {
+                        Assert.IsType<double>(v);
+                        Assert.Equal(D(v), D(State.FPR.F64[m_TestCase.Result.Key]));
+                        break;
+                    }
             }
         }
     }

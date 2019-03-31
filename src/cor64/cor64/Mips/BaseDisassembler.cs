@@ -24,7 +24,7 @@ namespace cor64.Mips
             DebugFast
         }
 
-        private static readonly String[] Cop2ConditionalTable = {
+        private static readonly String[] Cop1ConditionalTable = {
             "f", "un", "eq", "olt", "ult", "ole", "ule", "sf",
             "ngle", "sqe", "ngl", "lt", "nge", "le", "ngt"
         };
@@ -97,18 +97,11 @@ namespace cor64.Mips
 
         protected ulong ComputeJumpTarget(BinaryInstruction inst)
         {
-            //ulong offset = inst.target << 2;
-            //return offset | (m_BaseAddress & 0xFFFFFFFFF0000000);
             return CoreUtils.ComputeTargetPC(false, false, m_BaseAddress, 0, inst.target);
         }
 
         protected ulong ComputeBranchTarget(BinaryInstruction inst)
         {
-            //ulong target = (ulong)(short)inst.imm;
-            //target <<= 2;
-            //target = (target & ~0x3FFFFUL) | (target & 0x3FFFF);
-            //target = (uint)((long)m_BaseAddress + (long)target);
-            //target += 4;
             return CoreUtils.ComputeBranchPC(false, m_BaseAddress, CoreUtils.ComputeBranchTargetOffset(inst.imm));
         }
 
@@ -127,7 +120,7 @@ namespace cor64.Mips
         protected static String DecodeCop1Conditional(BinaryInstruction inst)
         {
             if (inst.fc >= 0 && inst.fc <= 15 && inst.fmtType != FpuValueType.Reserved)
-                return Cop2ConditionalTable[inst.fc];
+                return Cop1ConditionalTable[inst.fc];
 
             else
                 return "cond";

@@ -12,10 +12,10 @@ namespace cor64.Mips
         private TRecord[] m_RecordSet;
         private int m_Offset;
 
-        protected BasicBlock(ulong address, int storageSize)
+        protected BasicBlock(ulong address, int size)
         {
             m_Address = address;
-            m_RecordSet = new TRecord[storageSize];
+            m_RecordSet = new TRecord[size];
         }
 
         public void Append(TRecord instRecord)
