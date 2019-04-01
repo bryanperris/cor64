@@ -15,7 +15,7 @@ namespace RunN64
     class Program
     {
         private static ILRecompiler m_Interpreter = new ILRecompiler(true);
-        //private static SimpleInterpreter m_Interpreter = new SimpleInterpreter(true);
+        //private static Interpreter m_Interpreter = new Interpreter(true);
         //private static CFloatInterpreter m_Interpreter = new CFloatInterpreter(true);
 
         private static N64System m_System;
