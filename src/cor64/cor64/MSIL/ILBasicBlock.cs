@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection.Emit;
 using System.Text;
 using System.Threading.Tasks;
+using cor64.Mips;
 
 namespace cor64.MSIL
 {
@@ -14,6 +15,7 @@ namespace cor64.MSIL
         private DynamicMethod m_DMethod;
         private Object m_Bridge;
         private Object m_Owner;
+        private List<DecodedInstruction> m_FallbackInstructions = new List<DecodedInstruction>();
 
         public ILBasicBlock(ulong address, Object owner, Object bridge)
         {
@@ -53,6 +55,8 @@ namespace cor64.MSIL
         {
             m_NextPc = pc;
         }
+
+        public IList<DecodedInstruction> FallbackInstructions => m_FallbackInstructions;
 
         public ulong NextPC => m_NextPc;
 

@@ -7,18 +7,14 @@ namespace cor64.IO
 {
     public abstract class PerpherialDevice : DmaBlockDevice
     {
-        private Dictionary<uint, MemMappedBuffer> m_MemLookupTable = new Dictionary<uint, MemMappedBuffer>();
-        private uint m_BuilderOffset;
+        private long m_BuilderOffset;
         private int m_Size;
+        private MemMappedBuffer[] m_BufferTable;
 
         protected PerpherialDevice(N64MemoryController controller, int size) : base(controller)
         {
             m_Size = size;
-        }
-
-        protected void PrintOffset()
-        {
-            Console.WriteLine(m_BuilderOffset.ToString("X8"));
+            m_BufferTable = new MemMappedBuffer[size / 4];
         }
 
         protected void AppendDevice(params MemMappedBuffer[] devices)
@@ -34,156 +30,54 @@ namespace cor64.IO
             if (device == null)
                 throw new ArgumentNullException(nameof(device));
 
-            device.TaggedAddress = m_BuilderOffset;
-
-            for (int i = 0; i < device.Size; i++)
+            if (device.Size % 4 != 0)
             {
-                m_MemLookupTable.Add(m_BuilderOffset++, device);
+                throw new ArgumentException("size must be word aligned");
             }
+
+            device.AssignedAddress = m_BuilderOffset;
+
+            var count = device.Size / 4;
+            var off = m_BuilderOffset / 4;
+
+            for (int i = 0; i < count; i++)
+                m_BufferTable[off + i] = device;
+
+            m_BuilderOffset += (uint)device.Size;
         }
 
         protected void AppendUnused(int size)
         {
-            for (int i = 0; i < size; i++)
-            {
-                m_MemLookupTable.Add(m_BuilderOffset++, null);
-            }
+            m_BuilderOffset += (uint)size;
         }
 
         protected override void Read(long position, byte[] buffer, int offset, int count)
         {
-            MemMappedBuffer currentDevice = null;
-            uint localOffset = (uint)position;
+            var _buffer = m_BufferTable[(uint)position / 4];
 
-            for (int i = 0; i < count; i++)
+            if (_buffer != null)
             {
-                if (currentDevice == null || localOffset < currentDevice.TaggedAddress || localOffset > (currentDevice.TaggedAddress + currentDevice.Size))
-                {
-                    /* Look it up */
-                    if (m_MemLookupTable.ContainsKey(localOffset))
-                    {
-                        var device = m_MemLookupTable[localOffset];
+                // Assuming word-aligned read
 
-                        if (device == null)
-                        {
-                            localOffset++;
-                            continue;
-                        }
-
-                        currentDevice = device;
-                    }
-                }
-
-                buffer[offset + i] = currentDevice.ReadByte((int)(localOffset - currentDevice.TaggedAddress));
-                localOffset++;
+                var _offset = (int)position - (int)_buffer.AssignedAddress;
+                _buffer.Read(buffer, _offset, offset, count);
             }
         }
 
         protected override void Write(long position, byte[] buffer, int offset, int count)
         {
-            MemMappedBuffer currentDevice = null;
-            uint localOffset = (uint)position;
+            var _buffer = m_BufferTable[(uint)position / 4];
 
-            for (int i = 0; i < count; i++)
+            if (_buffer != null)
             {
-                if (currentDevice == null || localOffset < currentDevice.TaggedAddress || localOffset > (currentDevice.TaggedAddress + currentDevice.Size))
-                {
-                    if (currentDevice != null)
-                    {
-                        currentDevice.NotifyCPUWrite();
-                    }
+                // Assuming word-aligned write
 
-                    /* Look it up */
-                    if (m_MemLookupTable.ContainsKey(localOffset))
-                    {
-                        var device = m_MemLookupTable[localOffset];
-
-                        if (device == null)
-                        {
-                            localOffset++;
-                            continue;
-                        }
-
-                        currentDevice = device;
-                    }
-                }
-
-                currentDevice.WriteByte((int)(localOffset - currentDevice.TaggedAddress), buffer[offset + i]);
-                localOffset++;
-            }
-
-            if (currentDevice != null)
-            {
-                currentDevice.NotifyCPUWrite();
+                var _offset = (int)position - (int)_buffer.AssignedAddress;
+                _buffer.Write(buffer, offset, _offset, count);
+                _buffer.OnMemWrite();
             }
         }
 
         public override long Size => m_Size;
-    }
-
-    /* Base class for device IO functions mounted to memory */
-    abstract class MemFunction {
-        private int m_Id;
-        private int m_Size;
-
-        protected MemFunction(int id, int size) {
-            m_Id = id;
-            m_Size = size;
-        }
-
-        public abstract byte ReadByte(int offset);
-
-        public abstract void WriteByte(int offset, byte value);
-
-        public int Size => m_Size;
-
-        public int Id => m_Id;
-    }
-
-    class BufferMemFunction : MemFunction {
-        private byte[] m_Buffer;
-
-        public BufferMemFunction(int id, int size) : base(id, size)
-        {
-            m_Buffer = new byte[size];
-        }
-
-        public override byte ReadByte(int offset)
-        {
-            return m_Buffer[offset];
-        }
-
-        public override void WriteByte(int offset, byte value)
-        {
-            m_Buffer[offset] = value;
-        }
-    }
-
-    class RegisterMemfunction : MemFunction {
-        private PinnedBuffer m_RegStorageA;
-        private PinnedBuffer m_RegStorageB;
-
-        public RegisterMemfunction(int id, int size, bool seperateMaps) : base(id, size) {
-            m_RegStorageA = new PinnedBuffer(size);
-
-            if (seperateMaps) {
-                m_RegStorageB = new PinnedBuffer(size);
-            }
-        }
-
-        public override byte ReadByte(int offset)
-        {
-            return m_RegStorageA[offset];
-        }
-
-        public override void WriteByte(int offset, byte value)
-        {
-            var pinned = m_RegStorageB != null ? m_RegStorageB : m_RegStorageA;
-            pinned[offset] = value;
-        }
-
-        public IntPtr GetStorageAPtr() => m_RegStorageA.GetPointer();
-
-        public IntPtr GetStorageBPtr() => m_RegStorageB.GetPointer();
     }
 }

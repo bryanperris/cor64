@@ -17,11 +17,16 @@ namespace cor64
 
         protected void WriteField(int bitOffset, int bitCount, uint value)
         {
-            uint x = Value;
-            uint m = ~(uint.MaxValue << bitOffset >> bitOffset);
-            value <<= bitOffset;
-            x &= m;
-            x |= (m & m);
+            uint mask = ~(uint.MaxValue >> bitCount << bitCount);
+
+            bitCount--;
+
+            int left = (bitOffset - bitCount);
+            mask <<= left;
+            mask = ~mask;
+            uint x = Value & mask;
+            x |= (value << left) & ~mask;
+
             InternalSet(x);
         }
     }

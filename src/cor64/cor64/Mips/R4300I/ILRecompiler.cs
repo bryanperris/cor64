@@ -26,10 +26,12 @@ namespace cor64.Mips.R4300I
     {
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
         private CoreBridge m_CoreBridge;
-        private CoreR4300I m_FallbackInterpreter;
+        private Interpreter m_FallbackInterpreter;
         private ILCodeEmitter m_Emitter;
         private bool m_EndOfBlock = false;
         private bool m_CompileMode = true;
+        private bool m_BlockStart = false;
+        private bool m_BlockEndFlag = false;
 
         private ILBasicBlock m_CurrentBlock;
         private ILBasicBlock m_LastBlock;
@@ -88,23 +90,7 @@ namespace cor64.Mips.R4300I
             return m_CoreBridge.GetType().GetMethod(name);
         }
 
-        protected override bool Execute()
-        {
-            if (!m_CompileMode)
-            {
-                return true;
-            }
-
-            /* Step clock */
-            CoreClock.NextTick();
-
-            /* Step coprocessor 0 */
-            Cop0.ProcessorTick();
-
-            return base.Execute();
-        }
-
-        public void SetFallbackInterpreter(CoreR4300I interpreter)
+        public void SetFallbackInterpreter(Interpreter interpreter)
         {
             m_FallbackInterpreter = interpreter;
             interpreter.OverrideIStream(new StreamEx.Wrapper(IMemoryStream));
@@ -136,6 +122,81 @@ namespace cor64.Mips.R4300I
             }
         }
 
+        public sealed override void Step()
+        {
+            if (!m_BlockStart)
+            {
+                m_BlockStart = true;
+                BlockBegin();
+            }
+
+            /* If we just excuted a block and not compiling one, just return */
+            if (!m_CompileMode)
+            {
+                return;
+            }
+
+            // TODO: Need to handle tick updating in each compiled block
+            /* Step clock */
+            CoreClock.NextTick();
+
+            /* Step coprocessor 0 */
+            Cop0.ProcessorTick();
+
+
+            /* Decode and execute emitter */
+            var decoded = Decode();
+
+
+            if (m_BlockStart && (m_BlockEndFlag || decoded.EmulatorNop || decoded.LastOne))
+            {
+                if (decoded.EmulatorNop)
+                {
+                    throw new InvalidOperationException("Core has hit a emulator nop");
+                }
+
+                BlockEnd();
+                m_BlockStart = false;
+                m_BlockEndFlag = false;
+            }
+            else
+            {
+                if (ValidateInstruction(decoded))
+                {
+                    var call = GetInstructionMethod(decoded);
+
+                    if (call == null)
+                    {
+                        throw new NotSupportedException(String.Format("Opcode {0} not supported", decoded.Op));
+                    }
+                    else
+                    {
+                        m_Emitter.OpBegin();
+
+                        /* Allow the delay slot to be part of the block */
+                        if (m_EndOfBlock)
+                        {
+                            m_EndOfBlock = false;
+                            m_BlockEndFlag = true;
+                        }
+
+                        call(decoded);
+                        m_Pc += 4;
+
+                        //Console.WriteLine("{0:X8} {1}", m_Pc, Disassembler.GetFullDisassembly(decoded));
+
+                        m_Emitter.OpEnd();
+
+
+                    }
+                }
+                else
+                {
+                    throw new InvalidOperationException("Hit an invalid instruction");
+                }
+            }
+        }
+
         private void ExecuteBlock(ILBasicBlock block)
         {
             m_CompileMode = false;
@@ -145,7 +206,7 @@ namespace cor64.Mips.R4300I
             m_Pc = block.NextPC;
         }
 
-        protected sealed override void BlockBegin()
+        protected void BlockBegin()
         {
             if (m_FallbackInterpreter == null)
             {
@@ -179,7 +240,7 @@ namespace cor64.Mips.R4300I
             }
         }
 
-        protected sealed override void BlockEnd()
+        protected void BlockEnd()
         {
             if (m_CurrentBlock != null)
             {
@@ -196,23 +257,6 @@ namespace cor64.Mips.R4300I
             }
         }
 
-        protected sealed override void OpBegin()
-        {
-            m_Emitter.OpBegin();
-
-            /* Allow the delay slot to be part of the block */
-            if (m_EndOfBlock)
-            {
-                m_EndOfBlock = false;
-                m_BlockEndFlag = true;
-            }
-        }
-
-        protected sealed override void OpEnd()
-        {
-            m_Emitter.OpEnd();
-        }
-
 
         /* -------------------------------------------------------
          * Mips Common Emitter Methods
@@ -220,10 +264,13 @@ namespace cor64.Mips.R4300I
 
         private void EmitFallbackOp(DecodedInstruction inst)
         {
+            int index = m_Emitter.AppendFallbackInst(inst);
+
             m_Emitter.BridgeMethodCall("Fallback", () =>
             {
                 m_Emitter.BlockRef();
                 m_Emitter.Constant32(inst.IsBranch ? 1 : 0);
+                m_Emitter.Constant32(index);
             });
         }
 

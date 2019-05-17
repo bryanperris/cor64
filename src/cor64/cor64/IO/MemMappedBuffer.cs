@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -18,9 +19,9 @@ namespace cor64.IO
 
         private PinnedBuffer m_BufferA;
         private PinnedBuffer m_BufferB;
-        private bool m_CPUCanRead;
-        private bool m_CPUCanWrite;
-        public event Action CPUWrite;
+        private bool m_CanRead;
+        private bool m_CanWrite;
+        public event Action MemWrite;
         private int m_Size;
 
         public MemMappedBuffer(int size, MemModel mode = MemModel.SINGLE_READ_WRITE)
@@ -33,47 +34,49 @@ namespace cor64.IO
             {
                 case MemModel.SINGLE_READ_WRITE:
                     {
-                        m_CPUCanRead = true;
-                        m_CPUCanWrite = true;
+                        m_CanRead = true;
+                        m_CanWrite = true;
                         break;
                     }
                 case MemModel.SINGLE_READONLY:
                     {
-                        m_CPUCanRead = true;
+                        m_CanRead = true;
                         break;
                     }
                 case MemModel.SINGLE_WRITEONLY:
                     {
-                        m_CPUCanWrite = true;
+                        m_CanWrite = true;
                         break;
                     }
                 case MemModel.DUAL_READ_WRITE:
                     {
-                        m_CPUCanRead = true;
-                        m_CPUCanWrite = true;
+                        m_CanRead = true;
+                        m_CanWrite = true;
                         m_BufferB = new PinnedBuffer(size);
                         break;
                     }
             }
         }
 
-        public byte ReadByte(int offset)
+        public void Read(byte[] buffer, int srcOffset, int dstOffset, int count)
         {
-            if (m_CPUCanRead)
-                return m_BufferA[offset];
-            else
-                return 0;
+            if (m_CanRead)
+            {
+                Marshal.Copy(m_BufferA.GetPointer().Offset(srcOffset), buffer, dstOffset, count);
+            }
         }
 
-        public void WriteByte(int offset, byte value)
+        public void Write(byte[] buffer, int srcOffset, int dstOffset, int len)
         {
-            if (m_CPUCanWrite)
-                m_BufferB[offset] = value;
+            if (m_CanWrite)
+            {
+                Marshal.Copy(buffer, srcOffset, m_BufferA.GetPointer().Offset(dstOffset), len);
+            }
         }
 
-        public void NotifyCPUWrite()
+        public void OnMemWrite()
         {
-            CPUWrite?.Invoke();
+            MemWrite?.Invoke();
         }
 
         public IntPtr ReadPtr => m_BufferB.GetPointer();
@@ -82,6 +85,6 @@ namespace cor64.IO
 
         public int Size => m_Size;
 
-        public uint TaggedAddress { get; set; }
+        public long AssignedAddress { get; set; }
     }
 }

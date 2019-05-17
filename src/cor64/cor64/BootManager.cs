@@ -91,7 +91,6 @@ namespace cor64
             /* Coprocess 0 setup */
             WR0(CTS.CP0_REG_RANDOM, 0x0000001F);
             WR0(CTS.CP0_REG_COUNT, 0x00005000);
-            WR0(CTS.CP0_REG_COUNT, 0x00005000);
             WR0(CTS.CP0_REG_SR, 0x34000000);
             WR0(CTS.CP0_REG_CAUSE, 0x0000005C);
             WR0(CTS.CP0_REG_CONFIG, 0x0006E463);
@@ -103,9 +102,11 @@ namespace cor64
             MMIOWR(MMIORegWriteKind.MiVersion, 0x02020102);
             MMIOWR(MMIORegWriteKind.SpStatus, 1);
 
+            // TODO: FPU revision reg   = 0x00000511;
+
             if (!bypassIPL)
             {
-                Log.Debug("Booting with real system IPL3 bootloader");
+                Log.Debug("Booting from PIF ROM");
                 PC(0xBFC00000);
                 return;
             }

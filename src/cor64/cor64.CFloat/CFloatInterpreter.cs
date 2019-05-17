@@ -132,7 +132,7 @@ namespace cor64.CFloat
             }
             else
             {
-                WriteFPR_L(inst.FloatDest, (ulong)roundedValue);
+                WriteFPR_DW(inst.FloatDest, (ulong)roundedValue);
             }
         }
 
@@ -162,7 +162,7 @@ namespace cor64.CFloat
             }
             else
             {
-                WriteFPR_L(inst.FloatDest, (ulong)roundedValue);
+                WriteFPR_DW(inst.FloatDest, (ulong)roundedValue);
             }
         }
 
@@ -192,7 +192,7 @@ namespace cor64.CFloat
             }
             else
             {
-                WriteFPR_L(inst.FloatDest, (ulong)roundedValue);
+                WriteFPR_DW(inst.FloatDest, (ulong)roundedValue);
             }
         }
 
@@ -222,7 +222,7 @@ namespace cor64.CFloat
             }
             else
             {
-                WriteFPR_L(inst.FloatDest, (ulong)roundedValue);
+                WriteFPR_DW(inst.FloatDest, (ulong)roundedValue);
             }
         }
     }

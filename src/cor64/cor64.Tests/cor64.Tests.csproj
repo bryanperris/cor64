@@ -112,12 +112,13 @@
       <HintPath>..\packages\Newtonsoft.Json.12.0.1\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="NLog">
-      <HintPath>..\packages\NLog.4.6.0\lib\net45\NLog.dll</HintPath>
+      <HintPath>..\packages\NLog.4.6.2\lib\net45\NLog.dll</HintPath>
     </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Asm\BareMetalTests.cs" />
     <Compile Include="Cpu\AsmHelper.cs" />
+    <Compile Include="Cpu\BitTests.cs" />
     <Compile Include="Cpu\DisassemblerTests.cs" />
     <Compile Include="Cpu\FpuCoreTests.cs" />
     <Compile Include="Cpu\FpuHelper.cs" />

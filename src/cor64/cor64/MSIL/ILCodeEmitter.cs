@@ -8,6 +8,7 @@ using System.Reflection.Emit;
 using IL = System.Reflection.Emit.OpCodes;
 using System.Runtime.CompilerServices;
 using System.Linq.Expressions;
+using cor64.Mips;
 
 namespace cor64.MSIL
 {
@@ -38,6 +39,12 @@ namespace cor64.MSIL
         }
 
         public ILGenerator RawEmitter => m_CG;
+
+        public int AppendFallbackInst(DecodedInstruction inst)
+        {
+            m_CurrentBlock.FallbackInstructions.Add(inst);
+            return m_CurrentBlock.FallbackInstructions.Count - 1;
+        }
 
         public void DefineLocalVariable(Type t)
         {

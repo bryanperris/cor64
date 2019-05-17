@@ -5,18 +5,16 @@ using System.Text;
 using System.Threading.Tasks;
 using NLog;
 
-namespace cor64.Mips.R4300I.CP0
+namespace cor64.Mips.R4300I
 {
     /// <summary>
     /// This class simulates functions of the coprocessor 0 in high level emulation
     /// </summary>
-    public class Cop0Controller
+    public class SystemController
     {
         private readonly static Logger Log = LogManager.GetCurrentClassLogger();
         private bool m_Debug = true;
-        private Cop0RegsterSet m_Registers;
-        private StatusRegister m_StatusReg;
-        private CauseRegister m_CauseReg;
+        private ExecutionState m_State;
         private bool m_TLBRefillException;
         private bool m_XTLBRefillExcepetion;
         private bool m_CacheErr;
@@ -33,21 +31,13 @@ namespace cor64.Mips.R4300I.CP0
         private Func<ulong> m_CallbackReadPC;
         private Func<bool> m_CallbackDelaySlot;
 
-        public Cop0Controller()
+        protected CauseRegister CR => m_State.Cp0.Cause;
+        protected StatusRegister SR => m_State.Cp0.Status;
+        protected ControlRegisters REGS => m_State.Cp0;
+
+        public SystemController(ExecutionState coreState)
         {
-            m_Registers = new Cop0RegsterSet();
-
-            m_StatusReg = new StatusRegister();
-            m_CauseReg = new CauseRegister();
-
-            m_Registers.ValueChanged += OnRegUpdate;
-            m_StatusReg.ValueChanged += StatusValueChanged;
-            m_CauseReg.ValueChanged += CauseValueChanged;
-        }
-
-        private void CauseValueChanged(object data)
-        {
-            m_Registers.Write(CTS.CP0_REG_CAUSE, m_CauseReg.Read());
+            m_State = coreState;
         }
 
         public void Attach_State(ChipInterface iface, Clock clock)
@@ -79,28 +69,12 @@ namespace cor64.Mips.R4300I.CP0
 
         public void Initialize()
         {
-            m_StatusReg.Initialize();
+            SR.Initialize();
         }
 
         private void StatusValueChanged(object o)
         {
-            m_Registers.Write(CTS.CP0_REG_SR, m_StatusReg.Read());
-        }
-
-        private void OnRegUpdate(int i)
-        {
-            switch (i)
-            {
-                case CTS.CP0_REG_COMPARE:
-                    {
-                        if (m_IP7Multiplexer)
-                            ClearInterrupt(7);
-                        break;
-                    }
-                case CTS.CP0_REG_SR: m_StatusReg.Write((uint)m_Registers.Read(CTS.CP0_REG_SR)); break;
-                case CTS.CP0_REG_CAUSE: m_CauseReg.Write((uint)m_Registers.Read(CTS.CP0_REG_CAUSE)); break;
-                default: break;
-            }
+            REGS.Write(CTS.CP0_REG_SR, SR.Read());
         }
 
         /// <summary>
@@ -118,7 +92,7 @@ namespace cor64.Mips.R4300I.CP0
             if (m_Timer)
             {
                 m_Timer = false;
-                m_Registers.Write(CTS.CP0_REG_COUNT, 0);
+                REGS.Write(CTS.CP0_REG_COUNT, 0);
                 m_Clock.ClearCountClock();
             }
         }
@@ -131,10 +105,10 @@ namespace cor64.Mips.R4300I.CP0
              */
             if (m_Clock.CountClock)
             {
-                m_Registers.Write(CTS.CP0_REG_COUNT, m_Registers.Read(CTS.CP0_REG_COUNT) + 1);
+                REGS.Write(CTS.CP0_REG_COUNT, REGS.Read(CTS.CP0_REG_COUNT) + 1);
 
                 /* Fire the timer interrupt */
-                if (m_Registers.Read(CTS.CP0_REG_COUNT) >= m_Registers.Read(CTS.CP0_REG_COMPARE))
+                if (REGS.Read(CTS.CP0_REG_COUNT) >= REGS.Read(CTS.CP0_REG_COMPARE))
                 {
                     m_Timer = true;
                 }
@@ -143,34 +117,23 @@ namespace cor64.Mips.R4300I.CP0
 
         private bool ReadInterruptMask(int i)
         {
-            switch (i)
+            if (i >= 0 && i < 8)
             {
-                case 0: return SR.InterruptMask0;
-                case 1: return SR.InterruptMask1;
-                case 2: return SR.InterruptMask2;
-                case 3: return SR.InterruptMask3;
-                case 4: return SR.InterruptMask4;
-                case 5: return SR.InterruptMask5;
-                case 6: return SR.InterruptMask6;
-                case 7: return SR.InterruptMask7;
-                default: return false;
+                return SR.TestInterruptMask((StatusRegister.InterruptMask)i);
             }
+
+            return false;
         }
 
         private bool ReadInterrupt(int i)
         {
-            switch (i)
+
+            if (i >= 0 && i < 8)
             {
-                case 0: return Cause.Interrupt0;
-                case 1: return Cause.Interrupt1;
-                case 2: return Cause.Interrupt2;
-                case 3: return Cause.Interrupt3;
-                case 4: return Cause.Interrupt4;
-                case 5: return Cause.Interrupt5;
-                case 6: return Cause.Interrupt6;
-                case 7: return Cause.Interrupt7;
-                default: return false;
+                return CR.TestInterrupt((CauseRegister.Interrupt)i);
             }
+
+            return false;
         }
 
         private void CheckExceptions()
@@ -198,7 +161,7 @@ namespace cor64.Mips.R4300I.CP0
             ulong othersAddress = 0;
             bool serviceHandler = true;
 
-            if (m_StatusReg.TestFlags(StatusFlags.UseBootstrapVectors))
+            if (SR.TestFlags(StatusRegister.StatusFlags.UseBootstrapVectors))
             {
                 cacheAddress = 0xFFFFFFFFBFC00200;
                 othersAddress = 0xFFFFFFFFBFC00200;
@@ -229,35 +192,34 @@ namespace cor64.Mips.R4300I.CP0
                 target = cacheAddress + 0x100;
                 m_CacheErr = false;
             }
-            else if (m_CauseReg.ExceptionThrown)
+            else if (CR.ExceptionThrown)
             {
-                m_CauseReg.ClearThrownException();
+                CR.ClearThrownException();
 
                 target = othersAddress + 0x180;
 
-                if (!m_StatusReg.ExceptionsEnabled)
+                if (!(SR.ExceptionsEnabled))
                 {
                     if (m_CallbackDelaySlot())
                     {
-                        m_Registers.WriteFromInternal(CTS.CP0_REG_EPC, m_CallbackReadPC() - 4);
-                        m_CauseReg.SetFlags(CauseFlags.IsBranchDelaySlot);
+                        REGS.Write(CTS.CP0_REG_EPC, m_CallbackReadPC() - 4);
+                        CR.SetBranchDelayBit();
                     }
                     else
                     {
-                        m_Registers.WriteFromInternal(CTS.CP0_REG_EPC, m_CallbackReadPC());
-                        m_CauseReg.ClearFlags(CauseFlags.IsBranchDelaySlot);
+                        REGS.Write(CTS.CP0_REG_EPC, m_CallbackReadPC());
+                        CR.ClearBranchDelayBit();
                     }
                 }
 
-                m_StatusReg.SetFlags(StatusFlags.EnableExceptionLevel);
-                
+                SR.SetFlags(StatusRegister.StatusFlags.EnableExceptionLevel);
             }
             else
             {
                 target = othersAddress + 0x180;
                 serviceHandler = false;
 
-                if (m_StatusReg.InterruptsEnabled)
+                if (SR.InterruptsEnabled)
                 {
                     for (int i = 0; i < 8; i++)
                     {
@@ -290,7 +252,7 @@ namespace cor64.Mips.R4300I.CP0
                 }
 
                 /* Disable all other interrupts */
-                m_StatusReg.SetInterruptsEnabled(false);
+                SR.SetInterruptsEnabled(false);
 
                 /* Set where PC is going to be next */
                 ExceptionJump(target);
@@ -306,12 +268,6 @@ namespace cor64.Mips.R4300I.CP0
         {
 
         }
-
-        public StatusRegister SR => m_StatusReg;
-
-        public CauseRegister Cause => m_CauseReg;
-
-        public Cop0RegsterSet Registers => m_Registers;
 
         private bool ReadInterruptPin(int i)
         {
@@ -351,10 +307,10 @@ namespace cor64.Mips.R4300I.CP0
             }
         }
 
-        public bool IsKernelMode => m_StatusReg.ModeBits == 0;
+        public bool IsKernelMode => SR.ModeBits == 0;
 
-        public bool IsSupervisorMode => m_StatusReg.ModeBits == 1;
+        public bool IsSupervisorMode => SR.ModeBits == 1;
 
-        public bool IsUserMode => m_StatusReg.ModeBits == 2;
+        public bool IsUserMode => SR.ModeBits == 2;
     }
 }

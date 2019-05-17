@@ -5,9 +5,9 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using cor64.Mips.R4300I.CP0;
 using cor64.IO;
 using cor64.Debugging;
+using System.Diagnostics;
 
 namespace cor64.Mips.R4300I
 {
@@ -15,11 +15,34 @@ namespace cor64.Mips.R4300I
     {
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
         private bool m_WarnInfiniteJump = false;
+        private DecodedInstruction? m_InjectedInst;
+        private Func<bool> m_ExecuteCall;
+        private DecodedInstruction m_FailedInstruction;
 
+        /* Debug Stats */
+        private int m_CountMemAccess;
+        private bool m_EntryPointHit;
 
-        public Interpreter(bool debug) :
+        public Interpreter() : this(false, false)
+        {
+        }
+
+        public Interpreter(bool debug) : this(debug, false)
+        {
+        }
+
+        public Interpreter(bool debug, bool useProfiler) :
             base(new Disassembler("o32", debug ? BaseDisassembler.Mode.Debug : BaseDisassembler.Mode.Fast))
         {
+            if (useProfiler)
+            {
+                m_ExecuteCall = ExecuteInstWithProfiler;
+                StartedWithProfiler = true;
+            }
+            else
+            {
+                m_ExecuteCall = ExecuteInst;
+            }
         }
 
         private static long L(ulong v)
@@ -36,7 +59,7 @@ namespace cor64.Mips.R4300I
 
         public override string Description => "Interpreter";
 
-        protected override bool Execute()
+        public override void Step()
         {
             /* Step clock */
             CoreClock.NextTick();
@@ -44,8 +67,251 @@ namespace cor64.Mips.R4300I
             /* Step coprocessor 0 */
             Cop0.ProcessorTick();
 
-            return base.Execute();
+            /* Delay Slot Logic */
+            if (WillJump)
+            {
+                if (BranchDelay)
+                {
+                    BranchDelay = false;
+
+                    if (!m_ExecuteCall())
+                    {
+                        throw new Exception("Failed to execute instruction in delay slot");
+                    }
+                }
+
+                TakeBranch = false;
+                UnconditionalJump = false;
+
+                /* Should always be a word-aligned relative PC jump */
+                /* Always force 32-bit addresses */
+                m_Pc = (uint)TargetAddress;
+
+                if (m_Pc < 0)
+                {
+                    throw new InvalidOperationException("PC target cannot be negative");
+                }
+            }
+            else
+            {
+                /* Nornal execution path */
+                if (m_ExecuteCall())
+                {
+                    m_Pc += 4;
+                }
+                else
+                {
+                    throw new Exception(String.Format("Failed to execute instruction: 0x{0:X8} 0x{1:X8}", m_FailedInstruction.Address, m_FailedInstruction.Inst.inst));
+                }
+            }
         }
+
+        private bool ExecuteInstWithProfiler()
+        {
+            DecodedInstruction decoded;
+
+            if (m_InjectedInst.HasValue)
+            {
+                decoded = m_InjectedInst.Value;
+                m_InjectedInst = null;
+            }
+            else
+            {
+                decoded = Decode();
+            }
+
+            if (ValidateInstruction(decoded))
+            {
+                var call = GetInstructionMethod(decoded);
+
+                if (call == null)
+                {
+                    throw new NotSupportedException(String.Format("Opcode {0} not supported", decoded.Op));
+                }
+                else
+                {
+                    BeginInstructionProfile(decoded);
+
+                    call(decoded);
+
+                    EndInstructionProfile();
+
+                    DebugInstruction(decoded);
+
+                    return true;
+                }
+            }
+            else
+            {
+                m_FailedInstruction = decoded;
+                return false;
+            }
+        }
+
+        private bool ExecuteInst()
+        {
+            DecodedInstruction decoded;
+
+            if (m_InjectedInst.HasValue)
+            {
+                decoded = m_InjectedInst.Value;
+                m_InjectedInst = null;
+            }
+            else
+            {
+                decoded = Decode();
+            }
+
+            if (ValidateInstruction(decoded))
+            {
+                var call = GetInstructionMethod(decoded);
+
+                if (call == null)
+                {
+                    throw new NotSupportedException(String.Format("Opcode {0} not supported", decoded.Op));
+                }
+                else
+                {
+                    DebugInstruction(decoded);
+                    call(decoded);
+                    return true;
+                }
+            }
+            else
+            {
+                m_FailedInstruction = decoded;
+                return false;
+            }
+        }
+
+        [Conditional("DEBUG")]
+        private void DebugInstruction(DecodedInstruction instruction)
+        {
+            if (core_InstDebugMode != DebugInstMode.None)
+            {
+                bool print = core_InstDebugMode == DebugInstMode.Full;
+
+                if (core_InstDebugMode == DebugInstMode.ProgramOnly)
+                {
+                    if (!m_EntryPointHit)
+                    {
+                        if (m_Pc == DebugEntryPoint)
+                        {
+                            m_EntryPointHit = true;
+                            print = true;
+                        }
+                    }
+                    else
+                    {
+                        print = true;
+                    }
+                }
+
+                if (print)
+                    Console.WriteLine("{0:X8} {1}", m_Pc, Disassembler.GetFullDisassembly(instruction));
+            }
+        }
+
+        public void InjectInst(DecodedInstruction inst)
+        {
+            m_InjectedInst = inst;
+        }
+
+        private void ConvertFromSingle(int source, int dest, ExecutionFlags flags)
+        {
+            float value = ReadFPR_S(source);
+
+            if ((flags & ExecutionFlags.DataS) == ExecutionFlags.DataS)
+            {
+                // TODO: Throw invalid exception
+                throw new InvalidOperationException("float32 to float32");
+            }
+            else if ((flags & ExecutionFlags.DataD) == ExecutionFlags.DataD)
+            {
+                WriteFPR_D(dest, (double)value);
+            }
+            else if ((flags & ExecutionFlags.Data64) == ExecutionFlags.Data64)
+            {
+                WriteFPR_DW(dest, (ulong)value);
+            }
+            else
+            {
+                WriteFPR_W(dest, (uint)value);
+            }
+        }
+
+        private void ConvertFromDouble(int source, int dest, ExecutionFlags flags)
+        {
+            double value = ReadFPR_D(source);
+
+            if ((flags & ExecutionFlags.DataS) == ExecutionFlags.DataS)
+            {
+                WriteFPR_S(dest, (float)value);
+            }
+            else if ((flags & ExecutionFlags.DataD) == ExecutionFlags.DataD)
+            {
+                // TODO: Throw invalid exception
+                throw new InvalidOperationException("float64 to float64");
+            }
+            else if ((flags & ExecutionFlags.Data64) == ExecutionFlags.Data64)
+            {
+                WriteFPR_DW(dest, (ulong)(long)value);
+            }
+            else
+            {
+                WriteFPR_W(dest, (uint)(long)value);
+            }
+        }
+
+        private void ConvertFromUInt32(int source, int dest, ExecutionFlags flags)
+        {
+            if ((flags & ExecutionFlags.DataS) == ExecutionFlags.DataS)
+            {
+                WriteFPR_SNR(dest, (int)ReadFPR_W(source));
+            }
+            else if ((flags & ExecutionFlags.DataD) == ExecutionFlags.DataD)
+            {
+                WriteFPR_DNR(dest, (int)ReadFPR_W(source));
+            }
+            else if ((flags & ExecutionFlags.Data64) == ExecutionFlags.Data64)
+            {
+                // TODO: Throw invalid exception
+                throw new InvalidOperationException("word to word");
+            }
+            else
+            {
+                // TODO: Throw invalid exception
+                throw new InvalidOperationException("word to dword");
+            }
+        }
+
+        private void ConvertFromUInt64(int source, int dest, ExecutionFlags flags)
+        {
+            if ((flags & ExecutionFlags.DataS) == ExecutionFlags.DataS)
+            {
+                WriteFPR_SNR(dest, (long)ReadFPR_DW(source));
+            }
+            else if ((flags & ExecutionFlags.DataD) == ExecutionFlags.DataD)
+            {
+                WriteFPR_DNR(dest, (long)ReadFPR_DW(source));
+            }
+            else if ((flags & ExecutionFlags.Data64) == ExecutionFlags.Data64)
+            {
+                // TODO: Throw invalid exception
+                throw new InvalidOperationException("word to word");
+            }
+            else
+            {
+                // TODO: Throw invalid exception
+                throw new InvalidOperationException("word to dword");
+            }
+        }
+
+
+        /* ------------------------------------------------------------------
+         * Implemented Opcodes
+         * ------------------------------------------------------------------
+         */
 
         protected override void Add32(DecodedInstruction inst)
         {
@@ -600,13 +866,11 @@ namespace cor64.Mips.R4300I
         {
             ulong value = 0;
 
-            // TODO: Reexamine if IsOperation64 should be ignored
-
             /* Source value to copy */
             switch (inst.Op.XferSource)
             {
-                case RegBoundType.Hi: value = State.Hi; break;
-                case RegBoundType.Lo: value = State.Lo; break;
+                case RegBoundType.Hi: value = ReadHi(); break;
+                case RegBoundType.Lo: value = ReadLo(); break;
                 case RegBoundType.Gpr: value = ReadGPR64(inst.Source); break;
                 case RegBoundType.Cp0:
                     {
@@ -616,7 +880,7 @@ namespace cor64.Mips.R4300I
                             return;
                         }
 
-                        value = Cp0Regs.Read(inst.Destination);
+                        value = State.Cp0.Read(inst.Destination);
 
                         /* If running 64-bit mode, with the 32-bit version, then sign extend */
                         if (IsOperation64 && inst.IsData32())
@@ -634,7 +898,7 @@ namespace cor64.Mips.R4300I
                             return;
                         }
 
-                        value = State.FPR.S32[inst.FloatSource];
+                        value = ReadFPR_W(inst.FloatSource);
 
                         /* If running 64-bit mode, with the 32-bit version, then sign extend */
                         if (IsOperation64 && inst.IsData32())
@@ -676,18 +940,18 @@ namespace cor64.Mips.R4300I
 
                 case RegBoundType.Hi:
                     {
-                        State.Hi = IsOperation64 ? value : (uint)value;
+                        WriteHi(IsOperation64 ? value : (uint)value);
                         break;
                     }
 
                 case RegBoundType.Lo:
                     {
-                        State.Lo = IsOperation64 ? value : (uint)value;
+                        WriteLo(IsOperation64 ? value : (uint)value);
                         break;
                     }
                 case RegBoundType.Cp0:
                     {
-                        Cp0Regs.WriteFromGpr(inst.Destination, value);
+                        State.Cp0.Write(inst.Destination, value);
                         break;
                     }
                 case RegBoundType.Cp1:
@@ -698,10 +962,10 @@ namespace cor64.Mips.R4300I
                             return;
                         }
 
-                        if (Cop0.SR.FRMode)
+                        if (State.Cp0.Status.FRMode)
                         {
                             value &= 0xFFFFFFFF;
-                            State.FPR.S64[inst.FloatSource] = value;
+                            WriteFPR_DW(inst.FloatSource, value);
                         }
                         else
                         {
@@ -716,7 +980,7 @@ namespace cor64.Mips.R4300I
                                 value &= 0xFFFF;
                             }
 
-                            State.FPR.S32[inst.FloatSource] = (uint)value;
+                            WriteFPR_W(inst.FloatSource, (uint)value);
                         }
 
                         break;
@@ -740,8 +1004,8 @@ namespace cor64.Mips.R4300I
             bool isLikely = inst.IsLikely();
             bool isLink = inst.IsLink();
             TargetAddress = CoreUtils.ComputeBranchPC(IsOperation64, m_Pc, CoreUtils.ComputeBranchTargetOffset(inst.Immediate));
-            ulong source = State.GPR_64[inst.Source];
-            ulong target = State.GPR_64[inst.Target];
+            ulong source = ReadGPR64(inst.Source);
+            ulong target = ReadGPR64(inst.Target);
 
             TakeBranch = ComputeBranchCondition(source, target, inst.Op.XferTarget, inst.Op.ArithmeticType);
 
@@ -763,7 +1027,7 @@ namespace cor64.Mips.R4300I
         {
             bool isLink = inst.IsLink();
             bool isRegister = inst.IsRegister();
-            TargetAddress = CoreUtils.ComputeTargetPC(IsOperation64, isRegister, m_Pc, State.GPR_64[inst.Source], inst.Inst.target);
+            TargetAddress = CoreUtils.ComputeTargetPC(IsOperation64, isRegister, m_Pc, ReadGPR64(inst.Source), inst.Inst.target);
             UnconditionalJump = true;
 
             if (isLink)
@@ -780,6 +1044,8 @@ namespace cor64.Mips.R4300I
 
         protected override void Store(DecodedInstruction inst)
         {
+            m_CountMemAccess++;
+
             ulong address = 0;
             int size = inst.DataSize();
             ExecutionFlags flags = inst.Op.Flags;
@@ -874,6 +1140,8 @@ namespace cor64.Mips.R4300I
 
         protected override void Load(DecodedInstruction inst)
         {
+            m_CountMemAccess++;
+
             /* Modes: Upper Immediate, Unsigned / Signed (8, 16, 32, 64), Left / Right (32, 64), Load Linked */
             ulong address = 0;
             int size = 0;
@@ -1009,6 +1277,8 @@ namespace cor64.Mips.R4300I
         {
             try
             {
+                m_CountMemAccess++;
+
                 var size = inst.DataSize();
 
                 long baseAddress = (long)ReadGPR64(inst.Source);
@@ -1021,7 +1291,7 @@ namespace cor64.Mips.R4300I
                 {
                     default: throw new InvalidOperationException("Unsupported FPU Load Size: " + size.ToString());
                     case 4: WriteFPR_W(inst.FloatTarget, m_DataMemory.Data32Swp); break;
-                    case 8: WriteFPR_L(inst.FloatTarget, m_DataMemory.Data64Swp); break;
+                    case 8: WriteFPR_DW(inst.FloatTarget, m_DataMemory.Data64Swp); break;
                 }
 
                 /* If loading a doubleword and FR = 0, we don't care, we bypass 32-bit stuff */
@@ -1036,6 +1306,8 @@ namespace cor64.Mips.R4300I
 
         protected override void FloatStore(DecodedInstruction inst)
         {
+            m_CountMemAccess++;
+
             var size = inst.DataSize();
 
             long baseAddress = (long)ReadGPR64(inst.Source);
@@ -1046,7 +1318,7 @@ namespace cor64.Mips.R4300I
             {
                 default: throw new InvalidOperationException("Unsupported FPU Store Size: " + size.ToString());
                 case 4: m_DataMemory.Data32Swp = ReadFPR_W(inst.FloatTarget); break;
-                case 8: m_DataMemory.Data64Swp = ReadFPR_L(inst.FloatTarget); break;
+                case 8: m_DataMemory.Data64Swp = ReadFPR_DW(inst.FloatTarget); break;
             }
 
             try
@@ -1056,96 +1328,6 @@ namespace cor64.Mips.R4300I
             catch (MipsException e)
             {
                 SetExceptionState(e.Exception);
-            }
-        }
-
-        private void ConvertFromSingle(int source, int dest, ExecutionFlags flags)
-        {
-            float value = ReadFPR_S(source);
-
-            if ((flags & ExecutionFlags.DataS) == ExecutionFlags.DataS)
-            {
-                // TODO: Throw invalid exception
-                throw new InvalidOperationException("float32 to float32");
-            }
-            else if ((flags & ExecutionFlags.DataD) == ExecutionFlags.DataD)
-            {
-                WriteFPR_D(dest, (double)value);
-            }
-            else if ((flags & ExecutionFlags.Data64) == ExecutionFlags.Data64)
-            {
-                WriteFPR_L(dest, (ulong)value);
-            }
-            else
-            {
-                WriteFPR_W(dest, (uint)value);
-            }
-        }
-
-        private void ConvertFromDouble(int source, int dest, ExecutionFlags flags)
-        {
-            double value = ReadFPR_D(source);
-
-            if ((flags & ExecutionFlags.DataS) == ExecutionFlags.DataS)
-            {
-                WriteFPR_S(dest, (float)value);
-            }
-            else if ((flags & ExecutionFlags.DataD) == ExecutionFlags.DataD)
-            {
-                // TODO: Throw invalid exception
-                throw new InvalidOperationException("float64 to float64");
-            }
-            else if ((flags & ExecutionFlags.Data64) == ExecutionFlags.Data64)
-            {
-                WriteFPR_L(dest, (ulong)(long)value);
-            }
-            else
-            {
-                WriteFPR_W(dest, (uint)(long)value);
-            }
-        }
-
-        private void ConvertFromUInt32(int source, int dest, ExecutionFlags flags)
-        {
-            if ((flags & ExecutionFlags.DataS) == ExecutionFlags.DataS)
-            {
-                WriteFPR_SNR(dest, (int)ReadFPR_W(source));
-            }
-            else if ((flags & ExecutionFlags.DataD) == ExecutionFlags.DataD)
-            {
-                WriteFPR_DNR(dest, (int)ReadFPR_W(source));
-            }
-            else if ((flags & ExecutionFlags.Data64) == ExecutionFlags.Data64)
-            {
-                // TODO: Throw invalid exception
-                throw new InvalidOperationException("word to word");
-            }
-            else
-            {
-                // TODO: Throw invalid exception
-                throw new InvalidOperationException("word to dword");
-            }
-        }
-
-        private void ConvertFromUInt64(int source, int dest, ExecutionFlags flags)
-        {
-            if ((flags & ExecutionFlags.DataS) == ExecutionFlags.DataS)
-            {
-                WriteFPR_SNR(dest, (long)ReadFPR_L(source));
-            }
-            else if ((flags & ExecutionFlags.DataD) == ExecutionFlags.DataD)
-            {
-                WriteFPR_DNR(dest, (long)ReadFPR_L(source));
-            }
-            else if ((flags & ExecutionFlags.Data64) == ExecutionFlags.Data64)
-            {
-                // TODO: Throw invalid exception
-                throw new InvalidOperationException("word to word");
-            }
-            else
-            {
-                // TODO: Throw invalid exception
-                throw new InvalidOperationException("word to dword");
             }
         }
 
@@ -1301,7 +1483,7 @@ namespace cor64.Mips.R4300I
             }
             else
             {
-                WriteFPR_L(inst.FloatDest, (ulong)roundedValue);
+                WriteFPR_DW(inst.FloatDest, (ulong)roundedValue);
             }
         }
 
@@ -1329,7 +1511,7 @@ namespace cor64.Mips.R4300I
             }
             else
             {
-                WriteFPR_L(inst.FloatDest, (ulong)roundedValue);
+                WriteFPR_DW(inst.FloatDest, (ulong)roundedValue);
             }
         }
 
@@ -1357,7 +1539,7 @@ namespace cor64.Mips.R4300I
             }
             else
             {
-                WriteFPR_L(inst.FloatDest, (ulong)roundedValue);
+                WriteFPR_DW(inst.FloatDest, (ulong)roundedValue);
             }
         }
 
@@ -1385,7 +1567,7 @@ namespace cor64.Mips.R4300I
             }
             else
             {
-                WriteFPR_L(inst.FloatDest, (ulong)roundedValue);
+                WriteFPR_DW(inst.FloatDest, (ulong)roundedValue);
             }
         }
 
@@ -1447,7 +1629,8 @@ namespace cor64.Mips.R4300I
                         {
                             /* Compare that both are signaling NaNs */
                             // TODO: This needs real testing, and on some website I found that this always results false.
-                            result |= (State.FPR.SignalNaNTable[inst.FloatSource] == State.FPR.SignalNaNTable[inst.FloatTarget]);
+                            throw new Exception();
+                            //result |= (State.FPR.SignalNaNTable[inst.FloatSource] == State.FPR.SignalNaNTable[inst.FloatTarget]);
                         }
                     }
 
@@ -1471,8 +1654,7 @@ namespace cor64.Mips.R4300I
                 {
                     result = !result;
                 }
-
-                State.FPR.ConditionFlag = result;
+             
                 State.FCR.Condition = result;
             }
             else

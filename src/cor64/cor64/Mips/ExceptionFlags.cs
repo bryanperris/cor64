@@ -25,6 +25,7 @@ namespace cor64.Mips
         VCEInstruction, // Virtual Coherency Exception
         Float,
         Watch,
-        VCEData // Virtual Coherency Exception
+        VCEData, // Virtual Coherency Exception,
+        Undefined
     }
 }

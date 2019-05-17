@@ -62,11 +62,11 @@ namespace cor64.Tests.Cpu
             {
 
                 if (tester.SourceA.Key >= 0)
-                    State.GPR_64[tester.SourceA.Key] = (ulong)tester.SourceA.Value;
+                    WriteGPR64(tester.SourceA.Key, (ulong)tester.SourceA.Value);
 
                 if (!tester.IsImmediate && tester.SourceB.Key >= 0)
                 {
-                    State.GPR_64[tester.SourceB.Key] = (ulong)tester.SourceB.Value;
+                    WriteGPR64(tester.SourceB.Key, (ulong)tester.SourceB.Value);
                 }
             }
             else
@@ -89,19 +89,19 @@ namespace cor64.Tests.Cpu
 
             if (typeof(uint) == type)
             {
-                State.FPR.S32[index] = value;
+                WriteFPR_W(index, value);
             }
             else if (typeof(ulong) == type)
             {
-                State.FPR.S64[index] = value;
+                WriteFPR_DW(index, value);
             }
             else if (typeof(float) == type)
             {
-                State.FPR.F32[index] = value;
+                WriteFPR_S(index, value);
             }
             else if (typeof(double) == type)
             {
-                State.FPR.F64[index] = value;
+                WriteFPR_D(index, value);
             }
             else {
                 throw new ArgumentException("invalid type to set fpr value");
@@ -114,19 +114,19 @@ namespace cor64.Tests.Cpu
             {
                 case RegBoundType.Gpr:
                     {
-                        State.GPR_64[test.SourceA.Key] = test.SourceA.Value; break;
+                        WriteGPR64(test.SourceA.Key, test.SourceA.Value); break;
                     }
                 case RegBoundType.Hi:
                     {
-                        State.Hi = test.SourceA.Value; break;
+                        WriteHi(test.SourceA.Value); break;
                     }
                 case RegBoundType.Lo:
                     {
-                        State.Lo = test.SourceA.Value; break;
+                        WriteLo(test.SourceA.Value); break;
                     }
                 case RegBoundType.Cp0:
                     {
-                        Cp0Regs.Write(test.SourceCp0.Key, test.SourceCp0.Value); break;
+                        State.Cp0.Write(test.SourceCp0.Key, test.SourceCp0.Value); break;
                     }
                 default: throw new NotImplementedException();
             }
@@ -224,16 +224,16 @@ namespace cor64.Tests.Cpu
                 {
                     if (!m_UseWords)
                     {
-                        Assert.Equal(L((ulong)m_TestCase.ExpectedLo), L(State.Lo));
+                        Assert.Equal(L((ulong)m_TestCase.ExpectedLo), L(ReadLo()));
                     }
                     else
                     {
-                        Assert.Equal(I((uint)m_TestCase.ExpectedLo), I((uint)State.Lo));
+                        Assert.Equal(I((uint)m_TestCase.ExpectedLo), I((uint)ReadLo()));
                     }
                 }
                 else
                 {
-                    Assert.Equal(L(0UL), L(State.Lo));
+                    Assert.Equal(L(0UL), L(ReadLo()));
                 }
             }
 
@@ -243,16 +243,16 @@ namespace cor64.Tests.Cpu
                 {
                     if (!m_UseWords)
                     {
-                        Assert.Equal(L((ulong)m_TestCase.ExpectedHi), L(State.Hi));
+                        Assert.Equal(L((ulong)m_TestCase.ExpectedHi), L(ReadHi()));
                     }
                     else
                     {
-                        Assert.Equal(I((uint)m_TestCase.ExpectedHi), I((uint)State.Hi));
+                        Assert.Equal(I((uint)m_TestCase.ExpectedHi), I((uint)ReadHi()));
                     }
                 }
                 else
                 {
-                    Assert.Equal(L(0UL), L(State.Hi));
+                    Assert.Equal(L(0UL), L(ReadHi()));
                 }
             }
 
@@ -280,11 +280,11 @@ namespace cor64.Tests.Cpu
                 if ((m_TestCase.ExpectationFlags & TestCase.Expectations.Link) == TestCase.Expectations.Link)
                 {
                     /* Return address check */
-                    Assert.Equal(L(8UL), L(State.GPR_64[31]));
+                    Assert.Equal(L(8UL), L(ReadRA()));
                 }
                 else
                 {
-                    Assert.Equal(L(0UL), L(State.GPR_64[31]));
+                    Assert.Equal(L(0UL), L(ReadRA()));
                 }
             }
 
@@ -295,11 +295,11 @@ namespace cor64.Tests.Cpu
                 if ((m_TestCase.ExpectationFlags & TestCase.Expectations.Link) == TestCase.Expectations.Link)
                 {
                     /* Return address check */
-                    Assert.Equal(L(8UL), L(State.GPR_64[31]));
+                    Assert.Equal(L(8UL), L(ReadRA()));
                 }
                 else
                 {
-                    Assert.Equal(L(0UL), L(State.GPR_64[31]));
+                    Assert.Equal(L(0UL), L(ReadRA()));
                 }
             }
 
@@ -315,11 +315,11 @@ namespace cor64.Tests.Cpu
         private void TestGPRExpectations()
         {
             if (!m_UseWords)
-                Assert.Equal(L((ulong)m_TestCase.Result.Value), L(State.GPR_64[m_TestCase.Result.Key]));
+                Assert.Equal(L((ulong)m_TestCase.Result.Value), L(ReadGPR64(m_TestCase.Result.Key)));
             else
             {
                 /* Test values as 32-bit words */
-                Assert.Equal(I((uint)m_TestCase.Result.Value), I((uint)State.GPR_64[m_TestCase.Result.Key]));
+                Assert.Equal(I((uint)m_TestCase.Result.Value), I((uint)ReadGPR64(m_TestCase.Result.Key)));
             }
         }
 
@@ -343,28 +343,28 @@ namespace cor64.Tests.Cpu
                 case FpuValueType.Word:
                     {
                         Assert.IsType<uint>(v);
-                        Assert.Equal(I(v), I(State.FPR.S32[m_TestCase.Result.Key]));
+                        Assert.Equal(I(v), I(ReadFPR_W(m_TestCase.Result.Key)));
                         break;
                     }
 
                 case FpuValueType.Doubleword:
                     {
                         Assert.IsType<ulong>(v);
-                        Assert.Equal(L(v), L(State.FPR.S64[m_TestCase.Result.Key]));
+                        Assert.Equal(L(v), L(ReadFPR_DW(m_TestCase.Result.Key)));
                         break;
                     }
 
                 case FpuValueType.FSingle:
                     {
                         Assert.IsType<float>(v);
-                        Assert.Equal(F(v), F(State.FPR.F32[m_TestCase.Result.Key]));
+                        Assert.Equal(F(v), F(ReadFPR_S(m_TestCase.Result.Key)));
                         break;
                     }
 
                 case FpuValueType.FDouble:
                     {
                         Assert.IsType<double>(v);
-                        Assert.Equal(D(v), D(State.FPR.F64[m_TestCase.Result.Key]));
+                        Assert.Equal(D(v), D(ReadFPR_D(m_TestCase.Result.Key)));
                         break;
                     }
             }

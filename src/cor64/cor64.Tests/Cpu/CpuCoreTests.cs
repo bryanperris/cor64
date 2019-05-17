@@ -11,9 +11,6 @@ using Xunit;
 using static cor64.Tests.Cpu.Helper.ParamType;
 using static cor64.Mips.ExceptionType;
 using static cor64.Tests.Cpu.Helper;
-using cor64.Mips.R4300I.CP0;
-
-// TODO: should use flags to pass to the assembler for things like no-dest (Hi/lo)
 
 namespace cor64.Tests.Cpu
 {
@@ -383,30 +380,24 @@ namespace cor64.Tests.Cpu
         [Logging]
         public void Cop0Tests()
         {
-            var controller = new Cop0Controller();
-            var registers = controller.Registers;
-            var status = controller.SR;
-            var cause = controller.Cause;
+            var state = new ExecutionState();
+            var controller = new SystemController(state);
+            var registers = state.Cp0;
+            var status = state.Cp0.Status;
+            var cause = state.Cp0.Cause;
 
             Assert.Equal(0UL, registers.Read(CTS.CP0_REG_SR));
-            Assert.False(status.TestFlags(StatusFlags.UsableCop0));
+            Assert.False(status.TestFlags(StatusRegister.StatusFlags.UsableCop0));
 
             registers.Write(CTS.CP0_REG_SR, ~0U);
-            Assert.True(status.TestFlags(StatusFlags.UsableCop0));
-            Assert.True(status.TestFlags(StatusFlags.Kernel64Mode));
+            Assert.True(status.TestFlags(StatusRegister.StatusFlags.UsableCop0));
+            Assert.True(status.TestFlags(StatusRegister.StatusFlags.Kernel64Mode));
 
             Assert.Equal(0UL, registers.Read(CTS.CP0_REG_CAUSE));
-            Assert.False(cause.Interrupt0);
+            Assert.False(cause.TestInterrupt(CauseRegister.Interrupt.Int0));
 
             registers.Write(CTS.CP0_REG_CAUSE, ~0U);
-            Assert.True(cause.Interrupt0);
-            Assert.True(cause.Interrupt1);
-            Assert.True(cause.Interrupt2);
-            Assert.True(cause.Interrupt3);
-            Assert.True(cause.Interrupt4);
-            Assert.True(cause.Interrupt5);
-            Assert.True(cause.Interrupt6);
-            Assert.True(cause.Interrupt7);
+            Assert.True(cause.TestInterrupt(CauseRegister.Interrupt.All));
         }
 
         [Fact]

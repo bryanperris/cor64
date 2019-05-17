@@ -53,8 +53,6 @@ namespace cor64.Mips
         private bool m_BootCode;
         protected DecodedInstruction m_LastInst;
         private ulong m_ProgramStart;
-        protected bool m_BlockStart = false;
-        protected bool m_BlockEndFlag = false;
 
 
         protected BaseInterpreter(BaseDisassembler disassembler)
@@ -91,58 +89,7 @@ namespace cor64.Mips
 
         public DecodedInstruction LastInst => m_LastInst;
 
-        protected virtual void BlockBegin()
-        {
-
-        }
-
-        protected virtual void BlockEnd()
-        {
-
-        }
-
-        public void Step()
-        {
-            if (m_DebugMode)
-            {
-                m_InstructionStopWatch.Reset();
-                m_InstructionStopWatch.Start();
-            }
-
-            if (m_BootCode && m_Pc == m_ProgramStart)
-            {
-                m_BootCode = false;
-            }
-
-            if (!m_BlockStart)
-            {
-                m_BlockStart = true;
-                BlockBegin();
-            }
-
-            if (!Execute())
-            {
-                throw new InvalidOperationException("Core has failed to execute next step");
-            }
-
-            if (m_BlockStart && (m_BlockEndFlag || m_LastInst.EmulatorNop || m_LastInst.LastOne))
-            {
-                if (m_LastInst.EmulatorNop)
-                {
-                    throw new InvalidOperationException("Core has hit a emulator nop");
-                }
-
-                BlockEnd();
-                m_BlockStart = false;
-                m_BlockEndFlag = false;
-            }
-
-            if (m_DebugMode)
-            {
-                m_InstructionStopWatch.Stop();
-                m_TraceLog.SetInstructionTickCount(m_InstructionStopWatch.ElapsedMilliseconds);
-            }
-        }
+        public abstract void Step();
 
         public void HookInterface(N64MemoryController controller)
         {
@@ -192,15 +139,13 @@ namespace cor64.Mips
             return m_TraceLog.GenerateTraceLog();
         }
 
-        protected abstract bool Execute();
-
         public virtual void DumpLogInfo(StringBuilder sb)
         {
             MemoryDebugger memoryDebugger = new MemoryDebugger();
 
             sb.AppendLine("Program Counter: " + m_Pc.ToString("X8"));
-            sb.AppendLine("Register Hi: " + State.Hi.ToString("X16"));
-            sb.AppendLine("Register Lo: " + State.Lo.ToString("X16"));
+            sb.AppendLine("Register Hi: " + State.GetHi().ToString("X16"));
+            sb.AppendLine("Register Lo: " + State.GetLo().ToString("X16"));
             sb.Append("Last Data Memory Access: ");
             sb.Append(LastDataAddress.ToString("X8"));
             sb.Append(" (");
@@ -211,7 +156,7 @@ namespace cor64.Mips
 
             for (int i = 0; i < 32; i++)
             {
-                sb.AppendLine(String.Format("GPR {0}: {1:X16}", GetGPRName(i), m_State.GPR_64[i]));
+                sb.AppendLine(String.Format("GPR {0}: {1:X16}", GetGPRName(i), m_State.GetGpr64(i)));
             }
 
             sb.AppendLine("----\n");

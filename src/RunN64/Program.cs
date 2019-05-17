@@ -14,9 +14,9 @@ namespace RunN64
 {
     class Program
     {
-        private static ILRecompiler m_Interpreter = new ILRecompiler(true);
-        //private static Interpreter m_Interpreter = new Interpreter(true);
+        private static Interpreter m_Interpreter = new Interpreter(true, false);
         //private static CFloatInterpreter m_Interpreter = new CFloatInterpreter(true);
+        //private static ILRecompiler m_Interpreter = new ILRecompiler(true);
 
         private static N64System m_System;
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
@@ -135,6 +135,7 @@ namespace RunN64
 
             //m_Interpreter.SetDebuggingMode(true);
             //m_Interpreter.AddVBP_ReadGPR(29);
+            //m_Interpreter.SetInstructionDebugMode(DebugInstMode.ProgramOnly);
 
             InitLogging();
 
@@ -148,6 +149,7 @@ namespace RunN64
                 PhaseMsg("Insert Cartridge");
 
                 var cart = GetCartRom(config.RomFilepath);
+                m_Interpreter.DebugEntryPoint = cart.EntryPoint;
 
 
                 Console.ForegroundColor = ConsoleColor.Green;
@@ -185,6 +187,13 @@ namespace RunN64
                         if (Console.ReadKey().Key == ConsoleKey.Q)
                         {
                             host.Interrupt();
+
+                            if (m_Interpreter.StartedWithProfiler)
+                            {
+                                Console.WriteLine("\n--- Profiler Results ---");
+                                Console.Write(m_Interpreter.GetProfiledResults());
+                                Console.WriteLine("------");
+                            }
                         }
                     }
 

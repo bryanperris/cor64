@@ -118,7 +118,7 @@
       <HintPath>..\cor64\packages\Newtonsoft.Json.12.0.1\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="NLog">
-      <HintPath>..\cor64\packages\NLog.4.6.0\lib\net45\NLog.dll</HintPath>
+      <HintPath>..\cor64\packages\NLog.4.6.2\lib\net45\NLog.dll</HintPath>
     </Reference>
   </ItemGroup>
   <ItemGroup>

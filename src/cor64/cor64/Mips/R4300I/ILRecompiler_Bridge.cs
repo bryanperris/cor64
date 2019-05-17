@@ -69,19 +69,19 @@ namespace cor64.Mips.R4300I
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public void WritebackLo(ulong value)
             {
-                m_Core.State.Lo = m_Core.IsOperation64 ? value : (uint)value;
+                m_Core.WriteLo(value);
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public void WritebackHi(ulong value)
             {
-                m_Core.State.Hi = m_Core.IsOperation64 ? value : (uint)value;
+                m_Core.WriteHi(value);
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public void WritebackCop0(int reg, ulong value)
             {
-                m_Core.Cop0.Registers.WriteFromGpr(reg, value);
+                m_Core.State.Cp0.Write(reg, value);
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -91,9 +91,9 @@ namespace cor64.Mips.R4300I
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            public ulong[] GetGprRef()
+            public IntPtr GetGprRef()
             {
-                return m_Core.State.GPR_64.GetRef();
+                return m_Core.State.GetGprRef();
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -111,13 +111,13 @@ namespace cor64.Mips.R4300I
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public ulong ReadLo()
             {
-                return m_Core.State.Lo;
+                return m_Core.ReadLo();
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public ulong ReadHi()
             {
-                return m_Core.State.Hi;
+                return m_Core.ReadHi();
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -153,12 +153,13 @@ namespace cor64.Mips.R4300I
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            public void Fallback(ILBasicBlock block, bool isBranch)
+            public void Fallback(ILBasicBlock block, bool isBranch, int fallbackInstIndex)
             {
                 var fallback = m_Core.m_FallbackInterpreter;
 
                 /* Set the fallback PC to the address of the inst */
                 fallback.SafeSetPC(block.NextPC);
+                fallback.InjectInst(block.FallbackInstructions[fallbackInstIndex]);
                 fallback.Step();
 
                 /* Test units require this sync */

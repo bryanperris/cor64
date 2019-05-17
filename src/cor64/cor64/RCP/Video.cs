@@ -112,13 +112,13 @@ namespace cor64.RCP
             AppendDevice(m_ControlReg, m_Origin, m_Width, m_Interrupt, m_CurrentLine, m_Timing,
                          m_VSync, m_HSync, m_Leap, m_HStart, m_VStart, m_VBurst, m_XScale, m_YScale);
 
-            m_Origin.CPUWrite += FramebufferAddressHandler;
+            m_Origin.MemWrite += FramebufferAddressHandler;
             m_Memory = controller;
 
             m_XScale.ReadPtr.AsType_32Swp(0x100U * (640U / 160U));
             m_YScale.ReadPtr.AsType_32Swp(0x100U * (480U / 60U));
             m_Width.ReadPtr.AsType_32Swp(640);
-            m_CurrentLine.CPUWrite += CurrentScanlineHandler;
+            m_CurrentLine.MemWrite += CurrentScanlineHandler;
 
             m_ControlRegStruct = new VideoControlReg(m_ControlReg.ReadPtr);
         }

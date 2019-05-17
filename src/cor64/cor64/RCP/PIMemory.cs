@@ -28,8 +28,8 @@ namespace cor64.RCP
 
         public PIMemory(N64MemoryController controller) : base(controller, 0x100000)
         {
-            m_ReadLen.CPUWrite += ReadLengthWrite;
-            m_WriteLen.CPUWrite += WriteLengthWrite;
+            m_ReadLen.MemWrite += ReadLengthWrite;
+            m_WriteLen.MemWrite += WriteLengthWrite;
 
             AppendDevice(
                 m_DramAddress, m_CartAddress, m_ReadLen, m_WriteLen, 

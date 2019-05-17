@@ -3,58 +3,75 @@ using cor64.IO;
 
 namespace cor64.Mips
 {
-    public class FloatControlRegister : SpecialRegister32
+    public class FloatControlRegister
     {
         private uint m_Value;
+        private BitFiddler m_Fiddler = new BitFiddler();
+        
+        const int F_ROUNDMODE = 0;
+        const int F_FLAGS = 1;
+        const int F_ENABLES = 2;
+        const int F_CAUSE = 3;
+        const int F_COND = 4;
+        const int F_FS = 5;
 
-        public override uint Value
+        public FloatControlRegister()
         {
-            get { return m_Value; }
+            m_Fiddler.DefineField(01, 2);
+            m_Fiddler.DefineField(06, 5);
+            m_Fiddler.DefineField(11, 5);
+            m_Fiddler.DefineField(17, 6);
+            m_Fiddler.DefineField(23, 1);
+            m_Fiddler.DefineField(25, 1);
+        }
+
+        public uint Value
+        {
+            get 
+            {
+                return m_Value;
+            }
+
             set
             {
                 m_Value = value;
             }
         }
 
-        protected override void InternalSet(uint value)
-        {
-            m_Value = value;
-        }
-
         public RoundingMode RoundMode
         {
-            get => (RoundingMode)ReadField(1, 2);
-            set => WriteField(1, 2, (byte)value);
+            get => (RoundingMode)m_Fiddler.X(F_ROUNDMODE, ref m_Value);
+            set => m_Fiddler.J(F_ROUNDMODE, ref m_Value, (byte)value);
         }
 
         public FpuExceptionFlags Flags
         {
-            get => (FpuExceptionFlags)ReadField(6, 5);
-            set => WriteField(6, 5, (byte)value);
+            get => (FpuExceptionFlags)m_Fiddler.X(F_FLAGS, ref m_Value);
+            set => m_Fiddler.J(F_FLAGS, ref m_Value, (byte)value);
         }
 
         public FpuExceptionFlags Enables
         {
-            get => (FpuExceptionFlags)ReadField(11, 5);
-            set => WriteField(11, 5, (byte)value);
+            get => (FpuExceptionFlags)m_Fiddler.X(F_ENABLES, ref m_Value);
+            set => m_Fiddler.J(F_ENABLES, ref m_Value, (byte)value);
         }
 
         public FpuExceptionFlags Cause
         {
-            get => (FpuExceptionFlags)ReadField(17, 6);
-            set => WriteField(17, 6, (byte)value);
+            get => (FpuExceptionFlags)m_Fiddler.X(F_CAUSE, ref m_Value);
+            set => m_Fiddler.J(F_CAUSE, ref m_Value, (byte)value);
         }
 
         public bool Condition
         {
-            get => ReadField(23, 1) != 0;
-            set => WriteField(23, 1, (value ? 1U : 0U));
+            get => m_Fiddler.X(F_COND, ref m_Value) != 0;
+            set => m_Fiddler.J(F_COND, ref m_Value, (value ? 1U : 0U));
         }
 
         public bool FS
         {
-            get => ReadField(25, 1) != 0;
-            set => WriteField(25, 1, (value ? 1U : 0U));
+            get => m_Fiddler.X(F_FS, ref m_Value) != 0;
+            set => m_Fiddler.J(F_FS, ref m_Value, (value ? 1U : 0U));
         }
     }
 }

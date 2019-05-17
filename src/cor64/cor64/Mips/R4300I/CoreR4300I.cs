@@ -8,10 +8,16 @@ using System.Threading;
 using System.Threading.Tasks;
 using cor64.Debugging;
 using cor64.IO;
-using cor64.Mips.R4300I.CP0;
 using NLog;
 
 using static cor64.Mips.R4300I.Opcodes;
+
+public enum DebugInstMode
+{
+    None,
+    Full,
+    ProgramOnly
+}
 
 
 namespace cor64.Mips.R4300I
@@ -20,10 +26,11 @@ namespace cor64.Mips.R4300I
     {
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
         private Action<DecodedInstruction>[] m_CallTable;
-        private Cop0Controller m_Coprocessor0;
+        private SystemController m_Coprocessor0;
         private Clock m_CoreClock;
         protected DataMemory m_DataMemory;
-        protected bool m_DebugInstMode;
+        private Profiler m_Profiler = new Profiler();
+        public bool StartedWithProfiler { get; protected set; }
 
         /* TODO: When we do have a cache system, 
          * some conditions of the cache can break
@@ -36,13 +43,15 @@ namespace cor64.Mips.R4300I
         /* Debugging */
         private HashSet<int> m_GPRWriteBreakpoints = new HashSet<int>();
         private HashSet<int> m_GPRReadBreakpoints = new HashSet<int>();
+        protected DebugInstMode core_InstDebugMode;
+        private ulong m_EntryPoint;
 
         protected CoreR4300I(BaseDisassembler disassembler) : base(disassembler)
         {
             m_CallTable = new Action<DecodedInstruction>[OpcodeFactory.LastID + 1];
 
             m_CoreClock = new Clock(10, 2);
-            m_Coprocessor0 = new Cop0Controller();
+            m_Coprocessor0 = new SystemController(State);
             m_Coprocessor0.Attach_State(Interface, m_CoreClock);
             m_Coprocessor0.Attach_Callbacks(() => m_Pc, () => BranchDelay);
             m_Coprocessor0.ExceptionJump += ExceptionJump;
@@ -103,62 +112,9 @@ namespace cor64.Mips.R4300I
             UnconditionalJump = false;
         }
 
-        protected override bool Execute()
-        {
-            var valid = false;
-
-            /* Delay Slot Logic */
-            if (WillJump)
-            {
-                if (WillJump)
-                {
-                    valid = CallInstruction();
-                }
-                else
-                    valid = true; // Nullfied delay slot
-
-                BranchDelay = false;
-            }
-            else
-            {
-                /* Nornal execution path */
-                var success = CallInstruction();
-                m_Pc += 4;
-                return success;
-            }
-
-            /* Branch taken logic */
-            if (WillJump)
-            {
-                TakeBranch = false;
-                UnconditionalJump = false;
-
-                /* Should always be a word-aligned relative PC jump */
-                /* Always force 32-bit addresses */
-                m_Pc = (uint)TargetAddress;
-
-                if (m_Pc < 0)
-                {
-                    throw new InvalidOperationException("PC target cannot be negative");
-                }
-            }
-
-            return valid;
-        }
-
-        protected virtual void OpBegin()
-        {
-
-        }
-
-        protected virtual void OpEnd()
-        {
-
-        }
-
         protected ulong ReadCp0Value(int select, bool isDwordInst)
         {
-            var value = Cp0Regs.Read(select);
+            var value = State.Cp0.Read(select);
 
             /* If running 64-bit mode, with the 32-bit version, then sign extend */
             if (IsOperation64 && !isDwordInst)
@@ -177,41 +133,14 @@ namespace cor64.Mips.R4300I
             }
         }
 
-        protected bool CallInstruction()
+        protected bool ValidateInstruction(DecodedInstruction decoded)
         {
-            m_LastInst = Decode();
+            return !decoded.EmulatorNop && !decoded.IsNull;
+        }
 
-            if (m_LastInst.EmulatorNop)
-            {
-                return true;
-            }
-
-            if (m_LastInst.IsNull)
-                return false;
-
-            var opcode = m_LastInst.Op;
-
-            var instFunc = m_CallTable[m_LastInst.Op.ID];
-
-            if (instFunc != null)
-            {
-                OpBegin();
-
-                //if (m_DebugInstMode)
-                //{
-                //    Console.WriteLine(GetType().Name + "  " + m_Pc.ToString("X8") + ": " + Disassembler.GetFullDisassembly(m_LastInst));
-                //    Thread.Sleep(200);
-                //}
-
-                instFunc.Invoke(m_LastInst);
-                OpEnd();
-            }
-            else
-            {
-                throw new NotSupportedException(String.Format("Opcode {0} not supported", opcode.Op));
-            }
-
-            return true;
+        protected Action<DecodedInstruction> GetInstructionMethod(DecodedInstruction decoded)
+        {
+            return m_CallTable[decoded.Op.ID];
         }
 
         protected abstract void Add32(DecodedInstruction inst);
@@ -373,7 +302,7 @@ namespace cor64.Mips.R4300I
                 {
                     case RegBoundType.Cp1:
                         {
-                            var cond = State.FPR.ConditionFlag;
+                            var cond = State.FCR.Condition;
 
                             if (!compare)
                             {
@@ -411,15 +340,13 @@ namespace cor64.Mips.R4300I
          * Processor State Properties
          ********************************************************/
 
-        public Cop0RegsterSet Cp0Regs => m_Coprocessor0.Registers;
+        public SystemController Cop0 => m_Coprocessor0;
 
-        public Cop0Controller Cop0 => m_Coprocessor0;
+        public ExceptionType Exceptions => State.Cp0.Cause.Exception;
 
-        public ExceptionType Exceptions => m_Coprocessor0.Cause.ExceptionState;
+        public bool IsAddress64 => State.Cp0.Status.IsAddress64;
 
-        public bool IsAddress64 => m_Coprocessor0.SR.IsAddress64;
-
-        public bool IsOperation64 => m_Coprocessor0.SR.IsOperation64;
+        public bool IsOperation64 => State.Cp0.Status.IsOperation64;
 
         public Clock CoreClock => m_CoreClock;
 
@@ -430,37 +357,24 @@ namespace cor64.Mips.R4300I
          * State Interface
          ********************************************************/
 
-        public void OverrideCop0(Cop0Controller cop0)
+        public void OverrideCop0(SystemController cop0)
         {
             m_Coprocessor0 = cop0;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         protected uint ReadGPR32(int i)
         {
-            if (DebugMode)
-            {
-                if (m_GPRReadBreakpoints.Contains(i))
-                {
-                    throw new VirtualBreakpointException();
-                }
-            }
-
-            return State.GPR_32[i];
+            return State.GetGpr32(i);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ulong ReadGPR64(int i)
         {
-            if (DebugMode)
-            {
-                if (m_GPRReadBreakpoints.Contains(i))
-                {
-                    throw new VirtualBreakpointException();
-                }
-            }
+            return State.GetGpr64(i);
+        }
 
-            return State.GPR_64[i];
+        public ulong ReadRA()
+        {
+            return State.GetGpr64(31);
         }
 
         public ulong ReadPC()
@@ -468,163 +382,121 @@ namespace cor64.Mips.R4300I
             return m_Pc;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void SetOperation64Mode(bool mode)
         {
-            m_Coprocessor0.SR.DebugSet_Operation64(mode);
+            State.Cp0.Status.DebugSet_Operation64(mode);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void SetExceptionState(ExceptionType type)
         {
             State.LLBit = false; // All exceptions cause atomic operations to fail
-            m_Coprocessor0.Cause.CauseException(type);
+            State.Cp0.Cause.SetException(type);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         protected void Writeback32(int reg, ulong value)
         {
-            if (reg < 1)
-            {
-                return;
-            }
-
             if (IsOperation64)
             {
-                /* Let the CLR sign extend the value for us 32-bit to 64-bit */
-                State.GPR_64[reg] = (ulong)(int)value;
+                State.SetGpr64(reg, (ulong)(int)value);
             }
             else
             {
-                State.GPR_32[reg] = (uint)value;
+                State.SetGpr32(reg, (uint)value);
             }
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         protected void Writeback64(int reg, ulong value)
         {
-            if (reg < 1)
-                return;
-
-            State.GPR_64[reg] = value;
+            State.SetGpr64(reg, value);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         protected void WritebackHiLo32(ulong hi, ulong lo)
         {
             if (IsOperation64)
             {
-                State.Hi = (ulong)(int)hi;
-                State.Lo = (ulong)(int)lo;
+                State.SetHi((ulong)(int)hi);
+                State.SetLo((ulong)(int)lo);
             }
             else
             {
-                State.Hi = (uint)hi;
-                State.Lo = (uint)lo;
+                State.SetHi((uint)hi);
+                State.SetLo((uint)lo);
             }
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         protected void WritebackHiLo64(ulong hi, ulong lo)
         {
-            State.Hi = hi;
-            State.Lo = lo;
+            State.SetHi(hi);
+            State.SetLo(lo);
         }
 
-        /// <summary>
-        /// Read float32
-        /// </summary>
-        /// <param name="select"></param>
-        /// <returns></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        protected void WriteGPR64(int select, ulong value)
+        {
+            State.SetGpr64(select, value);
+        }
+
+        protected void WriteGPR32(int select, uint value)
+        {
+            State.SetGpr32(select, value);
+        }
+
         protected float ReadFPR_S(int select)
         {
-            return State.FPR.F32[select];
+            return State.GetFprS(select);
         }
 
-        /// <summary>
-        /// Read float64
-        /// </summary>
-        /// <param name="select"></param>
-        /// <returns></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         protected double ReadFPR_D(int select)
         {
-            return State.FPR.F64[select];
+            return State.GetFprD(select);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         protected uint ReadFPR_W(int select)
         {
-            return State.FPR.S32[select];
+            return State.GetFprW(select);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        protected ulong ReadFPR_L(int select)
+        protected ulong ReadFPR_DW(int select)
         {
-            return State.FPR.S64[select];
+            return State.GetFprDW(select);
         }
 
-        /// <summary>
-        /// Unsigned Long Writeback
-        /// </summary>
-        /// <param name="select"></param>
-        /// <param name="value"></param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        protected void WriteFPR_L(int select, ulong value)
+        protected void WriteFPR_DW(int select, ulong value)
         {
-            State.FPR.S64[select] = value;
+            State.SetFprDW(select, value);
         }
 
-        /// <summary>
-        /// Unsigned Int Writeback
-        /// </summary>
-        /// <param name="select"></param>
-        /// <param name="value"></param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         protected void WriteFPR_W(int select, uint value)
         {
-            State.FPR.S32[select] = value;
+            State.SetFprW(select, value);
         }
 
-        /// <summary>
-        /// Writeback double (with rounding)
-        /// </summary>
-        /// <param name="select"></param>
-        /// <param name="value"></param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         protected void WriteFPR_D(int select, double value)
         {
-            State.FPR.F64[select] = RoundHelper.Round(value, State.FCR.RoundMode);
+            State.SetFprD(select, RoundHelper.Round(value, State.FCR.RoundMode));
         }
 
-        /// <summary>
-        /// Writeback single (without rounding)
-        /// </summary>
-        /// <param name="select"></param>
-        /// <param name="value"></param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         protected void WriteFPR_S(int select, float value)
         {
-            State.FPR.F32[select] = RoundHelper.Round(value, State.FCR.RoundMode);
+            State.SetFprS(select, RoundHelper.Round(value, State.FCR.RoundMode));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         protected void WriteFPR_DNR(int select, double value)
         {
-            State.FPR.F64[select] = RoundHelper.Round(value, State.FCR.RoundMode);
+            State.SetFprD(select, value);
         }
 
-        /// <summary>
-        /// Writeback single (without rounding)
-        /// </summary>
-        /// <param name="select"></param>
-        /// <param name="value"></param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         protected void WriteFPR_SNR(int select, float value)
         {
-            State.FPR.F32[select] = RoundHelper.Round(value, State.FCR.RoundMode);
+            State.SetFprS(select, value);
         }
+
+        protected ulong ReadHi() => State.GetHi();
+
+        protected ulong ReadLo() => State.GetLo();
+
+        protected void WriteHi(ulong value) => State.SetHi(value);
+
+        protected void WriteLo(ulong value) => State.SetLo(value);
 
         public override void AttachBootManager(BootManager bootManager)
         {
@@ -646,10 +518,10 @@ namespace cor64.Mips.R4300I
 
             bootManager.RegWrite += (off, val) =>
             {
-                State.GPR_64[off] = val;
+                State.SetGpr64(off, val);
             };
 
-            bootManager.CP0Write += m_Coprocessor0.Registers.Write;
+            bootManager.CP0Write += (i, x) => State.Cp0.Write(i, x);
         }
 
         /********************************************************
@@ -802,5 +674,27 @@ namespace cor64.Mips.R4300I
         {
             return ABI.GetLabel("o32", ABI.RegType.GPR, i);
         }
+
+        protected void BeginInstructionProfile(DecodedInstruction inst)
+        {
+            m_Profiler.StartSession(inst.Op);
+        }
+
+        protected void EndInstructionProfile()
+        {
+            m_Profiler.StopSession();
+        }
+
+        public String GetProfiledResults()
+        {
+            return m_Profiler.GenerateReport();
+        }
+
+        public void SetInstructionDebugMode(DebugInstMode mode)
+        {
+            core_InstDebugMode = mode;
+        }
+
+        public ulong DebugEntryPoint { get; set; }
     }
 }
