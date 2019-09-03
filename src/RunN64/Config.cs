@@ -8,5 +8,8 @@ namespace RunN64
     {
         [JsonProperty(PropertyName = "romFile")]
         public String RomFilepath { get; set; }
+
+        [JsonProperty(PropertyName = "elfFile")]
+        public String ElfFilepath { get; set; }
     }
 }

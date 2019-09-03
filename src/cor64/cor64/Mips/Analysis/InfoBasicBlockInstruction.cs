@@ -1,49 +1,64 @@
-﻿using System;
+﻿using cor64.Debugging;
+using System;
 using System.Collections.Generic;
+using System.Text;
 
 namespace cor64.Mips.Analysis
 {
     public class InfoBasicBlockInstruction
     {
-        private ulong m_Address;
-        private BinaryInstruction m_Inst;
-        private String m_Disassembly;
-        private List<MemAcess> m_AddressAccessList;
+        private List<MemoryAccessMeta> m_MemAccessList;
+        private int m_MemRef;
+        private StringBuilder m_StringBuilder = new StringBuilder();
+        private BaseDisassembler m_Disassembler;
+        private bool m_IsNullifed;
 
-        public struct MemAcess
+        public InfoBasicBlockInstruction(BaseDisassembler disassembler, DecodedInstruction inst, bool nullified)
         {
-            public ulong address;
-            public string note;
+            m_Disassembler = disassembler;
+            Inst = inst;
+            Address = inst.Address;
+            m_MemAccessList = new List<MemoryAccessMeta>();
+            m_IsNullifed = nullified;
         }
 
-        public InfoBasicBlockInstruction(BaseDisassembler disassembler, DecodedInstruction inst)
+        public void AppendMemoryAccess(MemoryAccessMeta memoryAccessMeta)
         {
-            m_Inst = inst.Inst;
-            m_Disassembly = disassembler.GetFullDisassembly(inst);
-            m_Address = inst.Address;
-            m_AddressAccessList = new List<MemAcess>();
+            m_MemAccessList.Add(memoryAccessMeta);
         }
 
-        public void AppendMemoryAccess(ulong address, string note)
+        public DecodedInstruction Inst { get; }
+
+        public ulong Address { get; }
+
+        public void IncrementUsageRef()
         {
-            m_AddressAccessList.Add(new MemAcess() { address = address, note = note });
+            m_MemRef++;
         }
 
-        public IReadOnlyList<MemAcess> MemAccessList => m_AddressAccessList;
-
-        public BinaryInstruction Inst => m_Inst;
-
-        public String Disasm => m_Disassembly;
-
-        public ulong Address => m_Address;
-
-        public long TickCount {
-            get;
-            set; }
+        public void ResetUsageRef()
+        {
+            m_MemRef = 0;
+        }
 
         public override string ToString()
         {
-            return String.Format("MIPS 0x{0:X8}: 0x{1:X8} {2} ({3} ms)", m_Address, m_Inst.inst, m_Disassembly, TickCount);
+            m_StringBuilder.Clear();
+            m_StringBuilder.Append(Address.ToString("X8"));
+            m_StringBuilder.Append(" ");
+            m_StringBuilder.Append(m_IsNullifed ? "(NULLIFIED) " : "");
+            m_StringBuilder.AppendLine(m_Disassembler.GetFullDisassembly(Inst));
+
+            if (m_MemAccessList.Count > 0)
+            {
+                if (m_MemRef < m_MemAccessList.Count)
+                {
+                    m_StringBuilder.Append("    >> ");
+                    m_StringBuilder.AppendLine(m_MemAccessList[m_MemRef].ReadMeta());
+                }
+            }
+
+            return m_StringBuilder.ToString();
         }
     }
 }

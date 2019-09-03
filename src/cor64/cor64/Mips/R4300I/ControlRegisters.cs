@@ -3,11 +3,13 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using NLog;
 
 namespace cor64.Mips.R4300I
 {
     public class ControlRegisters
     {
+        private static readonly Logger Log = LogManager.GetCurrentClassLogger();
         const int SIZE = 32;
         private ulong[] m_Registers;
         private Action<int, ulong>[] m_WriteMap;
@@ -50,6 +52,20 @@ namespace cor64.Mips.R4300I
         public void Write(int i, ulong value)
         {
             m_WriteMap[i](i, value);
+        }
+
+        public ulong RegRead(int i)
+        {
+            Log.Debug("Cop0 Reg Read: {0}", ABI.GetLabel("", ABI.RegType.Cop0, i));
+
+            return m_ReadMap[i](i);
+        }
+
+        public void RegWrite(int i, ulong value)
+        {
+            m_WriteMap[i](i, value);
+
+            Log.Debug("Cop0 Reg Write: {0} {1:X16}", ABI.GetLabel("", ABI.RegType.Cop0, i), value);
         }
     }
 }

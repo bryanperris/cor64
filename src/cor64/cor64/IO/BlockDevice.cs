@@ -10,31 +10,13 @@ namespace cor64.IO
 {
     public abstract class BlockDevice : IDisposable
     {
-        private Object m_Lock = new Object();
-
-        // XXX: Locks are a bit of a penalty here, so disabled for now
-
         public abstract long Size { get; }
 
-        public void SafeRead(long position, byte[] buffer, int offset, int count)
-        {
-            //lock (m_Lock)
-            //{
-                Read(position, buffer, offset, count);
-            //}
-        }
+        public abstract void Read(long position, byte[] buffer, int offset, int count);
 
-		public void SafeWrite(long position, byte[] buffer, int offset, int count)
-        {
-            //lock (m_Lock)
-            //{
-                Write(position, buffer, offset, count);
-            //}
-        }
+        public abstract void Write(long position, byte[] buffer, int offset, int count);
 
-        protected abstract void Read(long position, byte[] buffer, int offset, int count);
-
-        protected abstract void Write(long position, byte[] buffer, int offset, int count);
+        public long BaseAddress { get; set; }
 
         #region IDisposable Support
         private bool disposedValue = false; // To detect redundant calls

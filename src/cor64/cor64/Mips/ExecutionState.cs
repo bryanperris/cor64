@@ -13,6 +13,7 @@ namespace cor64.Mips
         const int SIZE_FPR = 32 * 8;
         const int SIZE_HILO = 62 * 2;
         const int SIZE_LLBIT = 1;
+        const int STACK_POINTER = 29;
 
         public FloatControlRegister FCR { get; } = new FloatControlRegister();
         public ControlRegisters Cp0 { get; } = new ControlRegisters();
@@ -27,6 +28,9 @@ namespace cor64.Mips
         private ulong* m_Hi;
         private ulong* m_Lo;
         private bool* m_LLbit;
+
+        private CoreDebugger m_CoreDbg;
+        private StackMonitor m_StackMonitor = new StackMonitor();
 
         public ExecutionState()
         {
@@ -55,9 +59,23 @@ namespace cor64.Mips
             m_LLbit = (bool*)ptr;
         }
 
+        public void SetCoreDebugger(CoreDebugger debugger)
+        {
+            this.m_CoreDbg = debugger;
+        }
+
         public IntPtr GetGprRef()
         {
             return (IntPtr)m_GprRegs64;
+        }
+
+        [Conditional("DEBUG")]
+        private void StackCheck(int i, ulong value)
+        {
+            if (i == STACK_POINTER)
+            {
+                m_StackMonitor.PointerUpdate(value);
+            }
         }
 
         [Conditional("DEBUG")]
@@ -80,6 +98,11 @@ namespace cor64.Mips
         {
             Check(i);
 
+            if (m_CoreDbg != null)
+            {
+                m_CoreDbg.TestForGprBreakpoint(i, false);
+            }
+
             return m_GprRegs64[i];
         }
 
@@ -87,6 +110,11 @@ namespace cor64.Mips
         public uint GetGpr32(int i)
         {
             Check(i);
+
+            if (m_CoreDbg != null)
+            {
+                m_CoreDbg.TestForGprBreakpoint(i, false);
+            }
 
             return m_GprRegs32[i << 1];
         }
@@ -99,6 +127,13 @@ namespace cor64.Mips
             Check(i);
 
             m_GprRegs64[i] = value;
+
+            StackCheck(i, value);
+
+            if (m_CoreDbg != null)
+            {
+                m_CoreDbg.TestForGprBreakpoint(i, true);
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -109,6 +144,13 @@ namespace cor64.Mips
             Check(i);
 
             m_GprRegs32[i << 1] = value;
+
+            StackCheck(i, value);
+
+            if (m_CoreDbg != null)
+            {
+                m_CoreDbg.TestForGprBreakpoint(i, true);
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -204,5 +246,7 @@ namespace cor64.Mips
             get => m_LLbit[0];
             set => m_LLbit[0] = value;
         }
+
+        public StackMonitor Stack => m_StackMonitor;
     }
 }

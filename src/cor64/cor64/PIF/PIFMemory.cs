@@ -10,7 +10,7 @@ namespace cor64.PIF
 
         public PIFMemory(N64MemoryController n64MemoryController) : base(n64MemoryController, 0x100000)
         {
-            AppendDevice(m_Rom, m_Ram);
+            Map(m_Rom, m_Ram);
         }
     }
 }

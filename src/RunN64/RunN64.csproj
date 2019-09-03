@@ -8,7 +8,7 @@
     <OutputType>Exe</OutputType>
     <RootNamespace>RunN64</RootNamespace>
     <AssemblyName>RunN64</AssemblyName>
-    <TargetFrameworkVersion>v4.7.1</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <Deterministic>true</Deterministic>
@@ -81,26 +81,14 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="OpenTK, Version=3.0.1.0, Culture=neutral, PublicKeyToken=bad199fe84eb3df4, processorArchitecture=MSIL">
-      <HintPath>..\cor64\packages\OpenTK.3.0.1\lib\net20\OpenTK.dll</HintPath>
-    </Reference>
-    <Reference Include="OpenTK.GLControl, Version=3.0.1.0, Culture=neutral, PublicKeyToken=bad199fe84eb3df4, processorArchitecture=MSIL">
-      <HintPath>..\cor64\packages\OpenTK.GLControl.3.0.1\lib\net20\OpenTK.GLControl.dll</HintPath>
-    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Configuration" />
     <Reference Include="System.Core" />
     <Reference Include="System.Drawing" />
-    <Reference Include="System.IO.Compression" />
-    <Reference Include="System.Runtime.Serialization" />
-    <Reference Include="System.ServiceModel" />
-    <Reference Include="System.Transactions" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml.Linq" />
-    <Reference Include="System.Data.DataSetExtensions" />
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="System.Data" />
-    <Reference Include="System.Net.Http" />
     <Reference Include="System.Xml" />
     <Reference Include="SkiaSharp">
       <HintPath>..\cor64\packages\SkiaSharp.1.68.0\lib\net45\SkiaSharp.dll</HintPath>
@@ -115,13 +103,30 @@
       <HintPath>..\cor64\packages\SkiaSharp.Views.1.68.0\lib\net45\SkiaSharp.Views.WPF.dll</HintPath>
     </Reference>
     <Reference Include="Newtonsoft.Json">
-      <HintPath>..\cor64\packages\Newtonsoft.Json.12.0.1\lib\net45\Newtonsoft.Json.dll</HintPath>
+      <HintPath>..\cor64\packages\Newtonsoft.Json.12.0.2\lib\net45\Newtonsoft.Json.dll</HintPath>
+    </Reference>
+    <Reference Include="mscorlib" />
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.Runtime.Serialization" />
+    <Reference Include="System.ServiceModel" />
+    <Reference Include="System.Transactions" />
+    <Reference Include="ELFSharp">
+      <HintPath>..\cor64\packages\ELFSharp.2.1.1\lib\net45\ELFSharp.dll</HintPath>
+    </Reference>
+    <Reference Include="OpenTK">
+      <HintPath>..\cor64\packages\OpenTK.3.1.0\lib\net20\OpenTK.dll</HintPath>
+    </Reference>
+    <Reference Include="OpenTK.GLControl">
+      <HintPath>..\cor64\packages\OpenTK.GLControl.3.1.0\lib\net20\OpenTK.GLControl.dll</HintPath>
     </Reference>
     <Reference Include="NLog">
-      <HintPath>..\cor64\packages\NLog.4.6.2\lib\net45\NLog.dll</HintPath>
+      <HintPath>..\cor64\packages\NLog.4.6.7\lib\net45\NLog.dll</HintPath>
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Forms\DebuggerForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Forms\EmuControls\DisassemblyView.cs">
       <SubType>Component</SubType>
     </Compile>
@@ -138,12 +143,12 @@
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Config.cs" />
+    <Compile Include="DebugSymbolSource.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
     <EmbeddedResource Include="FiraCode-Bold.ttf" />
     <EmbeddedResource Include="FiraCode-Regular.ttf" />
-    <None Include="OpenTK.dll.config" />
     <None Include="packages.config" />
     <None Include="libSkiaSharp.so" Condition=" '$([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::Linux)))' ">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -209,6 +214,9 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Include="TestRoms\CPUDIV.N64">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="TestRoms\CPUDIVU.N64">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Include="TestRoms\CPUDMULT.N64">
@@ -316,6 +324,9 @@
     <None Include="TestRoms\FrameBufferDMA32BPP640X480.N64">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Include="TestRoms\helloworld.z64">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <None Include="TestRoms\HelloWorldCPU16BPP320X240.N64">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
@@ -385,11 +396,25 @@
     <None Include="TestRoms\Julia32BPP320X240_D.N64">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Include="TestRoms\helloworld">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Include="TestRoms\RCPVersion.N64">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Include="TestRoms\RDRAMTest.N64">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Include="OpenTK.dll.config" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\cor64\cor64.BareMetal\cor64.BareMetal.csproj">
       <Project>{c9ad9cc9-33c2-4f20-b1a7-8265fde5a95b}</Project>
       <Name>cor64.BareMetal</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\cor64\cor64.WebService\cor64.WebService.csproj">
+      <Project>{27d292ba-061d-4b6d-90a0-96fb0285c872}</Project>
+      <Name>cor64.WebService</Name>
     </ProjectReference>
     <ProjectReference Include="..\cor64\cor64\cor64.csproj">
       <Project>{587cc6fc-600b-4d2a-9373-68319ff3b943}</Project>
@@ -400,6 +425,7 @@
       <Name>cor64.CFloat</Name>
     </ProjectReference>
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Import Project="..\cor64\packages\SkiaSharp.1.68.0\build\net45\SkiaSharp.targets" Condition="Exists('..\cor64\packages\SkiaSharp.1.68.0\build\net45\SkiaSharp.targets')" />
 </Project>

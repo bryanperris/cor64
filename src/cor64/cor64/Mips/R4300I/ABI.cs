@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace cor64.Mips.R4300I
 {
-    internal static class ABI
+    public static class ABI
     {
         private static readonly String[] RegisterLabel = {
             "r00", "r01", "r02", "r03", "r04", "r05", "r06", "r07",
@@ -57,7 +57,5 @@ namespace cor64.Mips.R4300I
                 default: return index.ToString("X2");
             }
         }
-
-        // TODO: A function that dumps out stack managed by the MIPS
     }
 }

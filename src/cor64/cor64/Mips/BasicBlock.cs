@@ -8,29 +8,22 @@ namespace cor64.Mips
 {
     public abstract class BasicBlock<TRecord>
     {
-        private ulong m_Address;
-        private TRecord[] m_RecordSet;
-        private int m_Offset;
+        private List<TRecord> m_RecordSet;
 
-        protected BasicBlock(ulong address, int size)
+        protected BasicBlock(ulong address)
         {
-            m_Address = address;
-            m_RecordSet = new TRecord[size];
+            Address = address;
+            m_RecordSet = new List<TRecord>();
         }
 
         public void Append(TRecord instRecord)
         {
-            m_RecordSet[m_Offset++] = instRecord;
+            m_RecordSet.Add(instRecord);
         }
 
-        public int Size => m_Offset + 1;
+        public int Size => m_RecordSet.Count;
 
-        public ulong Address => m_Address;
-
-        protected void SetAddress(ulong address)
-        {
-            m_Address = address;
-        }
+        public ulong Address { get; protected set; }
 
         public IReadOnlyList<TRecord> InstructionList => m_RecordSet;
 
@@ -43,7 +36,7 @@ namespace cor64.Mips
 
         public override string ToString()
         {
-            return m_Address.ToString("X8");
+            return Address.ToString("X8");
         }
     }
 }

@@ -8,9 +8,9 @@ namespace cor64
 {
     public enum RegionType : int
     {
-        Unknown,
-        PAL,
-        NTSC,
-        MPAL
+        Unknown = -1,
+        PAL = 0,
+        NTSC = 1,
+        MPAL = 2,
     }
 }

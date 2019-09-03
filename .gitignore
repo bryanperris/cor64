@@ -1,6 +1,8 @@
 .vs
-.vscode
 bin
 obj
 src/cor64/cor64.CFloat/libcf/b/
 src/cor64/packages/
+package-lock.json
+node_modules
+dist

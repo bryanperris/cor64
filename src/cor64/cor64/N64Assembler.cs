@@ -128,5 +128,33 @@ namespace cor64
         {
             throw new NotImplementedException();
         }
+
+        public static uint AssembleSingleInstruction(String asmLine)
+        {
+            N64Assembler assembler = new N64Assembler();
+            var source = new AssemblyTextSource("main");
+            source += "arch n64.cpu";
+            source += "endian msb";
+            source += asmLine;
+
+            /* Assemble into bytes */
+            assembler.AddAssemblySource(source);
+            assembler.AssembleCode(true);
+
+            /* Get the output */
+            var streamOut = assembler.Output;
+            streamOut.Position = 0;
+
+            byte[] buffer = new byte[streamOut.Length];
+            streamOut.Read(buffer, 0, buffer.Length);
+
+            uint bin = 0;
+            bin |= (uint)(buffer[0] << 24);
+            bin |= (uint)(buffer[1] << 16);
+            bin |= (uint)(buffer[2] << 08);
+            bin |= (uint)(buffer[3] & 0xFF);
+
+            return bin;
+        }
     }
 }

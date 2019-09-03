@@ -1,11 +1,13 @@
-﻿using cor64.Debugging;
+using cor64.Debugging;
 using cor64.IO;
 using cor64.Mips.Analysis;
+using NLog;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.Serialization;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -37,23 +39,21 @@ using System.Threading.Tasks;
 
 namespace cor64.Mips
 {
-    public abstract class BaseInterpreter
+    public abstract class BaseInterpreter : ISnapshotable
     {
+        private static readonly Logger Log = LogManager.GetCurrentClassLogger();
         private BaseDisassembler m_Disassembler;
         protected ulong m_Pc;
         private Stream m_IMemory;
-        private String m_LastDisasm;
         private StringBuilder m_ExecutionLog = new StringBuilder();
         private ProgramTrace m_TraceLog;
         public event Action<DecodedInstruction> TraceStep;
         private ExecutionState m_State;
         private Stopwatch m_InstructionStopWatch = new Stopwatch();
-        private ChipInterface m_Interface;
+        private MipsInterface m_Interface;
         private bool m_DebugMode;
-        private bool m_BootCode;
-        protected DecodedInstruction m_LastInst;
         private ulong m_ProgramStart;
-
+        private ProgramTrace.TraceMode m_TraceMode;
 
         protected BaseInterpreter(BaseDisassembler disassembler)
         {
@@ -67,13 +67,18 @@ namespace cor64.Mips
             m_Pc = address;
         }
 
+        public ulong ReadPC()
+        {
+            return m_Pc;
+        }
+
         /// <summary>
         /// Call this to determine when the program's bootloader is finished
         /// </summary>
         /// <param name="address"></param>
         public void SetProgramEntryPoint(ulong address)
         {
-            m_BootCode = true;
+            InBootMode = true;
             m_ProgramStart = address;
         }
 
@@ -87,13 +92,23 @@ namespace cor64.Mips
             m_DebugMode = mode;
         }
 
-        public DecodedInstruction LastInst => m_LastInst;
+        public void SetTraceMode(ProgramTrace.TraceMode mode)
+        {
+            m_TraceMode = mode;
+
+            if (mode != ProgramTrace.TraceMode.None)
+            {
+                Log.Debug("Execution trace logging has been enabled");
+            }
+        }
+
+        public DecodedInstruction CurrentInst { get; protected set; }
 
         public abstract void Step();
 
-        public void HookInterface(N64MemoryController controller)
+        public virtual void HookInterface(N64MemoryController controller)
         {
-            m_Interface = new ChipInterface(controller);
+            m_Interface = new MipsInterface(controller);
             controller.HookCpu(m_Interface);
         }
 
@@ -110,84 +125,46 @@ namespace cor64.Mips
 
         public abstract void AttachBootManager(BootManager bootManager);
 
+        /* The method is reponsible for setting up the reported rdram size */
+        protected abstract void ReportRdramSize();
+
         protected DecodedInstruction Decode()
         {
             DecodedInstruction decode = m_Disassembler.Disassemble(m_Pc);
 
-            if (m_DebugMode && decode.Op.Family != OperationFamily.Null)
+            if (m_DebugMode)
             {
-                m_LastDisasm = m_Disassembler.GetFullDisassembly(decode);
-                RecordAsmEntry(decode);
+                if (InBootMode)
+                {
+                    if (m_Pc == m_ProgramStart)
+                    {
+                        InBootMode = false;
+                        Log.Debug("**** Program Entry Point Hit ****");
+                        ReportRdramSize();
+                    }
+                }
             }
 
             return decode;
         }
 
-        private void RecordAsmEntry(DecodedInstruction dinst)
+        public bool IsTraceActive => m_TraceMode == ProgramTrace.TraceMode.Full || (m_TraceMode == ProgramTrace.TraceMode.ProgramOnly && !InBootMode);
+
+        public bool IsMemTraceActive => IsTraceActive && ((m_TraceLog.Details & ProgramTrace.TraceDetails.MemoryAccess) == ProgramTrace.TraceDetails.MemoryAccess);
+
+        protected void TraceInstruction(DecodedInstruction decode, bool nullifed)
         {
-            m_TraceLog.AppendInstruction(dinst);
-            TraceStep?.Invoke(dinst);
+            if (m_TraceMode != ProgramTrace.TraceMode.None && decode.Op.Family != OperationFamily.Null && IsTraceActive)
+            {
+                m_TraceLog.AppendInstruction(decode, nullifed);
+                TraceStep?.Invoke(decode);
+            }
         }
 
-        protected void AddMemAccess(ulong address, String note)
+        protected void AddMemAccess(ulong address, bool isWrite, String val)
         {
-            m_TraceLog.AddInstructionMemAccess(address, note);
-        }
-
-        public String GetExecutionLog()
-        {
-            return m_TraceLog.GenerateTraceLog();
-        }
-
-        public virtual void DumpLogInfo(StringBuilder sb)
-        {
-            MemoryDebugger memoryDebugger = new MemoryDebugger();
-
-            sb.AppendLine("Program Counter: " + m_Pc.ToString("X8"));
-            sb.AppendLine("Register Hi: " + State.GetHi().ToString("X16"));
-            sb.AppendLine("Register Lo: " + State.GetLo().ToString("X16"));
-            sb.Append("Last Data Memory Access: ");
-            sb.Append(LastDataAddress.ToString("X8"));
-            sb.Append(" (");
-            sb.Append(memoryDebugger.GetMemName((uint)LastDataAddress));
-            sb.AppendLine(")");
-
-            sb.AppendLine("--- GPR Table ---");
-
-            for (int i = 0; i < 32; i++)
-            {
-                sb.AppendLine(String.Format("GPR {0}: {1:X16}", GetGPRName(i), m_State.GetGpr64(i)));
-            }
-
-            sb.AppendLine("----\n");
-
-            sb.AppendLine(" --- CPU Disassembly Dump ---");
-
-            var head = m_Pc - (10 * 4);
-
-            if (head < 0)
-            {
-                head = 0;
-            }
-
-            for (ulong i = head; i <= m_Pc; i+=4)
-            {
-                sb.Append(i.ToString("X8"));
-                sb.Append(" ");
-
-                try
-                {
-                    var inst = m_Disassembler.Disassemble(i);
-                    sb.AppendLine(m_Disassembler.GetFullDisassembly(inst));
-                }
-                catch
-                {
-                    sb.AppendLine("Inaccessable memory");
-                }
-            }
-
-            sb.AppendLine("----\n");
-
+            if (IsMemTraceActive)
+                m_TraceLog.AddInstructionMemAccess(address, isWrite, val);
         }
 
         public virtual String GetGPRName(int i) {
@@ -203,18 +180,61 @@ namespace cor64.Mips
             }
         }
 
-        protected BaseDisassembler Disassembler => m_Disassembler;
+        public BaseDisassembler Disassembler => m_Disassembler;
 
         public ProgramTrace TraceLog => m_TraceLog;
 
-        public virtual String CurrentDisassembly => m_LastDisasm;
-
         public ExecutionState State => m_State;
 
-        public ChipInterface Interface => m_Interface;
+        public MipsInterface Interface => m_Interface;
 
         public bool DebugMode => m_DebugMode;
 
-        public bool InBootMode => m_BootCode;
+        public bool InBootMode { get; protected set; } = true;
+
+        public ProgramTrace.TraceMode TraceMode => m_TraceMode;
+
+        public virtual IDictionary<string, string> SnapSave()
+        {
+            StringBuilder sb = new StringBuilder();
+
+            Dictionary<string, string> snap = new Dictionary<string, string>
+            {
+                { "pc", m_Pc.ToString("X16") },
+                { "lo", m_State.GetLo().ToString("X16") },
+                { "hi", m_State.GetHi().ToString("X16") },
+                { "llbit", m_State.LLBit ? "1" : "0" }
+            };
+
+            for (int i = 0; i < 32; i++)
+            {
+                sb.Clear();
+                sb.Append(m_State.GetGpr64(i).ToString("X16"));
+                sb.Append(";");
+                sb.Append(((long)m_State.GetGpr64(i)).ToString());
+                sb.Append(";");
+                sb.Append(((int)m_State.GetGpr32(i)).ToString());
+
+                snap.Add("gpr" + i.ToString(), sb.ToString());
+            }
+
+            for (int i = 0; i < 32; i++)
+            {
+                sb.Clear();
+                sb.Append(m_State.GetFprDW(i).ToString("X16"));
+                sb.Append(";");
+                sb.Append(DoubleConverter.ToExactString(m_State.GetFprD(i)));
+                
+
+                snap.Add("fpr" + i.ToString(), sb.ToString());
+            }
+
+            return snap;
+        }
+
+        public virtual void SnapLoad(IDictionary<string, string> dictionary)
+        {
+            throw new NotImplementedException();
+        }
     }
 }

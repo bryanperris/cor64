@@ -9,7 +9,7 @@ namespace cor64.Mips.Analysis
     {
         private List<InfoBasicBlockLink> m_Links = new List<InfoBasicBlockLink>();
 
-        public InfoBasicBlock(ulong address) : base(address, 1024 / 4)
+        public InfoBasicBlock(ulong address) : base(address)
         {
 
         }
@@ -28,7 +28,7 @@ namespace cor64.Mips.Analysis
             for (int i = 0; i < code.Length; i++)
             {
                 RecordSet.Insert(i, code[i]);
-                SetAddress(Address - 4);
+                Address -= 4;
             }
         }
 

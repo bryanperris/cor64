@@ -19,9 +19,9 @@ namespace cor64.Mips.R4300I
         private bool m_XTLBRefillExcepetion;
         private bool m_CacheErr;
         private bool m_ResetException;
-        private ChipInterface m_Interface;
+        private MipsInterface m_Interface;
         private Clock m_Clock;
-        private bool[] m_InterruptReg = new bool[6];
+        private bool[] m_InterruptReg = new bool[8];
         private bool m_IP7Multiplexer = false;
         private bool m_Timer;
 
@@ -40,7 +40,7 @@ namespace cor64.Mips.R4300I
             m_State = coreState;
         }
 
-        public void Attach_State(ChipInterface iface, Clock clock)
+        public void Attach_State(MipsInterface iface, Clock clock)
         {
             m_Interface = iface;
             m_Clock = clock;
@@ -103,6 +103,12 @@ namespace cor64.Mips.R4300I
             /* TODO: When timer fires, somehow it has to turn off and reset, so I think at the end of a whole cycle
              *       we need to check that and reset it
              */
+            if (m_Clock == null)
+            {
+                Log.Warn("Clock source is null, skipping increment");
+                return;
+            }
+
             if (m_Clock.CountClock)
             {
                 REGS.Write(CTS.CP0_REG_COUNT, REGS.Read(CTS.CP0_REG_COUNT) + 1);

@@ -8,45 +8,46 @@ using System.Threading.Tasks;
 using NLog;
 using System.IO;
 using cor64.Mips.R4300I;
+using cor64.Debugging;
 
 namespace cor64
 {
     public class N64System
     {
         private readonly static Logger Log = LogManager.GetCurrentClassLogger();
-        private N64MemoryController m_Memory;
-        private BaseInterpreter m_CPU;
         private BootManager m_BootManager;
         private Cartridge m_Cartridge;
 
         public N64System()
         {
-            m_Memory = new N64MemoryController();
+            DeviceMemory = new N64MemoryController();
 
             /* Boot Management */
             m_BootManager = new BootManager();
             m_BootManager.MMIOWrite += MMIORegWrite;
+
+            Dbg = new Debugger(this);
         }
 
         private void MMIORegWrite(BootManager.MMIORegWriteKind kind, uint v)
         {
             switch (kind)
             {
-                case BootManager.MMIORegWriteKind.MiVersion: m_Memory.Interface_MI.SetVersion(v); break;
-                case BootManager.MMIORegWriteKind.SpStatus: m_Memory.Interface_SP.SetStatus(v); break;
+                case BootManager.MMIORegWriteKind.MiVersion: DeviceMemory.Interface_MI.SetVersion(v); break;
+                case BootManager.MMIORegWriteKind.SpStatus: DeviceMemory.Interface_SP.SetStatus(v); break;
                 default: break;
             }
         }
 
-        public N64System CPU(BaseInterpreter interpreter)
+        public N64System CPU(CoreR4300I interpreter)
         {
             Log.Info("MIPS R4300I CPU Engine: {0}", interpreter.Description);
 
-            m_CPU = interpreter;
+            DeviceCPU = interpreter;
 
-            interpreter.AttachIStream(m_Memory.CreateMemoryStream());
-            interpreter.AttachDStream(m_Memory.CreateMemoryStream());
-            interpreter.HookInterface(m_Memory);
+            interpreter.AttachIStream(DeviceMemory.CreateMemoryStream());
+            interpreter.AttachDStream(DeviceMemory.CreateMemoryStream());
+            interpreter.HookInterface(DeviceMemory);
             interpreter.AttachBootManager(m_BootManager);
             return this;
         }
@@ -54,47 +55,63 @@ namespace cor64
         public N64System Boot(Cartridge cartridge)
         {
             m_Cartridge = cartridge;
-            m_Memory.MountCartridge(cartridge);
-            m_Memory.Init();
+            DeviceMemory.MountCartridge(cartridge);
+            DeviceMemory.Init();
             m_BootManager.BootCartridge(cartridge, true);
-            m_CPU.SetProgramEntryPoint(cartridge.EntryPoint);
+            DeviceCPU.SetProgramEntryPoint(cartridge.EntryPoint);
             return this;
         }
 
-        public void StepOnce()
+        /// <summary>
+        /// Step all system events on a single system tick (Single core mode)
+        /// </summary>
+        public void Tick()
         {
-            m_CPU.Step();
+            Dbg.EnterExecution();
+            DeviceCPU.Step();
+            Dbg.LeaveExecution();
+            DeviceCPU.CoreDbg.SkipBreakpoint = false;
         }
+
+        /// <summary>
+        /// If an exception is thrown during a tick, call this to cleanup anything aftwards
+        /// </summary>
+        public void TickFinally()
+        {
+            Dbg.LeaveExecution();
+        }
+
+        // For supporting multiple threads, we need an event system to schedule ticks in parallel
 
         public void DebugMode()
         {
-            m_Memory.DebugMode();
+            DeviceMemory.DebugMode();
         }
 
-        public void DumpExecutionLog(String path)
+        public void DumpExecutionLog(Stream stream)
         {
-            StringBuilder sb = new StringBuilder();
+            StreamWriter writer = new StreamWriter(stream);
 
-            if (m_CPU != null)
+            if (DeviceCPU != null)
             {
-                if (m_CPU.TraceLog.Size > 0)
+                if (DeviceCPU.TraceLog.Size > 0)
                 {
-                    sb.AppendLine("Trace Log Dump:");
-                    sb.AppendLine(m_CPU.TraceLog.GenerateTraceLog());
+                    writer.WriteLine("Trace Log Dump:");
+                    writer.WriteLine(DeviceCPU.TraceLog.GenerateTraceLog());
+                    writer.WriteLine("\n\n");
+                    writer.Flush();
                 }
-
-                m_CPU.DumpLogInfo(sb);
             }
             else
             {
-                sb.AppendLine("No CPU was attached!");
+                writer.WriteLine("No CPU was attached!");
             }
-
-            File.WriteAllText(path, sb.ToString());
         }
 
-        public BaseInterpreter DeviceCPU => m_CPU;
+        public Debugger Dbg { get; }
 
-        public N64MemoryController DeviceMemory => m_Memory;
+        public CoreR4300I DeviceCPU { get; private set; }
+
+        public N64MemoryController DeviceMemory { get; }
     }
 }

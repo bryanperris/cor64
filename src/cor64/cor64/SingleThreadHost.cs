@@ -16,6 +16,9 @@ namespace cor64
         private bool m_Running;
         private Exception m_Exception;
         private AutoResetEvent m_StartWaitEvent;
+        private bool m_BreakPoint = false;
+        private bool m_StepOnce = false;
+        public event Action Break;
 
         public SingleThreadHost(N64System system)
         {
@@ -31,7 +34,7 @@ namespace cor64
 
             try
             {
-                Log.Debug("CPU execution starting at 0x{0:X8}", ((CoreR4300I)m_System.DeviceCPU).ReadPC());
+                Log.Info("CONTINUE...@" + m_System.DeviceCPU.ReadPC().ToString("X8"));
 
                 while (true)
                 {
@@ -40,7 +43,37 @@ namespace cor64
                         throw m_Exception;
                     }
 
-                    m_System.StepOnce();
+                    if (m_System.Dbg.StepNext)
+                    {
+                        m_StepOnce = true;
+                        m_BreakPoint = false;
+                    }
+
+                    if (!m_StepOnce && m_System.Dbg.IsBreakActive)
+                    {
+                        if (!m_BreakPoint)
+                        {
+                            Break?.Invoke();
+                            Log.Info("BREAK...@" + m_System.DeviceCPU.ReadPC().ToString("X8"));
+                            m_BreakPoint = true;
+                        }
+
+                        continue;
+                    }
+
+                    if (m_BreakPoint)
+                    {
+                        m_BreakPoint = false;
+                        continue;
+                    }
+
+                    m_System.Tick();
+
+                    if (m_StepOnce)
+                    {
+                        m_System.Dbg.Break();
+                        m_StepOnce = false;
+                    }
                 }
             }
             catch (Exception e)
@@ -51,6 +84,7 @@ namespace cor64
             {
                 m_Running = false;
                 m_StartWaitEvent.Reset();
+                m_System.TickFinally();
             }
         }
 
@@ -66,6 +100,12 @@ namespace cor64
         public void Interrupt()
         {
             m_Exception = new Exception("The system was interrupted");
+        }
+
+        public void Resume()
+        {
+            m_Exception = null;
+            Start();
         }
 
         public bool IsRunning => m_Running;

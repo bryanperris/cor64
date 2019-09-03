@@ -120,7 +120,7 @@ namespace RunN64.Forms
                 if (m_SourceBitmap != null)
                     m_SourceBitmap.Dispose();
 
-                m_SourceBitmap = new SKBitmap(m_VideoInterface.Width, m_VideoInterface.Height, SKColorType.Rgba8888, SKAlphaType.Opaque);
+                m_SourceBitmap = new SKBitmap(m_VideoInterface.Width, m_VideoInterface.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
             }
         }
 

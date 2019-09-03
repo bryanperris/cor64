@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using cor64.Debugging;
 using cor64.Mips;
@@ -19,22 +20,26 @@ namespace cor64.IO
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
         private bool m_Debug = false;
         private BlockDevice m_CartRom; // Domain 1, Address 2 region
-        private ChipInterface m_CPUInterface;
+        private MipsInterface m_CPUInterface;
         private MemoryDebugger m_MemDebugger = new MemoryDebugger();
         private UnifiedMemModel<BlockDevice> m_MemModel = new UnifiedMemModel<BlockDevice>();
+        private long m_CountWriters;
+        private long m_CountReaders;
+
+        private const int DUMMY_SECTION_SIZE = 0x100000;
 
         public void Init()
         {
             m_MemModel.RDRAM = new Rdram();
-            m_MemModel.RDRAMRegs = new DummyMemory(0x100000);
+            m_MemModel.RDRAMRegs = new RdramRegisters(this);
             m_MemModel.SPRegs = new SignalProcessorMemory(this);
-            m_MemModel.DPCmdRegs = null;
-            m_MemModel.DpSpanRegs = null;
+            m_MemModel.DPCmdRegs = new DummyMemory(DUMMY_SECTION_SIZE, "Display Command Interface"); ;
+            m_MemModel.DpSpanRegs = new DummyMemory(DUMMY_SECTION_SIZE, "Display Span Interface"); ;
             m_MemModel.MIRegs = m_CPUInterface;
             m_MemModel.VIRegs = new Video(this);
-            m_MemModel.AIRegs = new DummyMemory(0x100000);
+            m_MemModel.AIRegs = new DummyMemory(DUMMY_SECTION_SIZE, "Audio Interface");
             m_MemModel.PIRegs = new PIMemory(this);
-            m_MemModel.RIRegs = new DummyMemory(0x100000);
+            m_MemModel.RIRegs = new RdramInterface(this);
             m_MemModel.SIRegs = new SerialMemory(this);
             m_MemModel.Cart = m_CartRom;
             m_MemModel.PIF = new PIFMemory(this);
@@ -49,6 +54,8 @@ namespace cor64.IO
 
         public void Read(long address, bool aligned, byte[] buffer, int offset, int count)
         {
+            Interlocked.Increment(ref m_CountReaders);
+
             if (aligned)
             {
                 _ReadMemAligned((uint)address, buffer, offset, count);
@@ -57,10 +64,14 @@ namespace cor64.IO
             {
                 _ReadMemUnaligned((uint)address, buffer, offset, count);
             }
+
+            Interlocked.Decrement(ref m_CountReaders);
         }
 
         public void Write(long address, bool aligned, byte[] buffer, int offset, int count)
         {
+            Interlocked.Increment(ref m_CountWriters);
+
             if (aligned)
             {
                 _WriteMemAligned((uint)address, buffer, offset, count);
@@ -69,6 +80,8 @@ namespace cor64.IO
             {
                 _WriteMemUnaligned((uint)address, buffer, offset, count);
             }
+
+            Interlocked.Decrement(ref m_CountWriters);
         }
 
         public StreamEx CreateMemoryStream()
@@ -92,7 +105,8 @@ namespace cor64.IO
                 throw new IOException(String.Format("Device block for read not found for {0:X4} ({1})", blkDevice, m_MemDebugger.GetMemName(address)));
             }
 
-            blkDevice.SafeRead(blkOffset, buffer, offset, count);
+            blkDevice.BaseAddress = address;
+            blkDevice.Read(blkOffset, buffer, offset, count);
         }
 
         private void _WriteMemAligned(uint address, byte[] buffer, int offset, int count)
@@ -105,7 +119,8 @@ namespace cor64.IO
                 throw new IOException(String.Format("Device block for write not found for {0:X4} ({1})", blkDevice, m_MemDebugger.GetMemName(address)));
             }
 
-            blkDevice.SafeWrite(blkOffset, buffer, offset, count);
+            blkDevice.BaseAddress = address;
+            blkDevice.Write(blkOffset, buffer, offset, count);
         }
 
         private void _ReadMemUnaligned(uint address, byte[] buffer, int offset, int count)
@@ -124,7 +139,8 @@ namespace cor64.IO
                     throw new IOException(String.Format("Device block for unaligned read not found for {0:X4} ({1})", blkDevice, m_MemDebugger.GetMemName(address)));
                 }
 
-                blkDevice.SafeRead(blkOffset, buffer, bufferCursor, 1);
+                blkDevice.BaseAddress = address;
+                blkDevice.Read(blkOffset, buffer, bufferCursor, 1);
 
                 bytesLeft--;
                 cursor++;
@@ -148,7 +164,8 @@ namespace cor64.IO
                     throw new IOException(String.Format("Device block for unaligned write not found for {0:X4} ({1})", blkDevice, m_MemDebugger.GetMemName(address)));
                 }
 
-                blkDevice.SafeWrite(blkOffset, buffer, bufferCursor, 1);
+                blkDevice.BaseAddress = address;
+                blkDevice.Write(blkOffset, buffer, bufferCursor, 1);
 
                 bytesLeft--;
                 cursor++;
@@ -181,12 +198,12 @@ namespace cor64.IO
             return copyTask;
         }
 
-        public void HookCpu(ChipInterface iface)
+        public void HookCpu(MipsInterface iface)
         {
             m_CPUInterface = iface;
         }
 
-        public ChipInterface Interface_MI => m_CPUInterface;
+        public MipsInterface Interface_MI => m_CPUInterface;
 
         public SignalProcessorMemory Interface_SP => (SignalProcessorMemory)m_MemModel.SPRegs;
 
@@ -218,6 +235,11 @@ namespace cor64.IO
 
             public override int Read(byte[] buffer, int offset, int count)
             {
+                while (Interlocked.Read(ref m_Controller.m_CountWriters) > 0)
+                {
+                    Thread.Sleep(200);
+                }
+
                 m_Controller.Read(Position, AlignmentMode, buffer, offset, count);
                 return count;
             }
@@ -234,6 +256,11 @@ namespace cor64.IO
 
             public override void Write(byte[] buffer, int offset, int count)
             {
+                while (Interlocked.Read(ref m_Controller.m_CountReaders) > 0)
+                {
+                    Thread.Sleep(200);
+                }
+
                 m_Controller.Write(Position, AlignmentMode, buffer, offset, count);
             }
         }

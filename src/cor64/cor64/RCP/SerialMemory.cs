@@ -41,11 +41,11 @@ namespace cor64.RCP
 
         public SerialMemory(N64MemoryController controller) : base(controller, 0x100000)
         {
-            AppendDevice(m_DramAddress, m_PifReadAddress);
-            AppendUnused(8);
-            AppendDevice(m_PifWriteAddress);
-            AppendUnused(4);
-            AppendDevice(m_Status);
+            Map(m_DramAddress, m_PifReadAddress);
+            Map(8);
+            Map(m_PifWriteAddress);
+            Map(4);
+            Map(m_Status);
         }
     }
 }

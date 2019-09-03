@@ -12,7 +12,7 @@ namespace cor64.Mips
     {
         private StreamEx m_BaseStream;
 
-        public VMemStream(StreamEx streamEx)
+        protected VMemStream(StreamEx streamEx)
         {
             m_BaseStream = streamEx;
         }
@@ -27,20 +27,13 @@ namespace cor64.Mips
         public override int Read(byte[] buffer, int offset, int count)
         {
             m_BaseStream.Position = TranslateAddress((uint)Position);
-            ReportAccess(true, m_BaseStream.Position, count);
             return m_BaseStream.Read(buffer, offset, count);
         }
 
         public override void Write(byte[] buffer, int offset, int count)
         {
             m_BaseStream.Position = TranslateAddress((uint)Position);
-            ReportAccess(false, m_BaseStream.Position, count);
             m_BaseStream.Write(buffer, offset, count);
-        }
-
-        protected virtual void ReportAccess(bool isRead, long address, int len)
-        {
-
         }
 
 

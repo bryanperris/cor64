@@ -19,72 +19,63 @@ namespace cor64.IO
 
         private PinnedBuffer m_BufferA;
         private PinnedBuffer m_BufferB;
-        private bool m_CanRead;
-        private bool m_CanWrite;
-        public event Action MemWrite;
-        private int m_Size;
+        public event Action Write;
 
         public MemMappedBuffer(int size, MemModel mode = MemModel.SINGLE_READ_WRITE)
         {
-            m_Size = size;
+            Size = size;
             m_BufferA = new PinnedBuffer(size);
             m_BufferB = m_BufferA;
+            Write += EmptyHandler;
 
             switch (mode)
             {
                 case MemModel.SINGLE_READ_WRITE:
                     {
-                        m_CanRead = true;
-                        m_CanWrite = true;
+                        CanRead = true;
+                        CanWrite = true;
                         break;
                     }
                 case MemModel.SINGLE_READONLY:
                     {
-                        m_CanRead = true;
+                        CanRead = true;
                         break;
                     }
                 case MemModel.SINGLE_WRITEONLY:
                     {
-                        m_CanWrite = true;
+                        CanWrite = true;
                         break;
                     }
                 case MemModel.DUAL_READ_WRITE:
                     {
-                        m_CanRead = true;
-                        m_CanWrite = true;
+                        CanRead = true;
+                        CanWrite = true;
                         m_BufferB = new PinnedBuffer(size);
                         break;
                     }
             }
         }
 
-        public void Read(byte[] buffer, int srcOffset, int dstOffset, int count)
+        private void EmptyHandler()
         {
-            if (m_CanRead)
-            {
-                Marshal.Copy(m_BufferA.GetPointer().Offset(srcOffset), buffer, dstOffset, count);
-            }
+
         }
 
-        public void Write(byte[] buffer, int srcOffset, int dstOffset, int len)
+        public virtual void WriteNotify()
         {
-            if (m_CanWrite)
-            {
-                Marshal.Copy(buffer, srcOffset, m_BufferA.GetPointer().Offset(dstOffset), len);
-            }
-        }
-
-        public void OnMemWrite()
-        {
-            MemWrite?.Invoke();
+            Write.Invoke();
         }
 
         public IntPtr ReadPtr => m_BufferB.GetPointer();
 
         public IntPtr WritePtr => m_BufferA.GetPointer();
 
-        public int Size => m_Size;
+        public int Size { get; }
 
         public long AssignedAddress { get; set; }
+
+        public bool CanRead { get; }
+
+        public bool CanWrite { get; }
     }
 }

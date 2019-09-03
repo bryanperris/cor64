@@ -18,7 +18,7 @@ namespace cor64.IO
             m_SourceStream = streamSource;
         }
 
-		protected override void Read(long position, byte[] buffer, int offset, int count)
+		public sealed override void Read(long position, byte[] buffer, int offset, int count)
         {
 			m_SourceStream.Position = position;
 
@@ -35,7 +35,7 @@ namespace cor64.IO
             }
         }
 
-		protected override void Write(long position, byte[] buffer, int offset, int count)
+        public sealed override void Write(long position, byte[] buffer, int offset, int count)
 		{
 			m_SourceStream.Position = position;
 

@@ -31,6 +31,7 @@ namespace cor64.Mips.R4300I
         protected DataMemory m_DataMemory;
         private Profiler m_Profiler = new Profiler();
         public bool StartedWithProfiler { get; protected set; }
+        private CoreDebugger m_CoreDebugger = new CoreDebugger();
 
         /* TODO: When we do have a cache system, 
          * some conditions of the cache can break
@@ -41,18 +42,19 @@ namespace cor64.Mips.R4300I
         protected bool EnableCp1 { get; set; } = true;
 
         /* Debugging */
-        private HashSet<int> m_GPRWriteBreakpoints = new HashSet<int>();
-        private HashSet<int> m_GPRReadBreakpoints = new HashSet<int>();
+
         protected DebugInstMode core_InstDebugMode;
         private ulong m_EntryPoint;
 
         protected CoreR4300I(BaseDisassembler disassembler) : base(disassembler)
         {
+            // Attach core debugger
+            State.SetCoreDebugger(m_CoreDebugger);
+
             m_CallTable = new Action<DecodedInstruction>[OpcodeFactory.LastID + 1];
 
             m_CoreClock = new Clock(10, 2);
             m_Coprocessor0 = new SystemController(State);
-            m_Coprocessor0.Attach_State(Interface, m_CoreClock);
             m_Coprocessor0.Attach_Callbacks(() => m_Pc, () => BranchDelay);
             m_Coprocessor0.ExceptionJump += ExceptionJump;
 
@@ -95,6 +97,21 @@ namespace cor64.Mips.R4300I
             Map(Condition, C_F, C_UN, C_EQ, C_UEQ, C_OLT, C_ULT, C_OLE, C_ULE, C_SF, C_NGLE, C_SEQ, C_NGL, C_LT, C_NGE, C_LE, C_NGT);
         }
 
+        public override void HookInterface(N64MemoryController controller)
+        {
+            base.HookInterface(controller);
+            m_Coprocessor0.Attach_State(Interface, m_CoreClock);
+        }
+
+        protected override void ReportRdramSize()
+        {
+            var traceMode = TraceMode;
+            SetTraceMode(Analysis.ProgramTrace.TraceMode.None);
+            m_DataMemory.Data32Swp = 0x00800000;
+            m_DataMemory.WriteData(0x80000318, 4, true);
+            SetTraceMode(traceMode);
+        }
+
         /********************************************************
          * Processor Core Logic
          ********************************************************/
@@ -114,7 +131,7 @@ namespace cor64.Mips.R4300I
 
         protected ulong ReadCp0Value(int select, bool isDwordInst)
         {
-            var value = State.Cp0.Read(select);
+            var value = State.Cp0.RegRead(select);
 
             /* If running 64-bit mode, with the 32-bit version, then sign extend */
             if (IsOperation64 && !isDwordInst)
@@ -244,6 +261,8 @@ namespace cor64.Mips.R4300I
         public ulong TargetAddress { get; set; }
 
         protected bool UnconditionalJump { get; set; }
+
+        protected bool NullifyNext { get; set; }
 
         public bool WillJump => TakeBranch || UnconditionalJump;
 
@@ -375,11 +394,6 @@ namespace cor64.Mips.R4300I
         public ulong ReadRA()
         {
             return State.GetGpr64(31);
-        }
-
-        public ulong ReadPC()
-        {
-            return m_Pc;
         }
 
         public void SetOperation64Mode(bool mode)
@@ -570,9 +584,11 @@ namespace cor64.Mips.R4300I
             private MemoryDebugger m_MemDebugger = new MemoryDebugger();
             private int m_LastNamedRegionHash = 0;
             private uint m_Size = 0xFFFFFFFF;
+            private StreamEx m_BaseStream;
 
             public SimpleVMemStream(CoreR4300I core, StreamEx streamEx, bool isDataPath) : base(streamEx)
             {
+                m_BaseStream = streamEx;
                 m_Core = core;
                 m_IsDataPath = isDataPath;
 
@@ -584,29 +600,38 @@ namespace cor64.Mips.R4300I
 
             public override long Length => m_Size;
 
-            protected override void ReportAccess(bool isRead, long address, int len)
+            public override int Read(byte[] buffer, int offset, int count)
             {
-                m_Core.LastDataAddress = (ulong)address;
+                var read = base.Read(buffer, offset, count);
 
-                if (m_Core.DebugMode && m_IsDataPath)
+                if (m_Core.IsMemTraceActive && m_IsDataPath)
                 {
-                    uint addr = (uint)address;
-                    var n = m_MemDebugger.GetMemName(addr);
-                    var h = n.GetHashCode();
-
-                    if (h != m_LastNamedRegionHash)
-                    {
-                        m_LastNamedRegionHash = h;
-                        m_Core.AddMemAccess(addr, n);
-
-                        String op = isRead ? "Data read from " : "Data write to ";
-                        String boot = m_Core.InBootMode ? "BOOTLOADER " : "";
-
-                        Log.Debug("{0} {1:X8} - {2} PMEM {3}", boot, m_Core.m_Pc, op, n);
-                    }
-
-                    // TODO: We should compress/trim memory access info when RAM operations take place such as RDRAM, PIF RAM, SP RAM, because they can add a lot of noise
+                    m_Core.AddMemAccess((uint)(ulong)m_BaseStream.Position, false, DebugValue(buffer, offset, count));
                 }
+
+                return read;
+            }
+
+            public override void Write(byte[] buffer, int offset, int count)
+            {
+                base.Write(buffer, offset, count);
+
+                if (m_Core.IsMemTraceActive && m_IsDataPath)
+                {
+                    m_Core.AddMemAccess((uint)(ulong)m_BaseStream.Position, true, DebugValue(buffer, offset, count));
+                }
+            }
+
+            private String DebugValue(byte[] buffer, int offset, int size)
+            {
+                StringBuilder sb = new StringBuilder();
+
+                for (int i = 0; i < size; i++)
+                {
+                    sb.Append(buffer[offset + i].ToString("X2"));
+                }
+
+                return sb.ToString();
             }
 
             protected override long TranslateAddress(long address)
@@ -662,14 +687,6 @@ namespace cor64.Mips.R4300I
          * Debugger Interface
          ********************************************************/
 
-        public void AddVBP_ReadGPR(int gpr)
-        {
-            if (!m_GPRReadBreakpoints.Contains(gpr))
-            {
-                m_GPRReadBreakpoints.Add(gpr);
-            }
-        }
-
         public override string GetGPRName(int i)
         {
             return ABI.GetLabel("o32", ABI.RegType.GPR, i);
@@ -695,6 +712,12 @@ namespace cor64.Mips.R4300I
             core_InstDebugMode = mode;
         }
 
-        public ulong DebugEntryPoint { get; set; }
+        public String DebugMemReadHex(long address, int size)
+        {
+            m_DataMemory.ReadData(address, size, true);
+            return m_DataMemory.Data64Swp.ToString("X16");
+        }
+
+        public CoreDebugger CoreDbg => m_CoreDebugger;
     }
 }

@@ -10,9 +10,8 @@ namespace cor64.Debugging
 
         public MemoryDebugger()
         {
-            AddSection(0x00000000, 0x001FFFFF, "RDRAM Memory Range 0");
-            AddSection(0x00200000, 0x003FFFFF, "RDRAM Memory Range 1");
-            AddSection(0x00400000, 0x03EFFFFF, "RDRAM Memory Unused");
+            AddSection(0x00000000, 0x007FFFFF, "RDRAM Memory");
+            AddSection(0x00800000, 0x03EFFFFF, "RDRAM Memory Unused");
             AddSection(0x03F00000, 0x03F00003, "RDRAM Reg: Config");
             AddSection(0x03F00004, 0x03F00007, "RDRAM Reg: DeviceID");
             AddSection(0x03F00008, 0x03F0000B, "RDRAM Reg: Delay");
@@ -129,6 +128,19 @@ namespace cor64.Debugging
 
         public String GetMemName(uint address)
         {
+            switch (address)
+            {
+                default: break;
+                case 0x300: return "osTvType";
+                case 0x304: return "osRomType";
+                case 0x308: return "osRomBase";
+                case 0x30C: return "osResetType";
+                case 0x310: return "osCicId";
+                case 0x314: return "osVersion";
+                case 0x318: return "osMemSize";
+                case 0x31C: return "osAppNMIBuffer";
+            }
+
             if (m_Cache.Count >= 30000)
             {
                 m_Cache.Clear();

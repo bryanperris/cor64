@@ -36,11 +36,11 @@ namespace cor64.RCP
 
         public SignalProcessorMemory(N64MemoryController controller) : base (controller, 0x100000)
         {
-            AppendDevice(m_DMemory, m_IMemory);
-            AppendUnused(0x3E000);
-            AppendDevice(m_MemAddress, m_DramAddress, m_ReadLen, m_WriteLen, m_Status, m_Full, m_Busy, m_Semaphore);
-            AppendUnused(0x3FFE0);
-            AppendDevice(m_PC, m_Bist);
+            Map(m_DMemory, m_IMemory);
+            Map(0x3E000);
+            Map(m_MemAddress, m_DramAddress, m_ReadLen, m_WriteLen, m_Status, m_Full, m_Busy, m_Semaphore);
+            Map(0x3FFE0);
+            Map(m_PC, m_Bist);
         }
 
         public void SetStatus(uint value)

@@ -106,20 +106,20 @@ namespace cor64.Tests.Cpu
             "div".CPUTest(4, 2).ExpectLo(2).Run();
                   CPUTest(SignedMax, MinusOne).ExpectLo(SignedOvfl + 1).Run();
                   CPUTest(MinusOne, SignedMax).ExpectHi(MinusOne).Run();
-                  CPUTest(1, 0).ExpectLo(0).Run();
+                  CPUTest(1, 0).ExpectLo(0xFFFFFFFFFFFFFFFF).ExpectHi(1).Run();
                   CPUTest(5, 2).ExpectLo(2).ExpectHi(1).Run();
 
             "divu".CPUTest(4, 2).ExpectLo(2).Run();
                    CPUTest(SignedMax, MinusOne).ExpectLo(0).ExpectHi(SignedMax).Run();
                    CPUTest(MinusOne, SignedMax).ExpectLo(2).ExpectHi(1).Run();
-                   CPUTest(1, 0).ExpectLo(0).Run();
+                   CPUTest(1, 0).ExpectLo(0xFFFFFFFFFFFFFFFF).ExpectHi(1).Run();
                    CPUTest(5, 2).ExpectLo(2).ExpectHi(1).Run();
 
             "ddiv".CPUTest(4, 2).Only64().ExpectLo(2).Run();
                    CPUTest(1, 1).Only32().NoDest().Except(Reserved).Run();
                    CPUTest(SignedMax64, MinusOne).Only64().ExpectLo(SignedOvfl64 + 1).Run();
                    CPUTest(MinusOne, SignedMax64).Only64().ExpectHi(MinusOne).Run();
-                   CPUTest(1, 0).Only64().ExpectLo(0).Run();
+                   CPUTest(1, 0).Only64().ExpectLo(0xFFFFFFFFFFFFFFFF).ExpectHi(1).Run();
                    CPUTest(5, 2).Only64().ExpectLo(2).ExpectHi(1).Run();
 
 
@@ -127,7 +127,7 @@ namespace cor64.Tests.Cpu
                    CPUTest(1, 1).Only32().NoDest().Except(Reserved).Run();
                    CPUTest(SignedMax64, MinusOne).Only64().ExpectLo(0).ExpectHi(SignedMax64).Run();
                    CPUTest(MinusOne, SignedMax64).Only64().ExpectLo(2).ExpectHi(1).Run();
-                   CPUTest(1, 0).Only64().ExpectLo(0).Run();
+                   CPUTest(1, 0).Only64().ExpectLo(0xFFFFFFFFFFFFFFFF).ExpectHi(1).Run();
                    CPUTest(5, 2).Only64().ExpectLo(2).ExpectHi(1).Run();
         }
 

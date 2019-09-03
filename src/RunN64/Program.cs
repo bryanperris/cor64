@@ -1,14 +1,19 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Text;
+using System.Threading;
+using System.Windows.Forms;
 using cor64;
+using cor64.Mips;
+using cor64.Mips.Analysis;
 using cor64.Mips.R4300I;
+using cor64.WebService;
 using Newtonsoft.Json;
 using NLog;
 using NLog.Config;
 using NLog.Targets;
 using RunN64.Forms;
-using System;
-using System.IO;
-using System.Threading;
-using System.Windows.Forms;
 
 namespace RunN64
 {
@@ -25,25 +30,12 @@ namespace RunN64
         {
             LoggingConfiguration configuration = new LoggingConfiguration();
 
-            String layout = @"${date:format=HH\:mm\:ss} ${message}";
-
-            //ColoredConsoleTarget consoleTarget = new ColoredConsoleTarget()
-            //{
-            //    Layout = layout,
-
-            //};
+            String layout = @"${message}";
 
             ConsoleTarget consoleTarget = new ConsoleTarget()
             {
                 Layout = layout
             };
-
-            //ConsoleRowHighlightingRule phaseColorRule = new ConsoleRowHighlightingRule(
-            //    ConditionParser.ParseExpression("starts-with('${message}', '--- Phase:')"),
-            //    ConsoleOutputColor.Cyan,
-            //    ConsoleOutputColor.Black);
-
-            //consoleTarget.RowHighlightingRules.Add(phaseColorRule);
 
             FileTarget fileTarget = new FileTarget()
             {
@@ -103,12 +95,17 @@ namespace RunN64
 
         private static void DumpExecutionLog()
         {
+            Log.Info("Dumping trace log... Please wait...");
+
             if (File.Exists("emulation.log"))
                 File.Delete("emulation.log");
 
-            m_System.DumpExecutionLog("emulation.log");
+            using (var fs = new FileStream("emulation.log", FileMode.CreateNew, FileAccess.ReadWrite))
+            {
+                m_System.DumpExecutionLog(fs);
+            }
 
-            Log.Info("Dumped trace log to emulation.log");
+            Log.Info("Done! trace log = emulation.log");
         }
 
         private static void Finish()
@@ -129,13 +126,33 @@ namespace RunN64
 
         }
 
+        private static void PrintEmuState()
+        {
+            Dictionary<string, string> snap = new Dictionary<string, string>();
+
+            m_System.Dbg.DumpState(snap);
+
+            Log.Debug("\n********* Emulator State *********\n");
+
+            StringBuilder sb = new StringBuilder();
+
+            m_System.Dbg.PrintCpuState(sb);
+
+            Console.ForegroundColor = ConsoleColor.White;
+            Log.Debug(sb);
+            Console.ForegroundColor = ConsoleColor.Green;
+
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Log.Debug("\nStack");
+            Log.Debug(m_System.DeviceCPU.State.Stack.DumpStack());
+            Console.ForegroundColor = ConsoleColor.Green;
+
+            Log.Debug("**********************************\n");
+        }
+
         static void Main(string[] args)
         {
             var config = JsonConvert.DeserializeObject<Config>(File.ReadAllText("config.json"));
-
-            //m_Interpreter.SetDebuggingMode(true);
-            //m_Interpreter.AddVBP_ReadGPR(29);
-            //m_Interpreter.SetInstructionDebugMode(DebugInstMode.ProgramOnly);
 
             InitLogging();
 
@@ -149,14 +166,34 @@ namespace RunN64
                 PhaseMsg("Insert Cartridge");
 
                 var cart = GetCartRom(config.RomFilepath);
-                m_Interpreter.DebugEntryPoint = cart.EntryPoint;
-
+                m_Interpreter.SetProgramEntryPoint(cart.EntryPoint);
 
                 Console.ForegroundColor = ConsoleColor.Green;
 
                 PhaseMsg("System Initialization");
 
                 m_System = new N64System();
+
+                /* Debugging setup */
+                m_Interpreter.SetDebuggingMode(true);
+                m_Interpreter.SetInstructionDebugMode(DebugInstMode.None);
+                m_Interpreter.SetTraceMode(ProgramTrace.TraceMode.None);
+                m_Interpreter.TraceLog.Details = ProgramTrace.TraceDetails.None;
+
+                //m_Interpreter.CoreDbg.AppendInstBreakpointByAddr(0x80002CCC);
+
+                if (!String.IsNullOrEmpty(config.ElfFilepath))
+                {
+                    var elfFilePath = Environment.CurrentDirectory + Path.DirectorySeparatorChar + config.ElfFilepath;
+
+                    if (File.Exists(elfFilePath))
+                        m_Interpreter.Disassembler.AttachSymbolProvider(new DebugSymbolSource(elfFilePath));
+                }
+
+
+                EmuWebService webService = new EmuWebService();
+                webService.Start();
+
                 m_System.DebugMode();
                 m_System.CPU(m_Interpreter);
                 m_System.Boot(cart);
@@ -171,20 +208,19 @@ namespace RunN64
                 gfxThread.SetApartmentState(ApartmentState.STA);
                 gfxThread.Start();
 
-
                 PhaseMsg("System Execution Start");
 
                 SingleThreadHost host = new SingleThreadHost(m_System);
-
+                host.Break += PrintEmuState;
                 host.Start();
 
                 while (true)
                 {
-                    //Console.WriteLine("PC Peek: {0:X8}", m_Interpreter.ReadPC());
-
                     if (Console.KeyAvailable)
                     {
-                        if (Console.ReadKey().Key == ConsoleKey.Q)
+                        var key = Console.ReadKey(true);
+
+                        if (key.Key == ConsoleKey.Q)
                         {
                             host.Interrupt();
 
@@ -195,10 +231,39 @@ namespace RunN64
                                 Console.WriteLine("------");
                             }
                         }
+
+                        if (key.Key == ConsoleKey.B)
+                        {
+                            if (!m_System.Dbg.IsBreakActive)
+                            {
+                                m_System.Dbg.Break();
+                            }
+                        }
+
+                        if (key.Key == ConsoleKey.C)
+                        {
+                            if (m_System.Dbg.IsBreakActive)
+                            {
+                                m_System.Dbg.Continue();
+                            }
+                        }
+
+                        if (key.Key == ConsoleKey.S)
+                        {
+                            m_System.Dbg.Step();
+                        }
                     }
 
                     if (host.ThrownException != null)
                     {
+                        if (host.ThrownException.GetType() == typeof(VirtualBreakpointException))
+                        {
+                            m_System.DeviceCPU.CoreDbg.SkipBreakpoint = true;
+                            m_System.Dbg.Break();
+                            host.Resume();
+                            continue;
+                        }
+
                         Console.ForegroundColor = ConsoleColor.Red;
                         Log.Error("\n--- An emulator error occured! ---");
                         Log.Error("Exception: {0}", host.ThrownException.Message);
@@ -215,6 +280,11 @@ namespace RunN64
                             Log.Error("Stack Trace: {0}", e.StackTrace.ToString());
                         }
 
+
+                        Log.Error("Last Instruction: " + m_System.DeviceCPU.Disassembler.GetFullDisassembly(m_System.DeviceCPU.CurrentInst));
+
+                        PrintEmuState();
+
                         Finish();
                         break;
                     }
@@ -223,7 +293,6 @@ namespace RunN64
                     {
                         break;
                     }
-                    
                 }
             }
             catch (Exception e)
@@ -233,7 +302,6 @@ namespace RunN64
                 Log.Error("Exception: {0}", e.Message);
                 Log.Error("Stack Trace: {0}", e.ToString());
             }
-
 
             if (Environment.OSVersion.Platform == PlatformID.Win32NT)
             {

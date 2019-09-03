@@ -1,4 +1,5 @@
-﻿using System;
+﻿using cor64.Debugging;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -15,6 +16,23 @@ namespace cor64.Mips.Analysis
         private List<InfoBasicBlock> m_Blocks = new List<InfoBasicBlock>();
         private List<String> m_RawTraceLog = new List<string>();
         private BaseDisassembler m_Disassembler;
+
+        /* Meta attachments */
+        private MemoryAccessMeta m_Attachment_MemAccess = null;
+
+        public enum TraceMode
+        {
+            None,
+            Full,
+            ProgramOnly
+        }
+
+        [Flags]
+        public enum TraceDetails
+        {
+            None = 0,
+            MemoryAccess = 0b1
+        }
 
         /* Program Informaton */
         private ulong m_EntryPoint;
@@ -37,12 +55,12 @@ namespace cor64.Mips.Analysis
             m_Disassembler = disassembler;
         }
 
-        public void AppendInstruction(DecodedInstruction inst)
+        public void AppendInstruction(DecodedInstruction inst, bool nullified)
         {
-            //Console.WriteLine((m_EndOfBlock ? "&& " : "") + (m_BlockRef.ContainsKey(inst.Address) ? "++ " : "") + (m_Freeze ? " ****** " : "") + new BasicBlockInstruction(inst).ToString());
+            //String blockHasInst = m_BlockRef.ContainsKey(inst.Address) ? "CACHED" : "APPEND";
 
             if (m_DebugCheck)
-                m_RawTraceLog.Add(new InfoBasicBlockInstruction(m_Disassembler, inst).ToString());
+                m_RawTraceLog.Add(new InfoBasicBlockInstruction(m_Disassembler, inst, nullified).ToString());
 
             /* End of block indicated via delay slot signal */
             if (m_EndOfBlock)
@@ -51,17 +69,20 @@ namespace cor64.Mips.Analysis
                 if (!m_InDelaySlot && m_LastBranch + 4 == inst.Address)
                 {
                     m_InDelaySlot = true;
+                    //Console.WriteLine("IN DELAY SLOT");
                 }
                 else
                 {
                     m_LastBlock = m_CurrentBlock;
 
-                    if (m_BlockRef.ContainsKey(inst.Address)) {
+                    if (m_BlockRef.ContainsKey(inst.Address))
+                    {
                         var block = m_BlockRef[inst.Address];
                         m_CurrentBlock = block;
                         m_Freeze = true;
                     }
-                    else {
+                    else
+                    {
                         /* We jumped somewhere new */
                         m_Freeze = false;
                         m_CurrentBlock = null;
@@ -70,6 +91,8 @@ namespace cor64.Mips.Analysis
                     /* Ok we are on the next block */
                     m_EndOfBlock = false;
                     m_InDelaySlot = false;
+
+                    //Console.WriteLine("NEXT BLOCK");
                 }
             }
 
@@ -94,7 +117,7 @@ namespace cor64.Mips.Analysis
 
             if (!m_Freeze)
             {
-                m_CurrentInst = new InfoBasicBlockInstruction(m_Disassembler, inst);
+                m_CurrentInst = new InfoBasicBlockInstruction(m_Disassembler, inst, nullified);
                 m_CurrentBlock.Append(m_CurrentInst);
 
                 if (m_BlockRef.ContainsKey(inst.Address))
@@ -130,6 +153,12 @@ namespace cor64.Mips.Analysis
             else
             {
                 var blockIndex = (inst.Address - m_CurrentBlock.Address) / 4;
+
+                if ((int)blockIndex >= m_CurrentBlock.InstructionList.Count)
+                {
+                    throw new ArgumentOutOfRangeException("block index is out of range");
+                }
+
                 m_CurrentInst = m_CurrentBlock.InstructionList[(int)blockIndex];
             }
 
@@ -138,6 +167,23 @@ namespace cor64.Mips.Analysis
                 m_EndOfBlock = true;
                 m_LastBranch = inst.Address;
             }
+
+            /* Process metadata attachments */
+            if (m_Attachment_MemAccess != null)
+            {
+                m_CurrentInst.AppendMemoryAccess(m_Attachment_MemAccess);
+                m_Attachment_MemAccess = null;
+            }
+
+            //String end = m_EndOfBlock ? "BLOCKEND" : "";
+            //String frozen = m_Freeze ? "FROZEN" : "NOTFROZEN";
+            //String status = blockHasInst + " " + frozen + " " + end;
+            //Console.WriteLine("{0:X8} {1} {2}", inst.Address, m_Disassembler.GetFullDisassembly(inst), status);
+        }
+
+        internal void Backtrack()
+        {
+            throw new NotImplementedException();
         }
 
         public string GenerateTraceLog()
@@ -162,18 +208,8 @@ namespace cor64.Mips.Analysis
                 for (int i = offset; i < code.Length; i++)
                 {
                     var codeLine = code[i];
-                    var memList = codeLine.MemAccessList;
                     stringBuilder.Append(codeLine.ToString());
-
-                    if (memList.Count > 0 && blockHit < memList.Count)
-                    {
-                        stringBuilder.Append(" \\\\ ");
-                        stringBuilder.Append(memList[blockHit].address.ToString("X8"));
-                        stringBuilder.Append(": ");
-                        stringBuilder.Append(memList[blockHit].note);
-                    }
-
-                    stringBuilder.AppendLine(" ");
+                    codeLine.IncrementUsageRef();
                 }
 
                 if (blockHit < links.Count)
@@ -192,21 +228,17 @@ namespace cor64.Mips.Analysis
             return stringBuilder.ToString();
         }
 
-        public void AddInstructionMemAccess(ulong address, string note)
+        public void AddInstructionMemAccess(ulong address, bool isWrite, String val)
         {
-            if (m_CurrentInst != null)
-                m_CurrentInst.AppendMemoryAccess(address, note);
-        }
-
-        public void SetInstructionTickCount(long v)
-        {
-            if (m_CurrentInst != null)
+            if ((Details & TraceDetails.MemoryAccess) == TraceDetails.MemoryAccess)
             {
-                m_CurrentInst.TickCount = Math.Max(m_CurrentInst.TickCount, v);
+                m_Attachment_MemAccess = new MemoryAccessMeta(address, isWrite, val);
             }
         }
 
         public int Size => m_Blocks.Count;
+
+        public TraceDetails Details { get; set; }
 
         private void AddJumpArrow(IList<String> input, int start, int end, int repeat)
         {

@@ -3,6 +3,9 @@ C# based N64 Emulator
 
 This is a work-in-progress freetime project
 
+[ Debugging ]
+ * When hex dumping a rom, the program code (after the IPL) always starts 0x1000 in the file normally
+
 [ References ] 
 
  * byuu's Bass Assembler: https://github.com/ARM9/bass

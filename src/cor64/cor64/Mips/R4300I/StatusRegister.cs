@@ -103,12 +103,16 @@ namespace cor64.Mips.R4300I
         [Conditional("DEBUG")]
         private void DebugChanges(uint newValue, uint currentValue)
         {
-            const uint BEVFlag = (uint)StatusFlags.UseBootstrapVectors;
-
-            if ( (currentValue & BEVFlag) != (newValue & BEVFlag) )
+            if (TestChange(StatusFlags.UseBootstrapVectors, currentValue, newValue))
             {
-                Log.Debug("CPU code changed boot vector bit to: {0}", (newValue & BEVFlag) == BEVFlag);
+                Log.Debug("CPU code changed boot vector bit to: {0}", TestFlags(StatusFlags.UseBootstrapVectors));
             }
+        }
+
+        private bool TestChange(StatusFlags testFlags, uint oldVal, uint newVal) 
+        {
+            uint flags = (uint)testFlags;
+            return (oldVal & flags) != (newVal & flags);
         }
 
         public void SetOrClearFlags(bool value, StatusFlags flags)

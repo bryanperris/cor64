@@ -16,6 +16,7 @@ namespace cor64.Mips
         private ulong m_BaseAddress;
         private String m_Abi;
         private Mode m_Mode;
+        private ISymbolProvider m_SymbolProvider;
 
         public enum Mode
         {
@@ -48,6 +49,34 @@ namespace cor64.Mips
 
         public abstract String GetFullDisassembly(DecodedInstruction inst);
 
+        public String GetSymbol(ulong address)
+        {
+            /* We must clamp the virtual address to what ELF expects */
+            if ((address & 0xF0000000UL) == 0xA0000000UL)
+            {
+                address <<= 8;
+                address >>= 8;
+                address |= 0x80000000;
+            }
+
+            if (m_SymbolProvider != null)
+            {
+                var sym = m_SymbolProvider.GetSymbol(address);
+
+                if (sym != null)
+                {
+                    return sym;
+                }
+            }
+
+            return "";
+        }
+
+        public void AttachSymbolProvider(ISymbolProvider provider)
+        {
+            m_SymbolProvider = provider;
+        }
+
         private DecodedInstruction _Disassemble()
         {
             DecodedInstruction decoded;
@@ -60,7 +89,6 @@ namespace cor64.Mips
             BinaryInstruction inst = new BinaryInstruction(ReadNext32());
 
             decoded = new DecodedInstruction(m_BaseAddress, DecodeOpcode(inst), inst, false, m_BinaryStream.Position + 4 >= m_BinaryStream.Length);
-            m_BaseAddress += 4;
 
             return decoded;
         }
@@ -95,14 +123,14 @@ namespace cor64.Mips
             return (uint)((bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]);
         }
 
-        protected ulong ComputeJumpTarget(BinaryInstruction inst)
+        protected ulong ComputeJumpTarget(DecodedInstruction inst)
         {
-            return CoreUtils.ComputeTargetPC(false, false, m_BaseAddress, 0, inst.target);
+            return CoreUtils.ComputeTargetPC(false, false, inst.Address, 0, inst.Inst.target);
         }
 
-        protected ulong ComputeBranchTarget(BinaryInstruction inst)
+        protected ulong ComputeBranchTarget(DecodedInstruction inst)
         {
-            return CoreUtils.ComputeBranchPC(false, m_BaseAddress, CoreUtils.ComputeBranchTargetOffset(inst.imm));
+            return CoreUtils.ComputeBranchPC(false, inst.Address, CoreUtils.ComputeBranchTargetOffset(inst.Inst.imm));
         }
 
         protected static String DecodeCop1Format(BinaryInstruction inst)

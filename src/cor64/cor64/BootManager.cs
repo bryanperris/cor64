@@ -124,12 +124,23 @@ namespace cor64
             WR(08, 0x00000000000000C0);
             WR(10, 0x0000000000000040);
             WR(11, 0xFFFFFFFFA4000040);
-            WR(19, 0); /* 0: Cart, 1: DiskDrive */
-            //WR(20, 0x0000000000000001);
-            WR(20, (uint)cartridge.Serial.CountryID - 1);
-            WR(21, 0); /* 0: ColdReset, 1: NMI */
+
+            // osRomType: 0: Cart, 1: DiskDrive
+            WR(19, 0);
+
+            // osTvType
+            WR(20, (uint)region);
+
+            // osResetType: 0: ColdReset, 1: NMI
+            WR(21, 0);
+
+            // osCicId
             WR(22, (uint)cartridge.CICLockoutType.Seed());
+
+            // osVersion: 00 = 1.0, 15 = 2.5, etc
             WR(23, 0); /* S7: Unknown */
+
+
             WR(24, 0x0000000000000003);
             WR(29, 0xFFFFFFFFA4001FF0); // Stack pointer
             WR(31, 0xFFFFFFFFA4001550);

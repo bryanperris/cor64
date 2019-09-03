@@ -81,7 +81,7 @@ namespace cor64.Mips.R4300I
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public void WritebackCop0(int reg, ulong value)
             {
-                m_Core.State.Cp0.Write(reg, value);
+                m_Core.State.Cp0.RegWrite(reg, value);
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]

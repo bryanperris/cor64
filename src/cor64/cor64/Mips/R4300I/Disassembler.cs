@@ -53,9 +53,14 @@ namespace cor64.Mips.R4300I
                         {
                             operands += String.Format(
                                 " ----> 0x{0:X8}",
-                                opcode.Op.StartsWith("j") ? ComputeJumpTarget(bInst) : ComputeBranchTarget(bInst));
+                                opcode.Op.StartsWith("j") ? ComputeJumpTarget(inst) : ComputeBranchTarget(inst));
                         }
                     }
+
+                    /* Append debug symbol */
+                    operands += " ";
+                    operands += GetSymbol(inst.Address);
+                    operands += " ";
                 }
 
                 var dis = op + " " + operands;

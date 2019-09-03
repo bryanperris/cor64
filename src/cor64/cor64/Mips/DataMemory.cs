@@ -16,6 +16,7 @@ namespace cor64.Mips
         private byte[] m_DataBuffer;
         private GCHandle m_BufferHandle;
         private IntPtr m_BufferPtr;
+        public long LastAddress { get; private set; }
 
         public DataMemory(StreamEx stream)
         {
@@ -29,36 +30,54 @@ namespace cor64.Mips
 
         public void ReadData(long address, int size, bool aligned)
         {
-            /* 32-bit Constraint */
-            address = (uint)address;
+            // Clear buffer
+            Data64 = 0;
 
-            if (size > m_DataBuffer.Length)
+            try
             {
-                throw new ArgumentException();
+                /* 32-bit Constraint */
+                address = (uint)address;
+                LastAddress = address;
+
+                if (size > m_DataBuffer.Length)
+                {
+                    throw new ArgumentException();
+                }
+
+                m_DataStream.AlignmentMode = aligned;
+                m_DataStream.Position = address;
+                m_DataStream.Read(m_DataBuffer, 0, size);
+
+                //Console.WriteLine("Read {0:X16} from {1:X8}", Data64, address);
             }
-
-            m_DataStream.AlignmentMode = aligned;
-            m_DataStream.Position = address;
-            Array.Clear(m_DataBuffer, 0, m_DataBuffer.Length);
-            m_DataStream.Read(m_DataBuffer, 0, size);
-
-            //Console.WriteLine("Read {0:X16} from {1:X8}", Data64, address);
+            catch (Exception e)
+            {
+                throw new EmuException("ReadData: Hit an exception for " + address.ToString("X8"), e);
+            }
         }
 
         public void WriteData(long address, int size, bool aligned)
         {
-            address = (uint)address;
-
-            if (size > m_DataBuffer.Length)
+            try
             {
-                throw new ArgumentException();
+                address = (uint)address;
+                LastAddress = address;
+
+                if (size > m_DataBuffer.Length)
+                {
+                    throw new ArgumentException();
+                }
+
+                //Console.WriteLine("Write {0:X16} to {1:X8}", Data64, address);
+
+                m_DataStream.AlignmentMode = aligned;
+                m_DataStream.Position = address;
+                m_DataStream.Write(m_DataBuffer, 0, size);
             }
-
-            //Console.WriteLine("Write {0:X16} to {1:X8}", Data64, address);
-
-            m_DataStream.AlignmentMode = aligned;
-            m_DataStream.Position = address;
-            m_DataStream.Write(m_DataBuffer, 0, size);
+            catch (Exception e)
+            {
+                throw new EmuException("WriteData: Hit an exception for " + address.ToString("X8"), e);
+            }
         }
 
         public byte Data8

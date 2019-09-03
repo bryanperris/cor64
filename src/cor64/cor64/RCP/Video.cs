@@ -107,18 +107,56 @@ namespace cor64.RCP
         private N64MemoryController m_Memory;
         private VideoControlReg m_ControlRegStruct;
 
+        private const float GLIDE_COEFF = (float)40 / (float)90;
+
         public Video(N64MemoryController controller) : base(controller, 0x100000)
         {
-            AppendDevice(m_ControlReg, m_Origin, m_Width, m_Interrupt, m_CurrentLine, m_Timing,
-                         m_VSync, m_HSync, m_Leap, m_HStart, m_VStart, m_VBurst, m_XScale, m_YScale);
+            Map(
+                m_ControlReg,
+                m_Origin,
+                m_Width,
+                m_Interrupt,
+                m_CurrentLine,
+                m_Timing,
+                m_VSync,
+                m_HSync,
+                m_Leap,
+                m_HStart,
+                m_VStart,
+                m_VBurst,
+                m_XScale,
+                m_YScale);
 
-            m_Origin.MemWrite += FramebufferAddressHandler;
+            m_Origin.Write += FramebufferAddressHandler;
+            m_CurrentLine.Write += CurrentScanlineHandler;
+
+            m_Width.Write += () =>
+            {
+                Log.Debug("Framebuffer width set to " + m_Width.ReadPtr.AsType_32Swp().ToString("X8"));
+            };
+
+            m_XScale.Write += () => {
+                Log.Debug("Framebuffer xscale set to " + m_XScale.ReadPtr.AsType_32Swp().ToString("X8"));
+            };
+
+            m_HStart.Write += () => {
+                Log.Debug("Framebuffer hstart set to " + m_HStart.ReadPtr.AsType_32Swp().ToString("X8"));
+            };
+
+            m_YScale.Write += () => {
+                Log.Debug("Framebuffer yscale set to " + m_YScale.ReadPtr.AsType_32Swp().ToString("X8"));
+            };
+
+            m_Leap.Write += () => {
+                Log.Debug("Framebuffer leap set to " + m_Leap.ReadPtr.AsType_32Swp().ToString("X8"));
+            };
+
             m_Memory = controller;
 
             m_XScale.ReadPtr.AsType_32Swp(0x100U * (640U / 160U));
             m_YScale.ReadPtr.AsType_32Swp(0x100U * (480U / 60U));
             m_Width.ReadPtr.AsType_32Swp(640);
-            m_CurrentLine.MemWrite += CurrentScanlineHandler;
+
 
             m_ControlRegStruct = new VideoControlReg(m_ControlReg.ReadPtr);
         }
@@ -139,9 +177,76 @@ namespace cor64.RCP
 
         public int FramebufferOffset => (int)(m_Origin.ReadPtr.AsType_32Swp() << 8 >> 8);
 
-        public int Width => (int)m_Width.ReadPtr.AsType_32Swp();
+        private int ComputeHWidth()
+        {
+            var hstartReg = m_HStart.ReadPtr.AsType_32Swp();
+            var hstart = hstartReg >> 16;
+            var hend = hstartReg & 0xFFFF;
+            var scale = (float)(m_XScale.ReadPtr.AsType_32Swp() & 0xFFF) / 1024.0f;
 
-        public int Height => ((int)m_YScale.ReadPtr.AsType_32Swp() * 60) / 0x100;
+            if (hend == hstart)
+            {
+                hend = (uint)(m_Width.ReadPtr.AsType_32Swp() / scale);
+            }
+
+            var width = (int)(hend - hstart);
+
+
+
+            if (scale == 0.0f)
+            {
+                return 0;
+            }
+
+            width = (int)(width * scale);
+            width++;
+            width &= ~01;
+
+            return width;
+        }
+
+        private int ComputeVHeight()
+        {
+            var vstartReg = m_VStart.ReadPtr.AsType_32Swp();
+            var vstart = vstartReg >> 16;
+            var vend = vstartReg & 0xFFFF;
+            var scale = (float)(m_YScale.ReadPtr.AsType_32Swp() & 0xFFF) / 1024.0f;
+            var height = (int)((vend - vstart));
+
+            if (scale == 0.0f)
+            {
+                return 0;
+            }
+
+            height = (int)(height * scale);
+            height++;
+            height &= ~01;
+
+            return height;
+        }
+
+        public int Width
+        {
+            get {
+                var w = ComputeHWidth();
+
+                if (w < 1)
+                    return 320;
+                else
+                    return w;
+            }
+        }
+
+        public int Height {
+            get {
+                var h = ComputeVHeight();
+
+                if (h < 1)
+                    return 240;
+                else
+                    return h;
+            }
+}
 
         public VideoControlReg ControlReg => m_ControlRegStruct;
 
