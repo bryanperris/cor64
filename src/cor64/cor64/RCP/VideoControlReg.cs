@@ -22,7 +22,7 @@ namespace cor64.RCP
         public VideoControlReg(IntPtr ptr)
         {
             m_Ptr = ptr;
-            m_Fiddler.DefineField(1, 2);
+            m_Fiddler.DefineField(0, 2);
         }
 
         public int GetPixelMode()

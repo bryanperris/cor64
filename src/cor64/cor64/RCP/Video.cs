@@ -1,4 +1,5 @@
 ﻿using cor64.IO;
+using cor64.Mips;
 using NLog;
 using System;
 using System.Collections.Generic;
@@ -106,10 +107,9 @@ namespace cor64.RCP
         private MemMappedBuffer m_YScale = new MemMappedBuffer(4);
         private N64MemoryController m_Memory;
         private VideoControlReg m_ControlRegStruct;
+        private MipsInterface m_Interface;
 
-        private const float GLIDE_COEFF = (float)40 / (float)90;
-
-        public Video(N64MemoryController controller) : base(controller, 0x100000)
+        public Video(N64MemoryController controller, MipsInterface mipsInterface) : base(controller, 0x100000)
         {
             Map(
                 m_ControlReg,
@@ -127,6 +127,8 @@ namespace cor64.RCP
                 m_XScale,
                 m_YScale);
 
+            m_Interface = mipsInterface;
+
             m_Origin.Write += FramebufferAddressHandler;
             m_CurrentLine.Write += CurrentScanlineHandler;
 
@@ -143,12 +145,12 @@ namespace cor64.RCP
                 Log.Debug("Framebuffer hstart set to " + m_HStart.ReadPtr.AsType_32Swp().ToString("X8"));
             };
 
-            m_YScale.Write += () => {
-                Log.Debug("Framebuffer yscale set to " + m_YScale.ReadPtr.AsType_32Swp().ToString("X8"));
+            m_VStart.Write += () => {
+                Log.Debug("Framebuffer vstart set to " + m_VStart.ReadPtr.AsType_32Swp().ToString("X8"));
             };
 
-            m_Leap.Write += () => {
-                Log.Debug("Framebuffer leap set to " + m_Leap.ReadPtr.AsType_32Swp().ToString("X8"));
+            m_YScale.Write += () => {
+                Log.Debug("Framebuffer yscale set to " + m_YScale.ReadPtr.AsType_32Swp().ToString("X8"));
             };
 
             m_Memory = controller;
@@ -170,83 +172,55 @@ namespace cor64.RCP
 
         private void FramebufferAddressHandler()
         {
-            uint ramAddress = m_Origin.ReadPtr.AsType_32Swp();
-
-            Log.Debug("Framebuffer pointer set to {0:X8}", ramAddress);
+            Log.Debug("Framebuffer pointer set to {0:X8}", FramebufferOffset);
         }
 
         public int FramebufferOffset => (int)(m_Origin.ReadPtr.AsType_32Swp() << 8 >> 8);
 
+        public uint XScale => m_XScale.ReadPtr.AsType_32Swp();
+
+        public uint YScale => m_YScale.ReadPtr.AsType_32Swp();
+
+        public uint HStart => m_HStart.ReadPtr.AsType_32Swp();
+
+        public uint VStart => m_VStart.ReadPtr.AsType_32Swp();
+
+        public uint WidthReg => m_Width.ReadPtr.AsType_32Swp();
+
         private int ComputeHWidth()
         {
-            var hstartReg = m_HStart.ReadPtr.AsType_32Swp();
-            var hstart = hstartReg >> 16;
-            var hend = hstartReg & 0xFFFF;
-            var scale = (float)(m_XScale.ReadPtr.AsType_32Swp() & 0xFFF) / 1024.0f;
+            if (XScale == 0)
+                return 320;
 
-            if (hend == hstart)
+            var start = ((HStart & 0x03FF0000) >> 16) & 0x3FF;
+            var end = (HStart & 0x3FF);
+            var delta = end - start;
+            var scale = (XScale & 0xFFF);
+
+            if (delta == 0)
             {
-                hend = (uint)(m_Width.ReadPtr.AsType_32Swp() / scale);
+                delta = WidthReg;
             }
 
-            var width = (int)(hend - hstart);
-
-
-
-            if (scale == 0.0f)
-            {
-                return 0;
-            }
-
-            width = (int)(width * scale);
-            width++;
-            width &= ~01;
-
-            return width;
+            return (int)((delta * scale) / 0x400);
         }
 
         private int ComputeVHeight()
         {
-            var vstartReg = m_VStart.ReadPtr.AsType_32Swp();
-            var vstart = vstartReg >> 16;
-            var vend = vstartReg & 0xFFFF;
-            var scale = (float)(m_YScale.ReadPtr.AsType_32Swp() & 0xFFF) / 1024.0f;
-            var height = (int)((vend - vstart));
+            if (YScale == 0)
+                return 240;
+                
+            var start = ((VStart & 0x03FF0000) >> 16) & 0x3FF;
+            var end = (VStart & 0x3FF);
+            var delta = end - start;
+            var scale = (YScale & 0xFFF);
 
-            if (scale == 0.0f)
-            {
-                return 0;
-            }
-
-            height = (int)(height * scale);
-            height++;
-            height &= ~01;
-
-            return height;
+            return (int)((delta * scale) / 0x800);
         }
 
-        public int Width
-        {
-            get {
-                var w = ComputeHWidth();
+        public int Width => ComputeHWidth();
 
-                if (w < 1)
-                    return 320;
-                else
-                    return w;
-            }
-        }
-
-        public int Height {
-            get {
-                var h = ComputeVHeight();
-
-                if (h < 1)
-                    return 240;
-                else
-                    return h;
-            }
-}
+        public int Height => ComputeVHeight();
 
         public VideoControlReg ControlReg => m_ControlRegStruct;
 
@@ -307,6 +281,11 @@ namespace cor64.RCP
             }
 
             m_CurrentLine.ReadPtr.AsType_32Swp(m_Interrupt.ReadPtr.AsType_32Swp());
+        }
+
+        public void SetVideoInterrupt()
+        {
+            m_Interface.SetInterrupt(MipsInterface.INT_VI, true);
         }
     }
 }

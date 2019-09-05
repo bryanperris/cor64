@@ -19,6 +19,13 @@ namespace cor64.Mips.R4300I
         private DecodedInstruction? m_InjectedInst;
         private Func<bool> m_ExecuteCall;
         private DecodedInstruction m_FailedInstruction;
+        private bool m_TakenException;
+
+        private bool bSave_TakeBranch;
+        private bool bSave_BranchDelay;
+        private bool bSave_UnconditionalJump;
+        private ulong bSDave_TargetAddress;
+        private bool bSave_NullifyNext;
 
         /* Debug Stats */
         private int m_CountMemAccess;
@@ -59,13 +66,54 @@ namespace cor64.Mips.R4300I
 
         public override string Description => "Interpreter";
 
+        public void CheckForInterrupts()
+        {
+            if (m_TakenException)
+                return;
+
+            if (State.Cp0.Status.ErrorLevel)
+            {
+                m_Pc = Cop0.ExceptionHandlerAddress;
+                m_TakenException = true;
+                //Log.Debug("Error handler set pc to " + m_Pc.ToString("X8"));
+            }
+
+            if (State.Cp0.Status.ExceptionLevel && !m_TakenException)
+            {
+                m_Pc = Cop0.ExceptionHandlerAddress;
+                m_TakenException = true;
+                //Log.Debug("Exception handler set pc to " + m_Pc.ToString("X8"));
+            }
+
+            //SetInstructionDebugMode(DebugInstMode.Full);
+
+            /* Save the branch unit context */
+            if (m_TakenException)
+            {
+                bSave_TakeBranch = TakeBranch;
+                bSave_BranchDelay = BranchDelay;
+                bSave_UnconditionalJump = UnconditionalJump;
+                bSDave_TargetAddress = TargetAddress;
+                bSave_NullifyNext = NullifyNext;
+
+                TakeBranch = false;
+                BranchDelay = false;
+                UnconditionalJump = false;
+                TargetAddress = 0;
+                NullifyNext = false;
+            }
+        }
+
         public override void Step()
         {
             /* Step clock */
             CoreClock.NextTick();
 
             /* Step coprocessor 0 */
-            Cop0.ProcessorTick();
+            Cop0.ProcessorTick(m_Pc);
+
+            /* Check for exceptions */
+            CheckForInterrupts();
 
             /* Delay Slot Logic */
             if (WillJump)
@@ -126,7 +174,7 @@ namespace cor64.Mips.R4300I
 
                 if (call == null)
                 {
-                    throw new NotSupportedException(String.Format("Opcode {0} not supported", decoded.Op));
+                    throw new NotSupportedException(String.Format("Opcode {0} not supported", decoded.Op.Op));
                 }
                 else
                 {
@@ -178,7 +226,7 @@ namespace cor64.Mips.R4300I
 
                 if (call == null)
                 {
-                    throw new NotSupportedException(String.Format("Opcode {0} not supported", decoded.Op));
+                    throw new NotSupportedException(String.Format("Opcode {0} not supported", decoded.Op.Op));
                 }
                 else
                 {
@@ -213,7 +261,7 @@ namespace cor64.Mips.R4300I
             if (core_InstDebugMode != DebugInstMode.None)
             {
                 if (core_InstDebugMode == DebugInstMode.Full || (core_InstDebugMode == DebugInstMode.ProgramOnly && !InBootMode))
-                    Console.WriteLine("{0:X8} {1}  <{2}>", m_Pc, Disassembler.GetFullDisassembly(instruction), InBootMode ? "BOOT" : "PROG");
+                    Console.WriteLine("{0:X8} |{2}| {1}", m_Pc, Disassembler.GetFullDisassembly(instruction), InBootMode ? "BOOT" : "PROG");
             }
         }
 
@@ -898,6 +946,7 @@ namespace cor64.Mips.R4300I
         protected override void TransferReg(DecodedInstruction inst)
         {
             ulong value = 0;
+            int xferTargetRegSelect = inst.Destination;
 
             /* Source value to copy */
             switch (inst.Op.XferSource)
@@ -933,6 +982,8 @@ namespace cor64.Mips.R4300I
                             value = (ulong)(int)(uint)value;
                         }
 
+                        xferTargetRegSelect = inst.Target;
+
                         break;
                     }
                 case RegBoundType.Cp1:
@@ -950,6 +1001,8 @@ namespace cor64.Mips.R4300I
                         {
                             value = (ulong)(int)(uint)value;
                         }
+
+                        xferTargetRegSelect = inst.Target;
 
                         break;
                     }
@@ -970,6 +1023,8 @@ namespace cor64.Mips.R4300I
                             value = (ulong)(int)(uint)value;
                         }
 
+                        xferTargetRegSelect = inst.Target;
+
                         break;
                     }
             }
@@ -979,7 +1034,7 @@ namespace cor64.Mips.R4300I
             {
                 case RegBoundType.Gpr:
                     {
-                        Writeback64(inst.Destination, IsOperation64 ? value : (uint)value);
+                        Writeback64(xferTargetRegSelect, IsOperation64 ? value : (uint)value);
                         break;
                     }
 
@@ -1784,6 +1839,33 @@ namespace cor64.Mips.R4300I
             {
                 SetExceptionState(FpuExceptionFlags.Unimplemented);
             }
+        }
+
+        protected override void ExceptionReturn(DecodedInstruction inst)
+        {
+            if (State.Cp0.Status.ErrorLevel)
+            {
+                // when servicing an error trap
+                m_Pc = State.Cp0.RegRead(CTS.CP0_REG_ERROR_EPC);
+                State.Cp0.Status.ErrorLevel = false;
+            }
+            else
+            {
+                m_Pc = State.Cp0.RegRead(CTS.CP0_REG_EPC);
+                State.Cp0.Status.ExceptionLevel = false;
+            }
+
+            m_TakenException = false;
+
+            TakeBranch = bSave_TakeBranch;
+            BranchDelay = bSave_BranchDelay;
+            UnconditionalJump = bSave_UnconditionalJump;
+            TargetAddress = bSDave_TargetAddress;
+            NullifyNext = NullifyNext;
+
+#if DEBUG_FULL
+            Log.Debug("Interrupt service finished");
+#endif
         }
 
         public override IDictionary<string, string> SnapSave()

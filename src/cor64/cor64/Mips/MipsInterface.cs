@@ -1,9 +1,5 @@
 ﻿using cor64.IO;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using NLog;
 
 /* The Mips Interface (MI)
  * ---------------------------
@@ -51,14 +47,37 @@ namespace cor64.Mips
 {
     public class MipsInterface : PerpherialDevice
     {
+        private static readonly Logger Log = LogManager.GetCurrentClassLogger();
         private MemMappedBuffer m_Mode = new MemMappedBuffer(4, MemMappedBuffer.MemModel.DUAL_READ_WRITE);
         private MemMappedBuffer m_Version = new MemMappedBuffer(4, MemMappedBuffer.MemModel.SINGLE_READONLY);
         private MemMappedBuffer m_Interrupt = new MemMappedBuffer(4, MemMappedBuffer.MemModel.SINGLE_READONLY);
         private MemMappedBuffer m_Mask = new MemMappedBuffer(4, MemMappedBuffer.MemModel.DUAL_READ_WRITE);
+        private BitFiddler m_IntFiddler = new BitFiddler();
+        private BitFiddler m_MaskFiddler = new BitFiddler();
+
+        public const int INT_SP = 0;
+        public const int INT_SI = 1;
+        public const int INT_AI = 2;
+        public const int INT_VI = 3;
+        public const int INT_PI = 4;
+        public const int INT_DP = 5;
+
+        public const int MASK_CLEAR = 1;
+        public const int MASK_SET = 2;
 
         public MipsInterface(N64MemoryController controller) : base(controller, 0x100000)
         {
             Map(m_Mode, m_Version, m_Interrupt, m_Mask);
+
+            for (int i = 0; i < INT_DP + 1; i++)
+            {
+                m_IntFiddler.DefineField(i, 1);
+                m_MaskFiddler.DefineField(i * 2, 2);
+            }
+
+            m_Mask.Write += () => {
+                ProcessMaskClearSet();
+            };
         }
 
         public void SetVersion(uint value)
@@ -66,20 +85,123 @@ namespace cor64.Mips
             m_Version.ReadPtr.AsType_32Swp(value);
         }
 
-        public bool Int0
+        private bool ReadIntBool(int index)
         {
-            get;
-            set;
+            uint val = m_Interrupt.ReadPtr.AsType_32Swp();
+            m_IntFiddler.X(index, ref val);
+            return !(val == 0);
         }
 
-        public bool Int1 { get; set; }
+        private bool ReadMaskBool(int index)
+        {
+            uint val = m_Mask.ReadPtr.AsType_32Swp();
+            m_IntFiddler.X(index, ref val);
+            return !(val == 0);
+        }
 
-        public bool Int2 { get; set; }
+        public void ProcessMaskClearSet()
+        {
+            uint value = m_Mask.WritePtr.AsType_32Swp();
 
-        public bool Int3 { get; set; }
+#if DEBUG_FULL
+            Log.Debug("MI Interrupt Mask was modified: " + value.ToString("X8"));
+#endif
 
-        public bool Int4 { get; set; }
+            uint clearset_sp = m_MaskFiddler.X(INT_SP, ref value);
+            uint clearset_si = m_MaskFiddler.X(INT_SI, ref value);
+            uint clearset_ai = m_MaskFiddler.X(INT_AI, ref value);
+            uint clearset_vi = m_MaskFiddler.X(INT_VI, ref value);
+            uint clearset_pi = m_MaskFiddler.X(INT_PI, ref value);
+            uint clearset_dp = m_MaskFiddler.X(INT_DP, ref value);
 
-        public bool Int5 { get; set; }
+            if (clearset_sp != 0)
+            {
+                SetMask(INT_SP, clearset_sp == MASK_SET);
+            }
+
+            if (clearset_si != 0)
+            {
+                SetMask(INT_SI, clearset_si == MASK_SET);
+            }
+
+            if (clearset_ai != 0)
+            {
+                SetMask(INT_AI, clearset_ai == MASK_SET);
+            }
+
+            if (clearset_vi != 0)
+            {
+                SetMask(INT_VI, clearset_vi == MASK_SET);
+            }
+
+            if (clearset_pi != 0)
+            {
+                SetMask(INT_PI, clearset_pi == MASK_SET);
+            }
+
+            if (clearset_dp != 0)
+            {
+                SetMask(INT_DP, clearset_dp == MASK_SET);
+            }
+        }
+
+        public uint Interrupt => m_Interrupt.ReadPtr.AsType_32Swp();
+
+        public uint Mask => m_Interrupt.ReadPtr.AsType_32Swp();
+
+        public bool IntSP => ReadIntBool(INT_SP);
+
+        public bool IntSI => ReadIntBool(INT_SI);
+
+        public bool IntAI => ReadIntBool(INT_AI);
+
+        public bool IntVI => ReadIntBool(INT_VI);
+
+        public bool IntPI => ReadIntBool(INT_PI);
+
+        public bool IntDP => ReadIntBool(INT_DP);
+
+        public bool IntMaskSP => ReadMaskBool(INT_SP);
+
+        public bool IntMaskSI => ReadMaskBool(INT_SI);
+
+        public bool IntMaskAI => ReadMaskBool(INT_AI);
+
+        public bool IntMaskVI => ReadMaskBool(INT_VI);
+
+        public bool IntMaskPI => ReadMaskBool(INT_PI);
+
+        public bool IntMaskDP => ReadMaskBool(INT_DP);
+
+        public void SetInterrupt(int index, bool value)
+        {
+            uint val = value ? 1U : 0;
+            uint reg = m_Interrupt.ReadPtr.AsType_32Swp();
+            m_IntFiddler.J(index, ref reg, val);
+            m_Interrupt.ReadPtr.AsType_32Swp(reg);
+        }
+
+        private void SetMask(int index, bool value)
+        {
+#if DEBUG_FULL
+            string v = value ? "Enabled" : "Disabled";
+
+            switch (index)
+            {
+                default: break;
+                case INT_SP: Log.Debug("SP Interrupt " + v); break;
+                case INT_SI: Log.Debug("SI Interrupt " + v); break;
+                case INT_AI: Log.Debug("AI Interrupt " + v); break;
+                case INT_VI: Log.Debug("VI Interrupt " + v); break;
+                case INT_PI: Log.Debug("PI Interrupt " + v); break;
+                case INT_DP: Log.Debug("DP Interrupt " + v); break;
+            }
+#endif
+
+            uint val = value ? 1U : 0;
+            uint reg = m_Mask.ReadPtr.AsType_32Swp();
+            m_IntFiddler.J(index, ref reg, val);
+            m_Mask.ReadPtr.AsType_32Swp(reg);
+        }
     }
 }

@@ -36,7 +36,7 @@ namespace cor64.IO
             m_MemModel.DPCmdRegs = new DummyMemory(DUMMY_SECTION_SIZE, "Display Command Interface"); ;
             m_MemModel.DpSpanRegs = new DummyMemory(DUMMY_SECTION_SIZE, "Display Span Interface"); ;
             m_MemModel.MIRegs = m_CPUInterface;
-            m_MemModel.VIRegs = new Video(this);
+            m_MemModel.VIRegs = new Video(this, m_CPUInterface);
             m_MemModel.AIRegs = new DummyMemory(DUMMY_SECTION_SIZE, "Audio Interface");
             m_MemModel.PIRegs = new PIMemory(this);
             m_MemModel.RIRegs = new RdramInterface(this);

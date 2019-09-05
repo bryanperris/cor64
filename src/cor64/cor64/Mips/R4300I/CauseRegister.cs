@@ -22,25 +22,10 @@ namespace cor64.Mips.R4300I
 
         public CauseRegister()
         {
-            m_Fiddler.DefineField(06, 5);
-            m_Fiddler.DefineField(15, 8);
-            m_Fiddler.DefineField(29, 2);
+            m_Fiddler.DefineField(02, 5);
+            m_Fiddler.DefineField(08, 8);
+            m_Fiddler.DefineField(28, 2);
             m_Fiddler.DefineField(31, 1);
-        }
-
-        [Flags]
-        public enum Interrupt : byte
-        {
-            None = 0b0,
-            Int0 = 0b1,
-            Int1 = 0b10,
-            Int2 = 0b100,
-            Int3 = 0b1000,
-            Int4 = 0b10000,
-            Int5 = 0b100000,
-            Int6 = 0b1000000,
-            Int7 = 0b10000000,
-            All  = 0b11111111
         }
 
         public uint Value
@@ -102,21 +87,21 @@ namespace cor64.Mips.R4300I
             m_ExceptionThrown = false;
         }
 
-        public void SetInterrupt(Interrupt interrupt)
+        public void SetInterruptPending(int interrupt)
         {
             uint val = m_Fiddler.X(F_IP, ref m_Value);
             val |= (byte)interrupt;
             m_Fiddler.J(F_IP, ref m_Value, val);
         }
 
-        public void ClearInterrupt(Interrupt interrupt)
+        public void ClearInterrupt(int interrupt)
         {
             uint val = m_Fiddler.X(F_IP, ref m_Value);
             val &= ~(uint)interrupt;
             m_Fiddler.J(F_IP, ref m_Value, val);
         }
 
-        public bool TestInterrupt(Interrupt interrupt)
+        public bool ReadInterruptPending(int interrupt)
         {
             uint val = m_Fiddler.X(F_IP, ref m_Value);
             return (val & (uint)interrupt) == (uint)interrupt;

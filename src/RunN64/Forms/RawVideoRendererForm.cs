@@ -24,6 +24,7 @@ namespace RunN64.Forms
         private SKBitmap m_SourceBitmap;
         private SKBitmap m_FramebufferBitmap;
         private Cartridge m_Cart;
+        private int m_FrameCount;
 
         private const int RES_X = 640;
         private const int RES_Y = 480;
@@ -161,6 +162,19 @@ namespace RunN64.Forms
 
             if (m_RenderControl != null)
                 m_RenderControl.Invalidate();
+
+            if (m_FrameCount >= 60)
+            {
+                TriggerVI();
+            }
+            else
+                m_FrameCount++;
+        }
+
+        public void TriggerVI()
+        {
+            m_VideoInterface.SetVideoInterrupt();
+            m_FrameCount = 0;
         }
 
         void PaintSurface(object sender, SKPaintSurfaceEventArgs e)

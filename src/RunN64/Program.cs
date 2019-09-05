@@ -28,6 +28,13 @@ namespace RunN64
 
         static void InitLogging()
         {
+            var logLevel = LogLevel.Info;
+
+//#if DEBUG
+//            logLevel = LogLevel.Trace;
+//#endif
+
+
             LoggingConfiguration configuration = new LoggingConfiguration();
 
             String layout = @"${message}";
@@ -46,10 +53,10 @@ namespace RunN64
             };
 
             configuration.AddTarget("console", consoleTarget);
-            configuration.LoggingRules.Add(new LoggingRule("*", LogLevel.Trace, consoleTarget));
+            configuration.LoggingRules.Add(new LoggingRule("*", LogLevel.Debug, consoleTarget));
 
             configuration.AddTarget("file", fileTarget);
-            configuration.LoggingRules.Add(new LoggingRule("*", LogLevel.Trace, fileTarget));
+            configuration.LoggingRules.Add(new LoggingRule("*", LogLevel.Info, fileTarget));
 
             LogManager.Configuration = configuration;
             LogManager.Flush();
@@ -153,6 +160,7 @@ namespace RunN64
         static void Main(string[] args)
         {
             var config = JsonConvert.DeserializeObject<Config>(File.ReadAllText("config.json"));
+            RawVideoRendererForm rawVidForm = null;
 
             InitLogging();
 
@@ -201,7 +209,7 @@ namespace RunN64
                 /* Graphics/UI thread */
                 Thread gfxThread = new Thread(() =>
                 {
-                    RawVideoRendererForm rawVidForm = new RawVideoRendererForm(m_System.DeviceMemory.Interface_VI, cart);
+                    rawVidForm = new RawVideoRendererForm(m_System.DeviceMemory.Interface_VI, cart);
                     Application.Run(rawVidForm);
                 });
 
@@ -251,6 +259,12 @@ namespace RunN64
                         if (key.Key == ConsoleKey.S)
                         {
                             m_System.Dbg.Step();
+                        }
+
+                        if (key.Key == ConsoleKey.V)
+                        {
+                            Log.Info("Forcing video interrupt to fire");
+                            rawVidForm?.TriggerVI();
                         }
                     }
 

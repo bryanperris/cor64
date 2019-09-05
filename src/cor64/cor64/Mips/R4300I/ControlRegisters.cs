@@ -56,7 +56,9 @@ namespace cor64.Mips.R4300I
 
         public ulong RegRead(int i)
         {
+#if DEBUG_FULL
             Log.Debug("Cop0 Reg Read: {0}", ABI.GetLabel("", ABI.RegType.Cop0, i));
+#endif
 
             return m_ReadMap[i](i);
         }
@@ -65,7 +67,9 @@ namespace cor64.Mips.R4300I
         {
             m_WriteMap[i](i, value);
 
+#if DEBUG_FULL
             Log.Debug("Cop0 Reg Write: {0} {1:X16}", ABI.GetLabel("", ABI.RegType.Cop0, i), value);
+#endif
         }
     }
 }

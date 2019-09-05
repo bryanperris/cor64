@@ -18,6 +18,8 @@ namespace cor64.Mips.R4300I
         const int F_IM = 1;
         const int F_DS = 2;
         const int F_CU = 3;
+        const int F_ERL = 4;
+        const int F_EXL = 5;
 
         [Flags]
         public enum StatusFlags : uint
@@ -69,10 +71,12 @@ namespace cor64.Mips.R4300I
 
         public StatusRegister()
         {
-            m_Fiddler.DefineField(04, 2);
-            m_Fiddler.DefineField(15, 8);
-            m_Fiddler.DefineField(24, 9);
-            m_Fiddler.DefineField(31, 4);
+            m_Fiddler.DefineField(3, 2);
+            m_Fiddler.DefineField(8, 8);
+            m_Fiddler.DefineField(16, 9);
+            m_Fiddler.DefineField(28, 4);
+            m_Fiddler.DefineField(1, 1); // EXL
+            m_Fiddler.DefineField(2, 1); // ERL
         }
 
         public void Initialize()
@@ -151,7 +155,7 @@ namespace cor64.Mips.R4300I
 
         public bool IsOperation64 => ModeBits == 0 || TestFlags(StatusFlags.User64Mode) || TestFlags(StatusFlags.Supervisor64Mode);
 
-        public bool InterruptsEnabled => TestFlags(StatusFlags.InterruptsEnabled); 
+        public bool InterruptsEnabled => TestFlags(StatusFlags.InterruptsEnabled) && !ExceptionLevel && !ErrorLevel; 
 
         public void DebugSet_Address64(bool mode)
         {
@@ -191,6 +195,18 @@ namespace cor64.Mips.R4300I
         {
             get => (int)m_Fiddler.X(F_KSU, ref m_Value);
             set => m_Fiddler.J(F_KSU, ref m_Value, (uint)value);
+        }
+
+        public bool ExceptionLevel
+        {
+            get => !(m_Fiddler.X(F_EXL, ref m_Value) == 0);
+            set => m_Fiddler.J(F_EXL, ref m_Value, value ? 1U : 0);
+        }
+
+        public bool ErrorLevel
+        {
+            get => !(m_Fiddler.X(F_ERL, ref m_Value) == 0);
+            set => m_Fiddler.J(F_ERL, ref m_Value, value ? 1U : 0);
         }
 
         public void SetInterruptMask(InterruptMask interruptMask)

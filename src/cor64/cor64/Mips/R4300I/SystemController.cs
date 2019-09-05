@@ -25,8 +25,6 @@ namespace cor64.Mips.R4300I
         private bool m_IP7Multiplexer = false;
         private bool m_Timer;
 
-        public event Action<ulong> ExceptionJump;
-
         /* Callbacks */
         private Func<ulong> m_CallbackReadPC;
         private Func<bool> m_CallbackDelaySlot;
@@ -34,6 +32,8 @@ namespace cor64.Mips.R4300I
         protected CauseRegister CR => m_State.Cp0.Cause;
         protected StatusRegister SR => m_State.Cp0.Status;
         protected ControlRegisters REGS => m_State.Cp0;
+
+        public ulong ExceptionHandlerAddress { get; private set; }
 
         public SystemController(ExecutionState coreState)
         {
@@ -80,13 +80,13 @@ namespace cor64.Mips.R4300I
         /// <summary>
         /// Called to simulate a processor tick for coprocessor 0
         /// </summary>
-        public void ProcessorTick()
+        public void ProcessorTick(ulong pc)
         {
             /* Increment count register */
             IncrementCount();
 
             /* Process all system events */
-            CheckInterrupts();
+            CheckInterrupts(pc);
 
             /* Reset timer */
             if (m_Timer)
@@ -131,36 +131,24 @@ namespace cor64.Mips.R4300I
             return false;
         }
 
-        private bool ReadInterrupt(int i)
-        {
-
-            if (i >= 0 && i < 8)
-            {
-                return CR.TestInterrupt((CauseRegister.Interrupt)i);
-            }
-
-            return false;
-        }
-
-        private void CheckExceptions()
-        {
-        }
-
         /*********************************************
          * Master function to check all processor events 
          * **********************************************
          */
-        private void CheckInterrupts()
+        private void CheckInterrupts(ulong pc)
         {
+            if (!SR.InterruptsEnabled)
+                return;
+
             /* TODO: Check watch stuff unless EXL = 1 ? */
 
-            /* TODO: Process TLB exception related stuff */
+                /* TODO: Process TLB exception related stuff */
 
-            /* TODO: The code related to setting the exception code needs to handle priority */
+                /* TODO: The code related to setting the exception code needs to handle priority */
 
-            /* TODO: Coprocessor unuable exceptions */
+                /* TODO: Coprocessor unuable exceptions */
 
-            /* For exceptions that are not Reset or Cache related */
+                /* For exceptions that are not Reset or Cache related */
 
             ulong target = 0;
             ulong cacheAddress = 0;
@@ -222,29 +210,51 @@ namespace cor64.Mips.R4300I
             }
             else
             {
+                /* Check for interrupts (software and hardware) + timer event */
+
                 target = othersAddress + 0x180;
                 serviceHandler = false;
 
-                if (SR.InterruptsEnabled)
+
+                for (int i = 0; i < 8; i++)
                 {
-                    for (int i = 0; i < 8; i++)
+                    if (ReadInterruptMask(i))
                     {
-                        /* Software interrupts */
-                        if (i < 3)
+                        /* Software interrupts*/
+                        if (i <= 1)
                         {
-                            if (CheckSWInterrupt(i))
+                            if (CR.ReadInterruptPending(i))
                             {
+                                CR.ClearInterrupt(i);
                                 serviceHandler = true;
+                                //Log.Debug("!Interrupt - Software");
                                 break;
                             }
+
+                            continue;
+                        }
+
+                        if (i == 5)
+                        {
+                            /* The timer interrupt */
+                            // TODO: make this work
+                            continue;
+                        }
+
+                        /* All others are hardware interrupts (Mips interface) */
+                        int miSelect = (i - 2);
+
+                        if (CheckMiInterrupt(miSelect))
+                        {
+                            CR.SetInterruptPending(i);
+                            //ClearMiInterrupt(miSelect);
+                            //Log.Debug("!Interrupt - Hardware");
+                            serviceHandler = true;
+                            break;
                         }
                         else
                         {
-                            if (CheckHWInterrupt(i))
-                            {
-                                serviceHandler = true;
-                                break;
-                            }
+                            CR.ClearInterrupt(i);
                         }
                     }
                 }
@@ -252,65 +262,63 @@ namespace cor64.Mips.R4300I
 
             if (serviceHandler)
             {
-                if (m_Debug)
-                {
+#if DEBUG_FULL
                     Log.Debug("Servicing interrupt: {0:X8}", target);
-                }
+#endif
 
                 /* Disable all other interrupts */
                 SR.SetInterruptsEnabled(false);
 
                 /* Set where PC is going to be next */
-                ExceptionJump(target);
+                REGS.RegWrite(CTS.CP0_REG_EPC, pc);
+                REGS.RegWrite(CTS.CP0_REG_ERROR_EPC, 0);
+                ExceptionHandlerAddress = (uint)target;
+                SR.ExceptionLevel = true;
             }
         }
 
-        private void FireInterrupt(int i)
-        {
-
-        }
-
-        private void ClearInterrupt(int i)
-        {
-
-        }
-
-        private bool ReadInterruptPin(int i)
+        private bool ReadMiInterrupt(int i)
         {
             switch (i)
             {
-                case 0: return m_Interface.Int0;
-                case 1: return m_Interface.Int1;
-                case 2: return m_Interface.Int2;
-                case 3: return m_Interface.Int3;
-                case 4: return m_Interface.Int4;
-                case 5: return m_Interface.Int5;
+                case 0: return m_Interface.IntSP && m_Interface.IntMaskSP;
+                case 1: return m_Interface.IntSI && m_Interface.IntMaskSI;
+                case 2: return m_Interface.IntAI && m_Interface.IntMaskAI;
+                case 3: return m_Interface.IntVI && m_Interface.IntMaskVI;
+                case 4: return m_Interface.IntPI && m_Interface.IntMaskPI;
+                case 5: return m_Interface.IntDP && m_Interface.IntMaskDP;
                 default: return false;
             }
         }
 
-
-        private bool CheckSWInterrupt(int i)
+        private bool CheckMiInterrupt(int i)
         {
-            return !ReadInterruptMask(i) && ReadInterrupt(i);
+            if ((m_Interface.Interrupt & m_Interface.Mask) == 0)
+            {
+                return false;
+            }
+
+            return ReadMiInterrupt(i);
+
+            //if (i != 5)
+            //{
+            //    return ReadMiInterrupt(i);
+            //}
+            //else
+            //{
+            //    if (!m_IP7Multiplexer) {
+            //        return m_Clock.SClock && ReadMiInterrupt(i);
+            //    }
+            //    else
+            //    {
+            //        return m_Timer;
+            //    }
+            //}
         }
 
-        private bool CheckHWInterrupt(int i)
+        private void ClearMiInterrupt(int i)
         {
-            if (i != 5)
-            {
-                return !ReadInterruptMask(i) && ( m_InterruptReg[i] || ReadInterruptPin(i));
-            }
-            else
-            {
-                if (!m_IP7Multiplexer) {
-                    return !ReadInterruptMask(i) && ((m_Clock.SClock && ReadInterruptPin(i)) || m_InterruptReg[i]);
-                }
-                else
-                {
-                    return m_Timer;
-                }
-            }
+            m_Interface.SetInterrupt(i, false);
         }
 
         public bool IsKernelMode => SR.ModeBits == 0;

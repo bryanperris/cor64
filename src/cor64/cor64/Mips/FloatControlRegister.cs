@@ -17,12 +17,12 @@ namespace cor64.Mips
 
         public FloatControlRegister()
         {
-            m_Fiddler.DefineField(01, 2);
-            m_Fiddler.DefineField(06, 5);
-            m_Fiddler.DefineField(11, 5);
-            m_Fiddler.DefineField(17, 6);
+            m_Fiddler.DefineField(00, 2);
+            m_Fiddler.DefineField(02, 5);
+            m_Fiddler.DefineField(07, 5);
+            m_Fiddler.DefineField(12, 6);
             m_Fiddler.DefineField(23, 1);
-            m_Fiddler.DefineField(25, 1);
+            m_Fiddler.DefineField(24, 1);
         }
 
         public uint Value

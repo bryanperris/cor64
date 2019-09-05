@@ -56,7 +56,6 @@ namespace cor64.Mips.R4300I
             m_CoreClock = new Clock(10, 2);
             m_Coprocessor0 = new SystemController(State);
             m_Coprocessor0.Attach_Callbacks(() => m_Pc, () => BranchDelay);
-            m_Coprocessor0.ExceptionJump += ExceptionJump;
 
             Map(Add32, ADD, ADDU, ADDI, ADDIU);
             Map(BitwiseLogic, AND, ANDI, OR, ORI, NOR, XOR, XORI);
@@ -77,6 +76,7 @@ namespace cor64.Mips.R4300I
             Map(Load, LUI, LB, LBU, LH, LHU, LW, LWU, LWL, LWR, LD, LDL, LDR, LL, LLD);
             Map(Cache, CACHE);
             Map(Sync, SYNC);
+            Map(ExceptionReturn, ERET);
 
             /* FPU Hooks */
             Map(FloatLoad, LDC1, LWC1);
@@ -125,6 +125,7 @@ namespace cor64.Mips.R4300I
             /* Leave the whole branch handler */
             TakeBranch = false;
             BranchDelay = false;
+            NullifyNext = false;
             TargetAddress = 0;
             UnconditionalJump = false;
         }
@@ -237,6 +238,8 @@ namespace cor64.Mips.R4300I
         protected abstract void Convert(DecodedInstruction inst);
 
         protected abstract void Condition(DecodedInstruction inst);
+
+        protected abstract void ExceptionReturn(DecodedInstruction inst);
 
         #endregion
 

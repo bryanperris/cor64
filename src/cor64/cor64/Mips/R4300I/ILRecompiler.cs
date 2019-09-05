@@ -141,7 +141,7 @@ namespace cor64.Mips.R4300I
             CoreClock.NextTick();
 
             /* Step coprocessor 0 */
-            Cop0.ProcessorTick();
+            Cop0.ProcessorTick(m_Pc);
 
 
             /* Decode and execute emitter */
@@ -167,7 +167,7 @@ namespace cor64.Mips.R4300I
 
                     if (call == null)
                     {
-                        throw new NotSupportedException(String.Format("Opcode {0} not supported", decoded.Op));
+                        throw new NotSupportedException(String.Format("Opcode {0} not supported", decoded.Op.Op));
                     }
                     else
                     {
@@ -1118,6 +1118,11 @@ namespace cor64.Mips.R4300I
         }
 
         protected override void Condition(DecodedInstruction inst)
+        {
+            EmitFallbackOp(inst);
+        }
+
+        protected override void ExceptionReturn(DecodedInstruction inst)
         {
             EmitFallbackOp(inst);
         }
