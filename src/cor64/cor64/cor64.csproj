@@ -219,7 +219,6 @@
     <Compile Include="Mips\ExecutionState.cs" />
     <Compile Include="PIF\PIFMemory.cs" />
     <Compile Include="CommonExtensions.cs">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Compile>
     <Compile Include="RCP\VideoControlReg.cs" />
     <Compile Include="Mips\R4300I\InstructionHelper.cs" />

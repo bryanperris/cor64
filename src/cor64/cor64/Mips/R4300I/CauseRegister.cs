@@ -14,11 +14,21 @@ namespace cor64.Mips.R4300I
         private bool m_ExceptionThrown;
         private ExceptionType m_Exception;
         private BitFiddler m_Fiddler = new BitFiddler();
+        private BitFiddler m_IntFiddler = new BitFiddler();
 
         const int F_EXCEPTCODE = 0;
         const int F_IP = 1;
         const int F_CE = 2;
         const int F_BD = 3;
+
+        const int INT_0 = 0;
+        const int INT_1 = 1;
+        const int INT_2 = 2;
+        const int INT_3 = 3;
+        const int INT_4 = 4;
+        const int INT_5 = 5;
+        const int INT_6 = 6;
+        const int INT_7 = 7;
 
         public CauseRegister()
         {
@@ -26,6 +36,11 @@ namespace cor64.Mips.R4300I
             m_Fiddler.DefineField(08, 8);
             m_Fiddler.DefineField(28, 2);
             m_Fiddler.DefineField(31, 1);
+
+            for (int i = 0; i < 8; i++)
+            {
+                m_IntFiddler.DefineField(i, 1);
+            }
         }
 
         public uint Value
@@ -90,21 +105,21 @@ namespace cor64.Mips.R4300I
         public void SetInterruptPending(int interrupt)
         {
             uint val = m_Fiddler.X(F_IP, ref m_Value);
-            val |= (byte)interrupt;
+            m_IntFiddler.J(interrupt, ref val, 1);
             m_Fiddler.J(F_IP, ref m_Value, val);
         }
 
         public void ClearInterrupt(int interrupt)
         {
             uint val = m_Fiddler.X(F_IP, ref m_Value);
-            val &= ~(uint)interrupt;
+            m_IntFiddler.J(interrupt, ref val, 0);
             m_Fiddler.J(F_IP, ref m_Value, val);
         }
 
         public bool ReadInterruptPending(int interrupt)
         {
             uint val = m_Fiddler.X(F_IP, ref m_Value);
-            return (val & (uint)interrupt) == (uint)interrupt;
+            return m_IntFiddler.X(interrupt, ref val) != 0;
         }
     }
 }

@@ -13,6 +13,7 @@ namespace cor64.Mips.R4300I
         private readonly static Logger Log = LogManager.GetCurrentClassLogger();
         private uint m_Value;
         private BitFiddler m_Fiddler = new BitFiddler();
+        private BitFiddler m_IntFiddler = new BitFiddler();
 
         const int F_KSU = 0;
         const int F_IM = 1;
@@ -20,6 +21,16 @@ namespace cor64.Mips.R4300I
         const int F_CU = 3;
         const int F_ERL = 4;
         const int F_EXL = 5;
+
+        const int INT_0 = 0;
+        const int INT_1 = 1;
+        const int INT_2 = 2;
+        const int INT_3 = 3;
+        const int INT_4 = 4;
+        const int INT_5 = 5;
+        const int INT_6 = 6;
+        const int INT_7 = 7;
+
 
         [Flags]
         public enum StatusFlags : uint
@@ -54,29 +65,19 @@ namespace cor64.Mips.R4300I
             UsableCop0 = 0b10000000000000000000000000000
         }
 
-        [Flags]
-        public enum InterruptMask : byte
-        {
-            None = 0,
-            Int0 = 0b1,
-            Int1 = 0b10,
-            Int2 = 0b100,
-            Int3 = 0b1000,
-            Int4 = 0b10000,
-            Int5 = 0b100000,
-            Int6 = 0b1000000,
-            Int7 = 0b01000000,
-            All =  0b11111111
-        }
-
         public StatusRegister()
         {
             m_Fiddler.DefineField(3, 2);
-            m_Fiddler.DefineField(8, 8);
+            m_Fiddler.DefineField(8, 8); // Interrupt Masks
             m_Fiddler.DefineField(16, 9);
             m_Fiddler.DefineField(28, 4);
             m_Fiddler.DefineField(1, 1); // EXL
             m_Fiddler.DefineField(2, 1); // ERL
+
+            for (int i = 0; i < 8; i++)
+            {
+                m_IntFiddler.DefineField(i, 1);
+            }
         }
 
         public void Initialize()
@@ -209,24 +210,24 @@ namespace cor64.Mips.R4300I
             set => m_Fiddler.J(F_ERL, ref m_Value, value ? 1U : 0);
         }
 
-        public void SetInterruptMask(InterruptMask interruptMask)
+        public void SetInterruptMask(int index)
         {
             uint val = m_Fiddler.X(F_IM, ref m_Value);
-            val |= (byte)interruptMask;
+            m_IntFiddler.J(index, ref val, 1);
             m_Fiddler.J(F_IM, ref m_Value, val);
         }
 
-        public void ClearInterruptMask(InterruptMask interruptMask)
+        public void ClearInterruptMask(int index)
         {
             uint val = m_Fiddler.X(F_IM, ref m_Value);
-            val &= ~(uint)interruptMask;
+            m_IntFiddler.J(index, ref val, 0);
             m_Fiddler.J(F_IM, ref m_Value, val);
         }
 
-        public bool TestInterruptMask(InterruptMask interruptMask)
+        public bool CheckInterruptMask(int index)
         {
             uint val = m_Fiddler.X(F_IM, ref m_Value);
-            return (val & (uint)interruptMask) == (uint)interruptMask;
+            return m_IntFiddler.X(index, ref val) != 0;
         }
     }
 }

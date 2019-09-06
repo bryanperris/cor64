@@ -40,6 +40,17 @@ namespace cor64.Mips.R4300I
             "TagLo",    "TagHi",    "ErrorEPC", "Reserved"
         };
 
+        private static readonly String[] InterruptName = {
+            "Software Interrupt 1",
+            "Software Interrupt 2",
+            "RCP Interrupt",
+            "Cartridge Interrupt",
+            "Reset Button",
+            "RDB Read",
+            "RDB Write",
+            "Timer Event"
+        };
+
         public enum RegType
         {
             GPR,
@@ -56,6 +67,11 @@ namespace cor64.Mips.R4300I
                 case RegType.Cop1: return RegisterLabelCop1[index];
                 default: return index.ToString("X2");
             }
+        }
+
+        public static String GetInterruptType(int index)
+        {
+            return InterruptName[index];
         }
     }
 }

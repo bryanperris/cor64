@@ -13,7 +13,6 @@ namespace cor64.Mips.R4300I
     public class SystemController
     {
         private readonly static Logger Log = LogManager.GetCurrentClassLogger();
-        private bool m_Debug = true;
         private ExecutionState m_State;
         private bool m_TLBRefillException;
         private bool m_XTLBRefillExcepetion;
@@ -21,9 +20,6 @@ namespace cor64.Mips.R4300I
         private bool m_ResetException;
         private MipsInterface m_Interface;
         private Clock m_Clock;
-        private bool[] m_InterruptReg = new bool[8];
-        private bool m_IP7Multiplexer = false;
-        private bool m_Timer;
 
         /* Callbacks */
         private Func<ulong> m_CallbackReadPC;
@@ -83,77 +79,36 @@ namespace cor64.Mips.R4300I
         public void ProcessorTick(ulong pc)
         {
             /* Increment count register */
-            IncrementCount();
+            // TODO: Allow some clock emulator to suggest the increment amount instead
+            MipsTimerTick(1);
 
             /* Process all system events */
             CheckInterrupts(pc);
-
-            /* Reset timer */
-            if (m_Timer)
-            {
-                m_Timer = false;
-                REGS.Write(CTS.CP0_REG_COUNT, 0);
-                m_Clock.ClearCountClock();
-            }
         }
 
-        private void IncrementCount()
+        private void MipsTimerTick(ulong count)
         {
-            /* TODO: Instead of adding 1, it should be a value based on Clock, so we keep it in sync */
-            /* TODO: When timer fires, somehow it has to turn off and reset, so I think at the end of a whole cycle
-             *       we need to check that and reset it
-             */
-            if (m_Clock == null)
-            {
-                Log.Warn("Clock source is null, skipping increment");
-                return;
-            }
-
-            if (m_Clock.CountClock)
-            {
-                REGS.Write(CTS.CP0_REG_COUNT, REGS.Read(CTS.CP0_REG_COUNT) + 1);
-
-                /* Fire the timer interrupt */
-                if (REGS.Read(CTS.CP0_REG_COUNT) >= REGS.Read(CTS.CP0_REG_COMPARE))
-                {
-                    m_Timer = true;
-                }
-            }
+            REGS.Write(CTS.CP0_REG_COUNT, REGS.Read(CTS.CP0_REG_COUNT) + count);
         }
 
-        private bool ReadInterruptMask(int i)
-        {
-            if (i >= 0 && i < 8)
-            {
-                return SR.TestInterruptMask((StatusRegister.InterruptMask)i);
-            }
-
-            return false;
-        }
-
-        /*********************************************
-         * Master function to check all processor events 
-         * **********************************************
-         */
         private void CheckInterrupts(ulong pc)
         {
             if (!SR.InterruptsEnabled)
                 return;
+               
+            /* TODO: Process TLB exception related stuff */
 
-            /* TODO: Check watch stuff unless EXL = 1 ? */
+            /* TODO: The code related to setting the exception code needs to handle priority */
 
-                /* TODO: Process TLB exception related stuff */
+            /* TODO: Coprocessor unuable exceptions */
 
-                /* TODO: The code related to setting the exception code needs to handle priority */
-
-                /* TODO: Coprocessor unuable exceptions */
-
-                /* For exceptions that are not Reset or Cache related */
+            /* For exceptions that are not Reset or Cache related */
 
             ulong target = 0;
             ulong cacheAddress = 0;
             ulong othersAddress = 0;
-            bool serviceHandler = true;
+            bool executeHandler = false;
+            int sourceInterrupt = -1;
 
             if (SR.TestFlags(StatusRegister.StatusFlags.UseBootstrapVectors))
             {
@@ -166,26 +121,35 @@ namespace cor64.Mips.R4300I
                 othersAddress = 0xFFFFFFFF80000000;
             }
 
+            /* NMI MIPS Interrupt */
             if (m_ResetException)
             {
                 target = 0xFFFFFFFFBFC00000;
                 m_ResetException = false;
             }
+
+            /* 32-bit TLB Exception */
             if (m_TLBRefillException)
             {
                 target = othersAddress;
                 m_TLBRefillException = false;
             }
+
+            /* 64-bit TLB Exception */
             else if (m_XTLBRefillExcepetion)
             {
                 target = othersAddress + 0x080;
                 m_XTLBRefillExcepetion = false;
             }
+
+            /* CPU Cache Exception */
             else if (m_CacheErr)
             {
                 target = cacheAddress + 0x100;
                 m_CacheErr = false;
             }
+
+            /* CPU Instruction Exception */
             else if (CR.ExceptionThrown)
             {
                 CR.ClearThrownException();
@@ -206,114 +170,88 @@ namespace cor64.Mips.R4300I
                     }
                 }
 
-                SR.SetFlags(StatusRegister.StatusFlags.EnableExceptionLevel);
+                executeHandler = true;
             }
+
+            /* Interrupts */
             else
             {
-                /* Check for interrupts (software and hardware) + timer event */
-
                 target = othersAddress + 0x180;
-                serviceHandler = false;
-
 
                 for (int i = 0; i < 8; i++)
                 {
-                    if (ReadInterruptMask(i))
+                    if (SR.CheckInterruptMask(i))
                     {
-                        /* Software interrupts*/
-                        if (i <= 1)
+                        /* Software interrupt */
+                        if (i == 0 || i == 1)
                         {
                             if (CR.ReadInterruptPending(i))
                             {
                                 CR.ClearInterrupt(i);
-                                serviceHandler = true;
-                                //Log.Debug("!Interrupt - Software");
+                                executeHandler = true;
+                                sourceInterrupt = i;
                                 break;
                             }
 
                             continue;
                         }
 
-                        if (i == 5)
+                        /* RCP Interrupt */
+                        if (i == 2)
                         {
-                            /* The timer interrupt */
-                            // TODO: make this work
+                            if ((m_Interface.Interrupt & m_Interface.Mask) != 0)
+                            {
+                                CR.SetInterruptPending(i);
+                                sourceInterrupt = i;
+                                executeHandler = true;
+                                break;
+                            }
+                            else
+                            {
+                                CR.ClearInterrupt(i);
+                            }
+
                             continue;
                         }
 
-                        /* All others are hardware interrupts (Mips interface) */
-                        int miSelect = (i - 2);
+                        /* Timer Event */
+                        if (i == 7)
+                        {
+                            if (REGS.RegRead(CTS.CP0_REG_COMPARE) == REGS.RegRead(CTS.CP0_REG_COUNT))
+                            {
+                                CR.SetInterruptPending(i);
+                                executeHandler = true;
+                                sourceInterrupt = i;
+                                break;
+                            }
+                            else
+                            {
+                                CR.ClearInterrupt(i);
+                            }
 
-                        if (CheckMiInterrupt(miSelect))
-                        {
-                            CR.SetInterruptPending(i);
-                            //ClearMiInterrupt(miSelect);
-                            //Log.Debug("!Interrupt - Hardware");
-                            serviceHandler = true;
-                            break;
+                            continue;
                         }
-                        else
-                        {
-                            CR.ClearInterrupt(i);
-                        }
+
+                        /* Unimplemented others: (3) Cartridge, (4) Reset button, (5) RDB Read, (6) RDB Write */
                     }
                 }
             }
 
-            if (serviceHandler)
+            /* If true, then prepare to jump to the dedicated exception handler */
+            if (executeHandler)
             {
-#if DEBUG_FULL
-                    Log.Debug("Servicing interrupt: {0:X8}", target);
-#endif
-
-                /* Disable all other interrupts */
                 SR.SetInterruptsEnabled(false);
-
-                /* Set where PC is going to be next */
                 REGS.RegWrite(CTS.CP0_REG_EPC, pc);
                 REGS.RegWrite(CTS.CP0_REG_ERROR_EPC, 0);
                 ExceptionHandlerAddress = (uint)target;
                 SR.ExceptionLevel = true;
+
+                //if (sourceInterrupt >= 0)
+                //{
+                //    Log.Debug("!Interrupt - " + ABI.GetInterruptType(sourceInterrupt));
+                //    sourceInterrupt = -1;
+                //}
             }
-        }
-
-        private bool ReadMiInterrupt(int i)
-        {
-            switch (i)
-            {
-                case 0: return m_Interface.IntSP && m_Interface.IntMaskSP;
-                case 1: return m_Interface.IntSI && m_Interface.IntMaskSI;
-                case 2: return m_Interface.IntAI && m_Interface.IntMaskAI;
-                case 3: return m_Interface.IntVI && m_Interface.IntMaskVI;
-                case 4: return m_Interface.IntPI && m_Interface.IntMaskPI;
-                case 5: return m_Interface.IntDP && m_Interface.IntMaskDP;
-                default: return false;
-            }
-        }
-
-        private bool CheckMiInterrupt(int i)
-        {
-            if ((m_Interface.Interrupt & m_Interface.Mask) == 0)
-            {
-                return false;
-            }
-
-            return ReadMiInterrupt(i);
-
-            //if (i != 5)
-            //{
-            //    return ReadMiInterrupt(i);
-            //}
-            //else
-            //{
-            //    if (!m_IP7Multiplexer) {
-            //        return m_Clock.SClock && ReadMiInterrupt(i);
-            //    }
-            //    else
-            //    {
-            //        return m_Timer;
-            //    }
-            //}
         }
 
         private void ClearMiInterrupt(int i)
