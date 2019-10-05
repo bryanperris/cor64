@@ -8,6 +8,7 @@ using cor64;
 using cor64.Mips;
 using cor64.Mips.Analysis;
 using cor64.Mips.R4300I;
+using cor64.Mips.R4300I.JitIL;
 using cor64.WebService;
 using Newtonsoft.Json;
 using NLog;
@@ -19,9 +20,9 @@ namespace RunN64
 {
     class Program
     {
-        private static Interpreter m_Interpreter = new Interpreter(true, false);
+        //private static Interpreter m_Interpreter = new Interpreter(true, false);
         //private static CFloatInterpreter m_Interpreter = new CFloatInterpreter(true);
-        //private static ILRecompiler m_Interpreter = new ILRecompiler(true);
+        private static ILRecompiler m_Interpreter = new ILRecompiler(true);
 
         private static N64System m_System;
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
@@ -265,6 +266,7 @@ namespace RunN64
                         {
                             Log.Info("Forcing video interrupt to fire");
                             rawVidForm?.TriggerVI();
+                            m_System.DeviceCPU.State.Cp0.Status.SetInterruptsEnabled(true);
                         }
                     }
 

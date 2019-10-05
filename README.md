@@ -5,6 +5,12 @@ This is a work-in-progress freetime project
 
 [ Debugging ]
  * When hex dumping a rom, the program code (after the IPL) always starts 0x1000 in the file normally
+ 
+[ Development ]
+
+Restore paket dependencies
+$ cd src
+$ .paket/paket.exe install
 
 [ References ] 
 

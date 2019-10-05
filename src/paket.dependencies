@@ -1,0 +1,10 @@
+source https://www.nuget.org/api/v2
+
+nuget ELFSharp
+nuget Newtonsoft.Json
+nuget NUnit
+nuget OpenTK.GLControl
+nuget SkiaSharp.Views
+nuget vtortola.WebSocketListener
+nuget SkiaSharp.NativeAssets.Linux
+nuget NLog

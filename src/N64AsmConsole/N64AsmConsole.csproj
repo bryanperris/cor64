@@ -50,26 +50,6 @@
     <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
     <Prefer32Bit>true</Prefer32Bit>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x86'">
-    <DebugSymbols>true</DebugSymbols>
-    <OutputPath>..\..\bin\</OutputPath>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
-    <DebugType>full</DebugType>
-    <PlatformTarget>x86</PlatformTarget>
-    <ErrorReport>prompt</ErrorReport>
-    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
-    <Prefer32Bit>true</Prefer32Bit>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x86'">
-    <OutputPath>..\..\bin\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
-    <Optimize>true</Optimize>
-    <DebugType>pdbonly</DebugType>
-    <PlatformTarget>x86</PlatformTarget>
-    <ErrorReport>prompt</ErrorReport>
-    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
-    <Prefer32Bit>true</Prefer32Bit>
-  </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
     <Reference Include="System.Core" />
@@ -88,12 +68,12 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\cor64\cor64.BareMetal\cor64.BareMetal.csproj">
-      <Project>{c9ad9cc9-33c2-4f20-b1a7-8265fde5a95b}</Project>
+    <ProjectReference Include="..\cor64.BareMetal\cor64.BareMetal.csproj">
+      <Project>{C9AD9CC9-33C2-4F20-B1A7-8265FDE5A95B}</Project>
       <Name>cor64.BareMetal</Name>
     </ProjectReference>
-    <ProjectReference Include="..\cor64\cor64\cor64.csproj">
-      <Project>{587cc6fc-600b-4d2a-9373-68319ff3b943}</Project>
+    <ProjectReference Include="..\cor64\cor64.csproj">
+      <Project>{587CC6FC-600B-4D2A-9373-68319FF3B943}</Project>
       <Name>cor64</Name>
     </ProjectReference>
   </ItemGroup>

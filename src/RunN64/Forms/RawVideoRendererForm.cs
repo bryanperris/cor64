@@ -49,34 +49,17 @@ namespace RunN64.Forms
 
             if (Environment.GetEnvironmentVariable("NOVIDEO") == null)
             {
-                if (Environment.OSVersion.Platform == PlatformID.Unix)
+                m_GLSkiaControl = new SKGLControl()
                 {
-                    m_SkiaControl = new SKControl()
-                    {
-                        Location = new Point(0, 0),
-                        Size = this.Size,
-                        Dock = DockStyle.Fill
-                    };
+                    Location = new Point(0, 0),
+                    Size = this.Size,
+                    Dock = DockStyle.Fill
+                };
 
-                    m_SkiaControl.PaintSurface += PaintSurface;
-                    Controls.Add(m_SkiaControl);
+                m_GLSkiaControl.PaintSurface += GLPaintSurface;
+                Controls.Add(m_GLSkiaControl);
 
-                    m_RenderControl = m_SkiaControl;
-                }
-                else
-                {
-                    m_GLSkiaControl = new SKGLControl()
-                    {
-                        Location = new Point(0, 0),
-                        Size = this.Size,
-                        Dock = DockStyle.Fill
-                    };
-
-                    m_GLSkiaControl.PaintSurface += GLPaintSurface;
-                    Controls.Add(m_GLSkiaControl);
-
-                    m_RenderControl = m_GLSkiaControl;
-                }
+                m_RenderControl = m_GLSkiaControl;
             }
             else
             {
@@ -238,6 +221,12 @@ namespace RunN64.Forms
                 strPos += StrLen(res);
 
                 DrawString(colorMode, canvas, strPos, 0);
+
+                var addr = m_VideoInterface.FramebufferOffset.ToString("X8");
+
+                strPos += StrLen(colorMode);
+
+                DrawString(addr, canvas, strPos, 0);
 
                 float sf = ComputeScaleFactor(m_SourceBitmap.Width, m_SourceBitmap.Height, RES_X, RES_Y);
 
