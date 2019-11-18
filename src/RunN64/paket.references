@@ -1,7 +1,8 @@
-ELFSharp
-Newtonsoft.Json
 NLog
-OpenTK.GLControl
-SkiaSharp.Views
+Newtonsoft.Json
+ELFSharp
 SkiaSharp.NativeAssets.Linux
-System.Threading.Tasks.Dataflow
+glfw-net
+Avalonia.Desktop
+Avalonia.ReactiveUI
+CommandLineParser

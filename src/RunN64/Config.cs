@@ -11,5 +11,8 @@ namespace RunN64
 
         [JsonProperty(PropertyName = "elfFile")]
         public String ElfFilepath { get; set; }
+        
+        [JsonProperty(PropertyName = "useInterpreter")]
+        public bool UseInterpreter {get; set; }
     }
 }

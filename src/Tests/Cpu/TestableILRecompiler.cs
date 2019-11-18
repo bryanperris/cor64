@@ -28,8 +28,9 @@ namespace Tests.Cpu
             m_TestCase = tester;
 
             BypassMMU = true;
-            AttachIStream(new StreamEx.Wrapper(tester.GetProgram()));
-            AttachDStream(new StreamEx.Wrapper(m_TestDataMemory));
+            //AttachIStream(new StreamEx.Wrapper(cor64.DataEndianess.PreByteSwapStream(tester.GetProgram(), cor64.Cartridge.RomEndianess.Big)));
+            AttachIStream(tester.GetProgram());
+			AttachDStream(m_TestDataMemory);
 
             /* Inject zeros into data memory */
             for (int i = 0; i < 16; i++)
@@ -163,22 +164,27 @@ namespace Tests.Cpu
             return value.ToString("X8");
         }
 
-        private static bool AssertStreamBytes(Stream source, int offset, byte[] testBuffer)
+         private static String BytesToHex(byte[] bytes)
         {
-            var s = source;
+            StringBuilder sb = new StringBuilder();
 
-            //switch(testBuffer.Length)
-            //{
-            //    default: break;
-            //    case 2: s = new Swap16Stream(s); break;
-            //    case 4: s = new Swap32Stream(s); break;
-            //    case 8: s = new Swap64Stream(s); break;
-            //}
+            for (int i = 0; i < bytes.Length; i++)
+            {
+                sb.Append(bytes[i].ToString("X2"));
+            }
 
-            s.Position = offset;
+            return sb.ToString();
+        }
+
+        private static void AssertStreamBytes(Stream source, int offset, byte[] testBuffer)
+        {
+            source.Position = offset;
             byte[] readBuffer = new byte[testBuffer.Length];
-            s.Read(readBuffer, 0, readBuffer.Length);
-            return testBuffer.SequenceEqual(readBuffer);
+            source.Read(readBuffer, 0, readBuffer.Length);
+
+            Assert.AreEqual(
+                BytesToHex(testBuffer),
+                BytesToHex(readBuffer));
         }
 
         public void TestExpectations()
@@ -309,7 +315,7 @@ namespace Tests.Cpu
             {
                 if ((m_TestCase.ExpectationFlags & TestCase.Expectations.DMemStore) == TestCase.Expectations.DMemStore)
                 {
-                    Assert.True(AssertStreamBytes(m_TestDataMemory, m_TestCase.ExepectedBytesOffset, m_TestCase.ExpectedBytes));
+                    AssertStreamBytes(m_TestDataMemory, m_TestCase.ExepectedBytesOffset, m_TestCase.ExpectedBytes);
                 }
             }
         }
@@ -327,12 +333,22 @@ namespace Tests.Cpu
 
         private String F(float value)
         {
-            return value.ToString("G");
+            var v = value.ToString("G");
+
+            if (v.StartsWith("-"))
+                v = v.Substring(1);
+
+            return v;
         }
 
         private String D(double value)
         {
-            return value.ToString("G");
+            var v = value.ToString("G");
+
+            if (v.StartsWith("-"))
+                v = v.Substring(1);
+
+            return v;
         }
 
         private void TestFPRExpectations()

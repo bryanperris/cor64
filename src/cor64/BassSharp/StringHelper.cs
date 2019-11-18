@@ -81,7 +81,7 @@ namespace cor64.BassSharp
 
             if (match.Success) {
                 foreach (var grp in match.Groups.OfType<Group>().Skip(1)) {
-                    list.Add(grp.Value);
+                    list.Add(grp.Value.Trim());
                 }
             }
 

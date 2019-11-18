@@ -1,0 +1,13 @@
+source https://www.nuget.org/api/v2
+nuget ELFSharp
+nuget Microsoft.NET.Test.Sdk
+nuget nunit
+nuget NUnit3TestAdapter
+nuget OpenTK
+nuget NLog
+nuget SkiaSharp.NativeAssets.Linux
+nuget glfw-net
+nuget Avalonia
+nuget Avalonia.Desktop
+nuget Avalonia.ReactiveUI 0.8.2
+nuget CommandLineParser

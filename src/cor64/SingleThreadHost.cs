@@ -78,6 +78,7 @@ namespace cor64
             }
             catch (Exception e)
             {
+                Log.Error(e);
                 m_Exception = e;
             }
             finally

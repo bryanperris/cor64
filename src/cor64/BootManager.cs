@@ -60,9 +60,9 @@ namespace cor64
             byte[] romData = new byte[Cartridge.HeaderSize + Cartridge.BootSize];
 
             /* read from cart into buffer */
-            cartridge.RawStream.Position = 0;
-            cartridge.RawStream.Read(romData, 0, romData.Length);
-            cartridge.RawStream.Position = 0;
+            cartridge.RomStream.Position = 0;
+            cartridge.RomStream.Read(romData, 0, romData.Length);
+            cartridge.RomStream.Position = 0;
 
             const uint memStart = 0xA4000000;
             uint memEnd = memStart + (uint)romData.Length;
@@ -111,10 +111,9 @@ namespace cor64
                 return;
             }
 
-            SecurityChipsetType cicType = cartridge.CICLockoutType;
             RegionType region = cartridge.Region;
 
-            Log.Debug("Skipping system bootstrap, using initial startup state for {1}-{0}", cicType.ToString(), region.ToString());
+            Log.Debug("Skipping system bootstrap, using initial startup state for {1}-{0}", cartridge.IPL.ToString(), region.ToString());
 
             CopyCartBootstrap(cartridge);
 
@@ -135,7 +134,7 @@ namespace cor64
             WR(21, 0);
 
             // osCicId
-            WR(22, (uint)cartridge.CICLockoutType.Seed());
+            WR(22, cartridge.IPL.Seed);
 
             // osVersion: 00 = 1.0, 15 = 2.5, etc
             WR(23, 0); /* S7: Unknown */
@@ -149,7 +148,7 @@ namespace cor64
              * GPR5 is used with the IPL CRC checksum algorithm, its muliplied with the hardcoded seed
              */
 
-            switch (cicType)
+            switch (cartridge.IPL.Cic)
             {
                 default: break;
                 case SecurityChipsetType.X101: X101Setup(region); break;

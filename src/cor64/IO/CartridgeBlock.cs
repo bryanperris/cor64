@@ -30,7 +30,7 @@ namespace cor64.IO
             m_RealSize = size;
         }
 
-		public sealed override void Read(long position, byte[] buffer, int offset, int count)
+        public sealed override void Read(long position, byte[] buffer, int offset, int count)
         {
             //m_SourceStream.Position = position;
 
@@ -47,24 +47,32 @@ namespace cor64.IO
             //         }
 
             Marshal.Copy(IntPtr.Add(m_RomBuffer.GetPointer(), (int)position), buffer, offset, count);
+
+            if (CoreConfig.Current.ByteSwap)
+            {
+                if (count == 1)
+                {
+                    Console.WriteLine("Warning: Cartridge byte read");
+                }
+            }
         }
 
         public sealed override void Write(long position, byte[] buffer, int offset, int count)
-		{
-			//m_SourceStream.Position = position;
+        {
+            //m_SourceStream.Position = position;
 
-   //         while (count > 0)
-   //         {
-   //             if (m_SourceStream.Position < Size)
-   //             {
-			//		m_SourceStream.WriteByte(buffer[offset++]);
-   //             }
+            //         while (count > 0)
+            //         {
+            //             if (m_SourceStream.Position < Size)
+            //             {
+            //		m_SourceStream.WriteByte(buffer[offset++]);
+            //             }
 
-   //             count--;
-   //         }
-		}
+            //             count--;
+            //         }
+        }
 
-		public override long Size => 0x0FC00000;
+        public override long Size => 0x0FC00000;
 
         protected override void Dispose(bool disposing)
         {

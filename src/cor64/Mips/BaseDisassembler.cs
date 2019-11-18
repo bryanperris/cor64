@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using cor64.IO;
 
 namespace cor64.Mips
 {
@@ -17,6 +18,9 @@ namespace cor64.Mips
         private String m_Abi;
         private Mode m_Mode;
         private ISymbolProvider m_SymbolProvider;
+        private byte[] m_InstBuffer = new Byte[4];
+        private Swap32Stream m_SwapStream;
+        private Func<uint> m_ReadInstFunc;
 
         public enum Mode
         {
@@ -34,11 +38,25 @@ namespace cor64.Mips
         {
             m_Abi = abi;
             m_Mode = mode;
+
+            if (CoreConfig.Current.ByteSwap) {
+                m_ReadInstFunc = () => {
+                    m_SwapStream.Read(m_InstBuffer, 0, 4);
+                    return m_InstBuffer.ToUInt32();
+                };
+            }
+            else {
+                m_ReadInstFunc = () => {
+                    m_BinaryStream.Read(m_InstBuffer, 0, 4);
+                    return m_InstBuffer.ToUInt32();
+                };
+            }
         }
 
         public virtual void SetStreamSource(Stream stream)
         {
             m_BinaryStream = stream;
+            m_SwapStream = new Swap32Stream(stream);
         }
 
         public ulong CurrentAddress => m_BaseAddress;
@@ -86,7 +104,7 @@ namespace cor64.Mips
              * else in sequencial IO, let the stream handle it basically */
             m_BinaryStream.Position = (long)m_BaseAddress;
 
-            BinaryInstruction inst = new BinaryInstruction(ReadNext32());
+            BinaryInstruction inst = new BinaryInstruction(m_ReadInstFunc());
 
             decoded = new DecodedInstruction(m_BaseAddress, DecodeOpcode(inst), inst, false, m_BinaryStream.Position + 4 >= m_BinaryStream.Length);
 
@@ -112,15 +130,6 @@ namespace cor64.Mips
             }
 
             return disassembly;
-        }
-
-        private uint ReadNext32()
-        {
-            var bytes = new Byte[4];
-            m_BinaryStream.Read(bytes, 0, bytes.Length);
-
-            /* Byteswaps big to little */
-            return (uint)((bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]);
         }
 
         protected ulong ComputeJumpTarget(DecodedInstruction inst)

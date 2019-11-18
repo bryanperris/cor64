@@ -88,7 +88,7 @@ namespace cor64.IO
             Interlocked.Decrement(ref m_CountWriters);
         }
 
-        public StreamEx CreateMemoryStream()
+        public Stream CreateMemoryStream()
         {
             var stream = new _InternalStream(this);
             return stream;
@@ -160,7 +160,7 @@ namespace cor64.IO
 
         public Rdram RDRAM => (Rdram)m_MemModel.RDRAM;
 
-        private sealed class _InternalStream : StreamEx
+        private sealed class _InternalStream : Stream
         {
             private N64MemoryController m_Controller;
 
@@ -176,6 +176,8 @@ namespace cor64.IO
             public override bool CanWrite => true;
 
             public override long Length => 0xFFFFFFFFU;
+
+            public override long Position { get; set; }
 
             public override void Flush()
             {

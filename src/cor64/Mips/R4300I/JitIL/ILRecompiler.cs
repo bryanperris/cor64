@@ -88,7 +88,7 @@ namespace cor64.Mips.R4300I.JitIL
         {
             m_FallbackInterpreter = interpreter;
             //interpreter.SetInstructionDebugMode(DebugInstMode.Full);
-            interpreter.OverrideIStream(new StreamEx.Wrapper(IMemoryStream));
+            interpreter.OverrideIStream(IMemoryStream);
             interpreter.OverrideDStream(DMemoryStream);
             interpreter.OverrideCoreState(State);
             interpreter.OverrideCop0(Cop0);
@@ -312,7 +312,6 @@ namespace cor64.Mips.R4300I.JitIL
                 if (m_InterruptThread == null)
                 {
                     m_InterruptThread = new Thread(JitInterrupt);
-                    m_InterruptThread.SetApartmentState(ApartmentState.MTA);
                     m_InterruptThread.IsBackground = true;
                     m_InterruptThread.Start();
                 }
@@ -321,7 +320,6 @@ namespace cor64.Mips.R4300I.JitIL
                 if (m_MainThread == null)
                 {
                     m_MainThread = new Thread(JitMainLoop);
-                    m_MainThread.SetApartmentState(ApartmentState.MTA);
                     m_MainThread.IsBackground = true;
                     m_MainThread.Start();
                 }
@@ -592,12 +590,12 @@ namespace cor64.Mips.R4300I.JitIL
 
         void IDynamicMips.ReadDataMemory(long address, int size)
         {
-            m_DataMemory.ReadData((uint)address, size, true);
+            m_DataMemory.ReadData((uint)address, size);
         }
 
         void IDynamicMips.WriteDataMemory(long address, int size)
         {
-            m_DataMemory.WriteData((uint)address, size, true);
+            m_DataMemory.WriteData((uint)address, size);
         }
 
         byte IDynamicMips.GetMemData8()
@@ -612,32 +610,32 @@ namespace cor64.Mips.R4300I.JitIL
 
         ushort IDynamicMips.GetMemData16()
         {
-            return m_DataMemory.Data16Swp;
+            return m_DataMemory.Data16;
         }
 
         void IDynamicMips.SetMemData16(ushort value)
         {
-            m_DataMemory.Data16Swp = value;
+            m_DataMemory.Data16 = value;
         }
 
         uint IDynamicMips.GetMemData32()
         {
-            return m_DataMemory.Data32Swp;
+            return m_DataMemory.Data32;
         }
 
         void IDynamicMips.SetMemData32(uint value)
         {
-            m_DataMemory.Data32Swp = value;
+            m_DataMemory.Data32 = value;
         }
 
         ulong IDynamicMips.GetMemData64()
         {
-            return m_DataMemory.Data64Swp;
+            return m_DataMemory.Data64;
         }
 
         void IDynamicMips.SetMemData64(ulong value)
         {
-            m_DataMemory.Data64Swp = value;
+            m_DataMemory.Data64 = value;
         }
 
         void IDynamicMips.ClearBlockJump(MipsExecutableBlock block)

@@ -1,9 +1,10 @@
 .vs
 bin
 obj
-src/cor64.CFloat/libcf/b/
-/src/packages/
+b/
+packages
 package-lock.json
 node_modules
 dist
 paket-files
+mono_crash.mem*

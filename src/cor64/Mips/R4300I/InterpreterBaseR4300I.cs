@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 using cor64.Debugging;
 using cor64.IO;
 using NLog;
-
+using static cor64.Cartridge;
 using static cor64.Mips.R4300I.Opcodes;
 
 public enum DebugInstMode
@@ -33,6 +33,9 @@ namespace cor64.Mips.R4300I
         public bool StartedWithProfiler { get; protected set; }
         private CoreDebugger m_CoreDebugger = new CoreDebugger();
 
+        /* This is to ensures that the static opcode factory gets called before we the mapping */
+        private Dictionary<int, Action<DecodedInstruction>> m_SafeCallMap = new Dictionary<int, Action<DecodedInstruction>>();
+
         /* TODO: When we do have a cache system, 
          * some conditions of the cache can break
          * atomic operations (LLBit is set back to 0)
@@ -49,8 +52,6 @@ namespace cor64.Mips.R4300I
         {
             // Attach core debugger
             State.SetCoreDebugger(m_CoreDebugger);
-
-            m_CallTable = new Action<DecodedInstruction>[OpcodeFactory.LastID + 1];
 
             m_CoreClock = new Clock(10, 2);
             m_Coprocessor0 = new SystemController(State, m_CoreClock);
@@ -93,6 +94,21 @@ namespace cor64.Mips.R4300I
             Map(Floor, FLOOR_L, FLOOR_W);
             Map(Convert, CVT_D, CVT_L, CVT_S, CVT_W);
             Map(Condition, C_F, C_UN, C_EQ, C_UEQ, C_OLT, C_ULT, C_OLE, C_ULE, C_SF, C_NGLE, C_SEQ, C_NGL, C_LT, C_NGE, C_LE, C_NGT);
+
+            /* Now convert the dictionary into the flat call table */
+            m_CallTable = new Action<DecodedInstruction>[OpcodeFactory.LastID + 1];
+            
+            foreach (var entry in m_SafeCallMap) {
+                m_CallTable[entry.Key] = entry.Value;
+            }
+        }
+
+        private void Map(Action<DecodedInstruction> instAction, params Opcode[] opcodes)
+        {
+            foreach (var op in opcodes)
+            {   
+                m_SafeCallMap.Add(op.ID, instAction);
+            }
         }
 
         public void AttachSystemMemory(N64MemoryController controller)
@@ -104,8 +120,8 @@ namespace cor64.Mips.R4300I
         {
             var traceMode = TraceMode;
             SetTraceMode(Analysis.ProgramTrace.TraceMode.None);
-            m_DataMemory.Data32Swp = 0x00800000;
-            m_DataMemory.WriteData(0x80000318, 4, true);
+            m_DataMemory.Data32 = 0x00800000;
+            m_DataMemory.WriteData(0x80000318, 4);
             SetTraceMode(traceMode);
         }
 
@@ -136,14 +152,6 @@ namespace cor64.Mips.R4300I
             }
 
             return value;
-        }
-
-        private void Map(Action<DecodedInstruction> instAction, params Opcode[] opcodes)
-        {
-            foreach (var op in opcodes)
-            {
-                m_CallTable[op.ID] = instAction;
-            }
         }
 
         protected bool ValidateInstruction(DecodedInstruction decoded)
@@ -480,8 +488,16 @@ namespace cor64.Mips.R4300I
                 var debugMode = DebugMode;
                 SetDebuggingMode(false);
 
-                m_DataMemory.Data32 = val;
-                m_DataMemory.WriteData(addr, 4, true);
+                /* Incoming values are expected to be big-endian */
+
+                if (CoreConfig.Current.ByteSwap) {
+                    m_DataMemory.Data32 = val.ByteSwapped();
+                }
+                else {
+                    m_DataMemory.Data32 = val;
+                }
+
+                m_DataMemory.WriteData(addr, 4);
 
                 SetDebuggingMode(debugMode);
             };
@@ -503,19 +519,18 @@ namespace cor64.Mips.R4300I
         /* For testing-purposes */
         public bool BypassMMU { get; set; }
 
-        public override void AttachIStream(StreamEx memoryStream)
+        public override void AttachIStream(Stream memoryStream)
         {
             base.AttachIStream(new SimpleVMemStream(this, memoryStream, false));
         }
 
-        public void OverrideIStream(StreamEx memoryStream)
+        public void OverrideIStream(Stream memoryStream)
         {
             base.AttachIStream(memoryStream);
         }
 
-        public override void AttachDStream(StreamEx memoryStream)
+        public override void AttachDStream(Stream memoryStream)
         {
-            memoryStream.AlignmentMode = true;
             m_DataMemory = new DataMemory(new SimpleVMemStream(this, memoryStream, true));
         }
 
@@ -540,21 +555,23 @@ namespace cor64.Mips.R4300I
             private MemoryDebugger m_MemDebugger = new MemoryDebugger();
             private int m_LastNamedRegionHash = 0;
             private uint m_Size = 0xFFFFFFFF;
-            private StreamEx m_BaseStream;
+            private Stream m_BaseStream;
 
-            public SimpleVMemStream(InterpreterBaseR4300I core, StreamEx streamEx, bool isDataPath) : base(streamEx)
+            public SimpleVMemStream(InterpreterBaseR4300I core, Stream stream, bool isDataPath) : base(stream)
             {
-                m_BaseStream = streamEx;
+                m_BaseStream = stream;
                 m_Core = core;
                 m_IsDataPath = isDataPath;
 
                 if (m_Core.BypassMMU)
                 {
-                    m_Size = (uint)streamEx.Length;
+                    m_Size = (uint)stream.Length;
                 }
             }
 
             public override long Length => m_Size;
+
+            public override long Position { get; set; }
 
             public override int Read(byte[] buffer, int offset, int count)
             {
@@ -670,8 +687,8 @@ namespace cor64.Mips.R4300I
 
         public String DebugMemReadHex(long address, int size)
         {
-            m_DataMemory.ReadData(address, size, true);
-            return m_DataMemory.Data64Swp.ToString("X16");
+            m_DataMemory.ReadData(address, size);
+            return m_DataMemory.Data64.ToString("X16");
         }
 
         public CoreDebugger CoreDbg => m_CoreDebugger;

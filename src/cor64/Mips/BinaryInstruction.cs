@@ -36,7 +36,7 @@ namespace cor64.Mips
         {
             this.inst = inst;
 
-            /* This is assuming little endian memory model */
+            /* This model assume the data is little-endian */
             ushort l = (ushort)(inst);
             ushort h = (ushort)(inst >> 16);
             rt = (byte)(h & 0x1F);

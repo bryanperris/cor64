@@ -152,10 +152,26 @@ namespace Tests.Cpu
             return this;
         }
 
+        private void UpdateTestData(byte[] data) {
+            m_TestData = data;
+
+            // m_TestData = new byte[4 * 2];
+
+            // for (int i = 0; i < m_TestData.Length; i++) {
+            //     if (i < data.Length) {
+            //         m_TestData[i] = data[i];
+            //     }
+            // }
+
+            // Stream stream = new MemoryStream(m_TestData);
+            // stream = cor64.DataEndianess.PreByteSwapStream(stream, cor64.Cartridge.RomEndianess.Big);
+            // stream.Read(m_TestData, 0, m_TestData.Length);
+        }
+
         public TestCase ExpectDMem(int offset, params byte[] value)
 		{
 			m_ExpectationFlags |= Expectations.DMemStore;
-            m_TestData = value;
+            UpdateTestData(value);
             m_TestDataOffset = offset;
             IsLoadStore = true;
 			return this;
@@ -165,7 +181,7 @@ namespace Tests.Cpu
         {
             m_ExpectationFlags |= Expectations.DMemLoad;
             IsLoadStore = true;
-            m_TestData = data;
+            UpdateTestData(data);
             m_InjectDMem = true;
             /* Better way to manage this? */
             Result = new KeyValuePair<int, dynamic>(SourceA.Key, Result.Value);

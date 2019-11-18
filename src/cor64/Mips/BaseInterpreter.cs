@@ -10,6 +10,7 @@ using System.Linq;
 using System.Runtime.Serialization;
 using System.Text;
 using System.Threading.Tasks;
+using static cor64.Cartridge;
 
 /* TODO: List
  * Debugging
@@ -106,16 +107,15 @@ namespace cor64.Mips
 
         public abstract void Step();
 
-        public virtual void AttachIStream(StreamEx memoryStream)
+        public virtual void AttachIStream(Stream memoryStream)
         {
             m_IMemory = memoryStream;
-            memoryStream.AlignmentMode = true;
             m_Disassembler.SetStreamSource(memoryStream);
         }
-
+        
         protected Stream IMemoryStream => m_IMemory;
 
-        public abstract void AttachDStream(StreamEx memory);
+        public abstract void AttachDStream(Stream memory);
 
         public abstract void AttachBootManager(BootManager bootManager);
 

@@ -7,6 +7,8 @@ using System.Threading.Tasks;
 
 namespace cor64.IO
 {
+    // TODO: Implement stream access for this class
+
     public class PinnedBuffer : IDisposable
     {
         private byte[] m_Buffer;
@@ -36,6 +38,8 @@ namespace cor64.IO
                 m_Buffer[index] = value;
             }
         }
+
+        public byte[] RawBuffer => m_Buffer;
 
         public void Clear()
         {

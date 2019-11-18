@@ -16,36 +16,6 @@ namespace Tests.Cpu
     {
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
 
-        private static Stream Assemble(params String[] asm)
-        {
-            N64Assembler assembler = new N64Assembler();
-
-            /* Assembly Source */
-            var source = new AssemblyTextSource("main");
-            source += "arch n64.cpu";
-            source += "endian msb";
-
-            StringBuilder line = new StringBuilder();
-
-            for (int i = 0; i < asm.Length; i++)
-            {
-                line.Append(asm[i]);
-                if (i + 1 < asm.Length) line.Append(" ");
-            }
-
-            source += line.ToString();
-
-            /* Assemble into bytes */
-            assembler.AddAssemblySource(source);
-            assembler.AssembleCode(true);
-
-            /* Get the output */
-            var streamOut = assembler.Output;
-            streamOut.Position = 0;
-
-            return streamOut;
-        }
-
         private static String FpuAssemble(TestCase test)
         {
             StringBuilder sb = new StringBuilder();
@@ -196,7 +166,7 @@ namespace Tests.Cpu
 
             Log.Info("Test Asm: " + asm);
 
-            rom = Assemble(asm);
+            rom = Asm.Assemble(asm);
 
             testCase.SetProgram(rom);
         }

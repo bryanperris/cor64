@@ -15,8 +15,8 @@ namespace cor64.RCP
         const int F_PIXELMODE = 0;
 
         public uint Value {
-            get => m_Ptr.AsType_32Swp();
-            set => m_Ptr.AsType_32Swp(value);
+            get => m_Ptr.RegRead();
+            set => m_Ptr.RegWrite(value);
         }
 
         public VideoControlReg(IntPtr ptr)

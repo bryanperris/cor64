@@ -100,7 +100,7 @@ namespace cor64
             base.Assemble(strict);
         }
 
-        public void AssembleCode(bool strict = false)
+        public virtual void AssembleCode(bool strict = false)
         {
             Assemble(strict);
         }

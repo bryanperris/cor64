@@ -8,9 +8,23 @@ This is a work-in-progress freetime project
  
 [ Development ]
 
-Restore paket dependencies
-$ cd src
-$ .paket/paket.exe install
+What you need
+* NodeJS
+* .NET Framework / Mono
+* .NET Core 3.x or higher
+* For Linux: GLFW devel libraries
+
+Restore NPM packages
+$ npm install
+
+Install gulp command
+$ npm -g install gulp-cli
+
+Build and Run
+$ gulp run
+
+Run Unit Tests
+$ dotnet test -v q
 
 [ References ] 
 

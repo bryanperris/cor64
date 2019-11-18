@@ -1173,9 +1173,9 @@ namespace cor64.Mips.R4300I
             {
                 default: throw new InvalidOperationException("How did this happen?");
                 case 1: m_DataMemory.Data8 = (byte)ReadGPR64(inst.Target); break;
-                case 2: m_DataMemory.Data16Swp = (ushort)ReadGPR64(inst.Target); break;
-                case 4: m_DataMemory.Data32Swp = (uint)ReadGPR32(inst.Target); break;
-                case 8: m_DataMemory.Data64Swp = ReadGPR64(inst.Target); break;
+                case 2: m_DataMemory.Data16 = (ushort)ReadGPR64(inst.Target); break;
+                case 4: m_DataMemory.Data32 = (uint)ReadGPR32(inst.Target); break;
+                case 8: m_DataMemory.Data64 = ReadGPR64(inst.Target); break;
             }
 
             try
@@ -1189,24 +1189,24 @@ namespace cor64.Mips.R4300I
                         case 4:
                             {
                                 int index = (int)((uint)address & 3);
-                                m_DataMemory.ReadData((long)address & ~3, 4, true);
-                                uint val = m_DataMemory.Data32Swp;
+                                m_DataMemory.ReadData((long)address & ~3, 4);
+                                uint val = m_DataMemory.Data32;
                                 val &= CTS.SWL_MASK[index];
                                 val |= (ReadGPR32(inst.Target) >> CTS.SWL_SHIFT[index]);
-                                m_DataMemory.Data32Swp = val;
-                                m_DataMemory.WriteData((long)address, 4, true);
+                                m_DataMemory.Data32 = val;
+                                m_DataMemory.WriteData((long)address, 4);
                                 break;
                             }
 
                         case 8:
                             {
                                 int index = (int)((uint)address & 7);
-                                m_DataMemory.ReadData((long)address & ~7, 8, true);
-                                ulong val = m_DataMemory.Data64Swp;
+                                m_DataMemory.ReadData((long)address & ~7, 8);
+                                ulong val = m_DataMemory.Data64;
                                 val &= CTS.SDL_MASK[index];
                                 val |= (ReadGPR64(inst.Target) >> CTS.SDL_SHIFT[index]);
-                                m_DataMemory.Data64Swp = val;
-                                m_DataMemory.WriteData((long)address, 8, true);
+                                m_DataMemory.Data64 = val;
+                                m_DataMemory.WriteData((long)address, 8);
                                 break;
                             }
                     }
@@ -1220,24 +1220,24 @@ namespace cor64.Mips.R4300I
                         case 4:
                             {
                                 int index = (int)((uint)address & 3);
-                                m_DataMemory.ReadData((long)address & ~3, 4, true);
-                                uint val = m_DataMemory.Data32Swp;
+                                m_DataMemory.ReadData((long)address & ~3, 4);
+                                uint val = m_DataMemory.Data32;
                                 val &= CTS.SWR_MASK[index];
                                 val |= (ReadGPR32(inst.Target) << CTS.SWR_SHIFT[index]);
-                                m_DataMemory.Data32Swp = val;
-                                m_DataMemory.WriteData((long)address, 4, true);
+                                m_DataMemory.Data32 = val;
+                                m_DataMemory.WriteData((long)address, 4);
                                 break;
                             }
 
                         case 8:
                             {
                                 int index = (int)((uint)address & 7);
-                                m_DataMemory.ReadData((long)address & ~7, 8, true);
-                                ulong val = m_DataMemory.Data64Swp;
+                                m_DataMemory.ReadData((long)address & ~7, 8);
+                                ulong val = m_DataMemory.Data64;
                                 val &= CTS.SDR_MASK[index];
                                 val |= (ReadGPR64(inst.Target) << CTS.SDR_SHIFT[index]);
-                                m_DataMemory.Data64Swp = val;
-                                m_DataMemory.WriteData((long)address, 8, true);
+                                m_DataMemory.Data64 = val;
+                                m_DataMemory.WriteData((long)address, 8);
                                 break;
                             }
                     }
@@ -1253,7 +1253,7 @@ namespace cor64.Mips.R4300I
 
                     if (!LLMode || (LLMode && State.LLBit))
                     {
-                        m_DataMemory.WriteData((long)address, size, true);
+                        m_DataMemory.WriteData((long)address, size);
 
                         //if (m_Debug && inst.Target == 31)
                         //{
@@ -1334,22 +1334,22 @@ namespace cor64.Mips.R4300I
                             case 4:
                                 {
                                     int index = (int)((uint)address & 3);
-                                    m_DataMemory.ReadData((long)address & ~3, 4, true);
+                                    m_DataMemory.ReadData((long)address & ~3, 4);
                                     uint val = ReadGPR32(inst.Target);
                                     val &= CTS.LWL_MASK[index];
-                                    val |= (m_DataMemory.Data32Swp << CTS.LWL_SHIFT[index]);
-                                    m_DataMemory.Data32Swp = val;
+                                    val |= (m_DataMemory.Data32 << CTS.LWL_SHIFT[index]);
+                                    m_DataMemory.Data32 = val;
                                     break;
                                 }
 
                             case 8:
                                 {
                                     int index = (int)((uint)address & 7);
-                                    m_DataMemory.ReadData((long)address & ~7, 8, true);
+                                    m_DataMemory.ReadData((long)address & ~7, 8);
                                     ulong val = ReadGPR64(inst.Target);
                                     val &= CTS.LDL_MASK[index];
-                                    val |= (m_DataMemory.Data64Swp << CTS.LDL_SHIFT[index]);
-                                    m_DataMemory.Data64Swp = val;
+                                    val |= (m_DataMemory.Data64 << CTS.LDL_SHIFT[index]);
+                                    m_DataMemory.Data64 = val;
                                     break;
                                 }
                         }
@@ -1363,22 +1363,22 @@ namespace cor64.Mips.R4300I
                             case 4:
                                 {
                                     int index = (int)((uint)address & 3);
-                                    m_DataMemory.ReadData((long)address & ~3, 4, true);
+                                    m_DataMemory.ReadData((long)address & ~3, 4);
                                     uint val = ReadGPR32(inst.Target);
                                     val &= CTS.LWR_MASK[index];
-                                    val |= (m_DataMemory.Data32Swp >> CTS.LWR_SHIFT[index]);
-                                    m_DataMemory.Data32Swp = val;
+                                    val |= (m_DataMemory.Data32 >> CTS.LWR_SHIFT[index]);
+                                    m_DataMemory.Data32 = val;
                                     break;
                                 }
 
                             case 8:
                                 {
                                     int index = (int)((uint)address & 7);
-                                    m_DataMemory.ReadData((long)address & ~7, 8, true);
+                                    m_DataMemory.ReadData((long)address & ~7, 8);
                                     ulong val = ReadGPR64(inst.Target);
                                     val &= CTS.LDR_MASK[index];
-                                    val |= (m_DataMemory.Data64Swp >> CTS.LDR_SHIFT[index]);
-                                    m_DataMemory.Data64Swp = val;
+                                    val |= (m_DataMemory.Data64 >> CTS.LDR_SHIFT[index]);
+                                    m_DataMemory.Data64 = val;
                                     break;
                                 }
                         }
@@ -1390,7 +1390,7 @@ namespace cor64.Mips.R4300I
                             State.LLBit = true;
                         }
 
-                        m_DataMemory.ReadData((long)address, size, true);
+                        m_DataMemory.ReadData((long)address, size);
                     }
 
                     if (unsigned)
@@ -1399,9 +1399,9 @@ namespace cor64.Mips.R4300I
                         {
                             default: throw new InvalidOperationException("How did this happen (unsigned)?");
                             case 1: Writeback64(inst.Target, m_DataMemory.Data8); break;
-                            case 2: Writeback64(inst.Target, m_DataMemory.Data16Swp); break;
-                            case 4: Writeback64(inst.Target, m_DataMemory.Data32Swp); break;
-                            case 8: Writeback64(inst.Target, m_DataMemory.Data64Swp); break;
+                            case 2: Writeback64(inst.Target, m_DataMemory.Data16); break;
+                            case 4: Writeback64(inst.Target, m_DataMemory.Data32); break;
+                            case 8: Writeback64(inst.Target, m_DataMemory.Data64); break;
                         }
                     }
                     else
@@ -1410,9 +1410,9 @@ namespace cor64.Mips.R4300I
                         {
                             default: throw new InvalidOperationException("How did this happen?");
                             case 1: Writeback64(inst.Target, (ulong)(sbyte)m_DataMemory.Data8); break;
-                            case 2: Writeback64(inst.Target, (ulong)(short)m_DataMemory.Data16Swp); break;
-                            case 4: Writeback64(inst.Target, (ulong)(int)m_DataMemory.Data32Swp); break;
-                            case 8: Writeback64(inst.Target, (ulong)(long)m_DataMemory.Data64Swp); break;
+                            case 2: Writeback64(inst.Target, (ulong)(short)m_DataMemory.Data16); break;
+                            case 4: Writeback64(inst.Target, (ulong)(int)m_DataMemory.Data32); break;
+                            case 8: Writeback64(inst.Target, (ulong)(long)m_DataMemory.Data64); break;
                         }
                     }
                 }
@@ -1446,13 +1446,13 @@ namespace cor64.Mips.R4300I
                 long offset = (short)inst.Immediate;
                 var address = (ulong)(baseAddress + offset);
 
-                m_DataMemory.ReadData((long)address, size, true);
+                m_DataMemory.ReadData((long)address, size);
 
                 switch (size)
                 {
                     default: throw new InvalidOperationException("Unsupported FPU Load Size: " + size.ToString());
-                    case 4: WriteFPR_W(inst.FloatTarget, m_DataMemory.Data32Swp); break;
-                    case 8: WriteFPR_DW(inst.FloatTarget, m_DataMemory.Data64Swp); break;
+                    case 4: WriteFPR_W(inst.FloatTarget, m_DataMemory.Data32); break;
+                    case 8: WriteFPR_DW(inst.FloatTarget, m_DataMemory.Data64); break;
                 }
 
                 /* If loading a doubleword and FR = 0, we don't care, we bypass 32-bit stuff */
@@ -1478,13 +1478,13 @@ namespace cor64.Mips.R4300I
             switch (size)
             {
                 default: throw new InvalidOperationException("Unsupported FPU Store Size: " + size.ToString());
-                case 4: m_DataMemory.Data32Swp = ReadFPR_W(inst.FloatTarget); break;
-                case 8: m_DataMemory.Data64Swp = ReadFPR_DW(inst.FloatTarget); break;
+                case 4: m_DataMemory.Data32 = ReadFPR_W(inst.FloatTarget); break;
+                case 8: m_DataMemory.Data64 = ReadFPR_DW(inst.FloatTarget); break;
             }
 
             try
             {
-                m_DataMemory.WriteData((long)address, size, true);
+                m_DataMemory.WriteData((long)address, size);
             }
             catch (MipsException e)
             {
@@ -1859,5 +1859,7 @@ namespace cor64.Mips.R4300I
 
             return snap;
         }
+
+        public bool InfiniteLoopWarn => m_WarnInfiniteJump;
     }
 }

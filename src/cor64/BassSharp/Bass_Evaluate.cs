@@ -33,8 +33,8 @@ namespace cor64.BassSharp
                 Node node = Parser.Parse(expression);
                 return Evaluate(node, mode);
             }
-            catch (InvalidOperationException) {
-                throw new Error("Malformed expression: " + expression);
+            catch (InvalidOperationException e) {
+                throw new Error("Malformed expression: " + e.Message + ": " + expression);
             }
         }
 

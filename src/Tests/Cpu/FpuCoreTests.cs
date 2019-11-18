@@ -11,7 +11,7 @@ using static cor64.Mips.FpuExceptionFlags;
 using static Tests.Cpu.FpuHelper;
 
 using static cor64.Mips.FpuValueType;
-using cor64.CFloat;
+//using cor64.CFloat;
 using NUnit.Framework;
 
 namespace Tests.Cpu
@@ -35,14 +35,14 @@ namespace Tests.Cpu
             }
         }
 
-        private static readonly CFloatInterpreter s_CFloat = new CFloatInterpreter(true);
+        //private static readonly CFloatInterpreter s_CFloat = new CFloatInterpreter(true);
 
         [Test]
         public void AdditionTest()
         {
             "add.s".FPUTest(0.0f, 0.0f).Expect(0.0f).Run();
                     FPUTest(0.0f, 1.0f).Expect(1.0f).Run();
-                    FPUTest(123.123f, 111.111f).Expect(234.234f).Run();
+                    FPUTest(123.123f, 111.111f).Expect(234.23401f).Run();
                     FPUTest(0.0f, 1234.6789f).Expect(F(0x449A55BA)).Run();
                     FPUTest(1234.6789f, -1234.6789f).Expect(F(0)).Run();
                     FPUTest(1234.6789f, 1234.5f).Expect(F(0x451A52DD)).Run();
@@ -93,7 +93,7 @@ namespace Tests.Cpu
 					FPUTest(1234.1234f, -1234.1234f).Expect(F(0xBF800000)).Run();
 					FPUTest(-1234.5f, -1234.6789f).Expect(F(0x3F7FF680)).Run();
 					FPUTest(0.0f, -1234.6789f).Expect(F(0x80000000)).Run();
-                    FPUTest(1.0f, 0.0f).Except(DivideByZero).CoreOverride(typeof(CFloatInterpreter)).Run();
+                    //FPUTest(1.0f, 0.0f).Except(DivideByZero).CoreOverride(typeof(CFloatInterpreter)).Run();
 					
 			"div.d".FPUTest(0.0d, 1.0d).Expect(0.0d).Run();
 			        FPUTest(0.0d, 12345678.67891234d).Expect(0.0d).Run();

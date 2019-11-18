@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Security.Cryptography;
+using cor64.IO;
 
 namespace cor64.Utils
 {
@@ -16,10 +17,10 @@ namespace cor64.Utils
             m_CicType = type;
         }
 
-        protected override void HashCore(byte[] array, int ibStart, int cbSize)
+        protected override void HashCore(byte[] source, int ibStart, int cbSize)
         {
-            /* The source buffer must be big endian byte order, otherwise this fails */
-            BinaryReader arrayReader = new BinaryReader(new MemoryStream(array));
+            /* The source buffer must be converted to little-endian from big-endian */
+            BinaryReader arrayReader = new BinaryReader(new Swap32Stream(new MemoryStream(source)));
             BinaryWriter hashWriter = new BinaryWriter(new MemoryStream(m_Hashcode));
 
             if (cbSize < InputSize)
@@ -107,14 +108,50 @@ namespace cor64.Utils
             return (value << bits) | (value >> (32 - bits));
         }
 
-        public Int32 CRC1
+        public uint CRC1
         {
-            get { return (m_Hashcode[3] | (m_Hashcode[2] << 8) | (m_Hashcode[1] << 16) | (m_Hashcode[0] << 24)); }
+            get { return (uint) (m_Hashcode[0] | (m_Hashcode[1] << 8) | (m_Hashcode[2] << 16) | (m_Hashcode[3] << 24)); }
         }
 
-        public Int32 CRC2
+        public uint CRC2
         {
-            get { return (m_Hashcode[7] | (m_Hashcode[6] << 8) | (m_Hashcode[5] << 16) | (m_Hashcode[4] << 24)); }
+            get { return (uint) (m_Hashcode[4] | (m_Hashcode[5] << 8) | (m_Hashcode[6] << 16) | (m_Hashcode[7] << 24)); }
+        }
+
+        public uint CRC1Le
+        {
+            get { return (uint) (m_Hashcode[3] | (m_Hashcode[2] << 8) | (m_Hashcode[1] << 16) | (m_Hashcode[0] << 24)); }
+        }
+
+        public uint CRC2Le
+        {
+            get { return (uint) (m_Hashcode[7] | (m_Hashcode[6] << 8) | (m_Hashcode[5] << 16) | (m_Hashcode[4] << 24)); }
+        }
+
+        public void UpdateRomChecksum(byte[] romSource) {
+            romSource[0x10] = m_Hashcode[3];
+            romSource[0x11] = m_Hashcode[2];
+            romSource[0x12] = m_Hashcode[1];
+            romSource[0x13] = m_Hashcode[0];
+
+            romSource[0x14] = m_Hashcode[7];
+            romSource[0x15] = m_Hashcode[6];
+            romSource[0x16] = m_Hashcode[5];
+            romSource[0x17] = m_Hashcode[4];
+        }
+
+        public void UpdateRomChecksum(Stream romSource) {
+            romSource.Position = 0x10;
+
+            romSource.WriteByte(m_Hashcode[3]);
+            romSource.WriteByte(m_Hashcode[2]);
+            romSource.WriteByte(m_Hashcode[1]);
+            romSource.WriteByte(m_Hashcode[0]);
+
+            romSource.WriteByte(m_Hashcode[7]);
+            romSource.WriteByte(m_Hashcode[6]);
+            romSource.WriteByte(m_Hashcode[5]);
+            romSource.WriteByte(m_Hashcode[4]);
         }
 
         public override void Initialize()

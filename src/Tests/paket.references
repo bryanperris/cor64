@@ -1,3 +1,4 @@
-NUnit
+nunit
+NUnit3TestAdapter
+Microsoft.NET.Test.Sdk
 NLog
-Newtonsoft.Json

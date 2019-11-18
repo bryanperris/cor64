@@ -134,34 +134,34 @@ namespace cor64.RCP
 
             m_Width.Write += () =>
             {
-                Log.Debug("Framebuffer width set to " + m_Width.ReadPtr.AsType_32Swp().ToString("X8"));
+                Log.Debug("Framebuffer width set to " + m_Width.ReadPtr.RegRead().ToString("X8"));
             };
 
             m_XScale.Write += () =>
             {
-                Log.Debug("Framebuffer xscale set to " + m_XScale.ReadPtr.AsType_32Swp().ToString("X8"));
+                Log.Debug("Framebuffer xscale set to " + m_XScale.ReadPtr.RegRead().ToString("X8"));
             };
 
             m_HStart.Write += () =>
             {
-                Log.Debug("Framebuffer hstart set to " + m_HStart.ReadPtr.AsType_32Swp().ToString("X8"));
+                Log.Debug("Framebuffer hstart set to " + m_HStart.ReadPtr.RegRead().ToString("X8"));
             };
 
             m_VStart.Write += () =>
             {
-                Log.Debug("Framebuffer vstart set to " + m_VStart.ReadPtr.AsType_32Swp().ToString("X8"));
+                Log.Debug("Framebuffer vstart set to " + m_VStart.ReadPtr.RegRead().ToString("X8"));
             };
 
             m_YScale.Write += () =>
             {
-                Log.Debug("Framebuffer yscale set to " + m_YScale.ReadPtr.AsType_32Swp().ToString("X8"));
+                Log.Debug("Framebuffer yscale set to " + m_YScale.ReadPtr.RegRead().ToString("X8"));
             };
 
             m_Memory = controller;
 
-            m_XScale.ReadPtr.AsType_32Swp(0x100U * (640U / 160U));
-            m_YScale.ReadPtr.AsType_32Swp(0x100U * (480U / 60U));
-            m_Width.ReadPtr.AsType_32Swp(640);
+            m_XScale.ReadPtr.RegWrite(0x100U * (640U / 160U));
+            m_YScale.ReadPtr.RegWrite(0x100U * (480U / 60U));
+            m_Width.ReadPtr.RegWrite(640);
 
 
             m_ControlRegStruct = new VideoControlReg(m_ControlReg.ReadPtr);
@@ -169,7 +169,7 @@ namespace cor64.RCP
 
         private void CurrentScanlineHandler()
         {
-            uint curr = m_CurrentLine.ReadPtr.AsType_32Swp();
+            uint curr = m_CurrentLine.ReadPtr.RegRead();
 
             Log.Debug("Current scanline set to {0:X8}", curr);
         }
@@ -179,17 +179,17 @@ namespace cor64.RCP
             Log.Debug("Framebuffer pointer set to {0:X8}", FramebufferOffset);
         }
 
-        public int FramebufferOffset => (int)(m_Origin.ReadPtr.AsType_32Swp() << 8 >> 8);
+        public int FramebufferOffset => (int)(m_Origin.ReadPtr.RegRead() << 8 >> 8);
 
-        public uint XScale => m_XScale.ReadPtr.AsType_32Swp();
+        public uint XScale => m_XScale.ReadPtr.RegRead();
 
-        public uint YScale => m_YScale.ReadPtr.AsType_32Swp();
+        public uint YScale => m_YScale.ReadPtr.RegRead();
 
-        public uint HStart => m_HStart.ReadPtr.AsType_32Swp();
+        public uint HStart => m_HStart.ReadPtr.RegRead();
 
-        public uint VStart => m_VStart.ReadPtr.AsType_32Swp();
+        public uint VStart => m_VStart.ReadPtr.RegRead();
 
-        public uint WidthReg => m_Width.ReadPtr.AsType_32Swp();
+        public uint WidthReg => m_Width.ReadPtr.RegRead();
 
         private int ComputeHWidth()
         {
@@ -228,63 +228,64 @@ namespace cor64.RCP
 
         public VideoControlReg ControlReg => m_ControlRegStruct;
 
-        public void CopyFramebufferRGB565(byte[] buffer)
+        public IntPtr FramebufferPtr => m_Memory.RDRAM.GetRamPointer(FramebufferOffset);
+
+        public unsafe void CopyFramebufferRGB565(PinnedBuffer buffer)
         {
-            m_CurrentLine.ReadPtr.AsType_32Swp(0);
+            m_CurrentLine.ReadPtr.RegWrite(0);
 
-            unsafe
+            ushort* srcPixel = (ushort*)m_Memory.RDRAM.GetRamPointer(FramebufferOffset);
+            ushort* dstPixel = (ushort*)buffer.GetPointer();
+
+            for (int i = 0; i < buffer.RawBuffer.Length / 2; i++)
             {
-                fixed (byte* ptr = buffer)
+                ushort pixel = *srcPixel;
+
+                if (CoreConfig.Current.ByteSwap)
                 {
-                    ushort* srcPixel = (ushort*)m_Memory.RDRAM.GetRamPointer(FramebufferOffset);
-                    ushort* dstPixel = (ushort*)ptr;
-
-                    for (int i = 0; i < buffer.Length / 2; i++)
-                    {
-                        ushort pixel = (*srcPixel).ByteSwapped();
-                        srcPixel++;
-
-                        if ((pixel & 1) == 1)
-                        {
-                            pixel >>= 1;
-                            pixel <<= 1;
-                        }
-                        else
-                        {
-                            pixel = 0;
-                        }
-
-                        *dstPixel = pixel;
-                        dstPixel++;
-                    }
+                    pixel.ByteSwapped();
                 }
-            }
 
-            m_CurrentLine.ReadPtr.AsType_32Swp(m_Interrupt.ReadPtr.AsType_32Swp());
+                srcPixel++;
+
+                if ((pixel & 1) == 1)
+                {
+                    pixel >>= 1;
+                    pixel <<= 1;
+                }
+                else
+                {
+                    pixel = 0;
+                }
+
+                *dstPixel = pixel;
+                dstPixel++;
+            }
+            m_CurrentLine.ReadPtr.RegWrite(m_Interrupt.ReadPtr.RegRead());
         }
 
-        public void CopyFramebufferRGBA8888(byte[] buffer)
+        public unsafe void CopyFramebufferRGBA8888(PinnedBuffer buffer)
         {
-            m_CurrentLine.ReadPtr.AsType_32Swp(0);
+            m_CurrentLine.ReadPtr.RegWrite(0);
 
-            unsafe
+            uint* srcPixel = (uint*)m_Memory.RDRAM.GetRamPointer(FramebufferOffset);
+            uint* dstPixel = (uint*)buffer.GetPointer();
+
+            for (int i = 0; i < buffer.RawBuffer.Length / 4; i++)
             {
-                fixed (byte* ptr = buffer)
-                {
-                    uint* srcPixel = (uint*)m_Memory.RDRAM.GetRamPointer(FramebufferOffset);
-                    uint* dstPixel = (uint*)ptr;
+                uint pixel = *srcPixel;
 
-                    for (int i = 0; i < buffer.Length / 4; i++)
-                    {
-                        uint pixel = *srcPixel;
-                        srcPixel++;
-                        *dstPixel = pixel;
-                        dstPixel++;
-                    }
+                if (!CoreConfig.Current.ByteSwap)
+                {
+                    pixel = pixel.ByteSwapped();
                 }
+
+                srcPixel++;
+                *dstPixel = pixel;
+                dstPixel++;
             }
 
-            m_CurrentLine.ReadPtr.AsType_32Swp(m_Interrupt.ReadPtr.AsType_32Swp());
+            m_CurrentLine.ReadPtr.RegWrite(m_Interrupt.ReadPtr.RegRead());
         }
 
         public void SetVideoInterrupt()

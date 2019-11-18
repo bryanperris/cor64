@@ -1,5 +1,6 @@
 ﻿using System;
 using cor64.IO;
+using NLog;
 
 namespace cor64.RCP
 {
@@ -21,6 +22,7 @@ namespace cor64.RCP
 	 */
     public class SignalProcessorMemory : PerpherialDevice
     {
+        private readonly static Logger Log = LogManager.GetCurrentClassLogger();
         private MemMappedBuffer m_DMemory = new MemMappedBuffer(0x1000);
         private MemMappedBuffer m_IMemory = new MemMappedBuffer(0x1000);
         private MemMappedBuffer m_MemAddress = new MemMappedBuffer(4);
@@ -41,11 +43,20 @@ namespace cor64.RCP
             Map(m_MemAddress, m_DramAddress, m_ReadLen, m_WriteLen, m_Status, m_Full, m_Busy, m_Semaphore);
             Map(0x3FFE0);
             Map(m_PC, m_Bist);
+
+            /* Subscribe to program counter writes */
+            m_PC.Write += () => {
+                Log.Debug("Start RSP Task: " + m_PC.WritePtr.AsType_32Swp().ToString("X8"));
+            };
+
+            m_DramAddress.Write += () => {
+                Log.Debug("RSP ucode address set");
+            };
         }
 
         public void SetStatus(uint value)
         {
-            m_Status.WritePtr.AsType_32Swp(value);
+            m_Status.WritePtr.RegWrite(value);
         }
 
         // TODO: Implement status reg for SP and map it map2 A and B

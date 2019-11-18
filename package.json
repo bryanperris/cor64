@@ -1,0 +1,14 @@
+{
+  "name": "cor64",
+  "version": "1.0.0",
+  "description": "cor64",
+  "scripts": {
+    "start": "gulp"
+  },
+  "devDependencies": {
+    "del": "^5.1.0",
+    "gulp": "^4.0.2",
+    "gulp-dotnet-cli": "^1.1.0",
+    "gulp-util": "^3.0.8"
+  }
+}

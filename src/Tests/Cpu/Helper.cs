@@ -31,7 +31,7 @@ namespace Tests.Cpu
         {
             s_InterpreterList = new List<RuntimeTypeHandle>()
             {
-                typeof(TestableSimpleInterpreter).TypeHandle,
+                typeof(TestableInterpreter).TypeHandle,
                 typeof(TestableILRecompiler).TypeHandle
             };
 
@@ -192,6 +192,9 @@ namespace Tests.Cpu
                         continue;
                     }
                 }
+
+                /* Configure the machine env first */
+                CoreConfig.Current.ByteSwap = true;
 
                 /* Test in 64-bit Kernel Mode */
                 if (testCase.Test64)

@@ -8,18 +8,13 @@ using System.Threading.Tasks;
 
 namespace cor64.Mips
 {
-    public abstract class VMemStream : StreamEx
+    public abstract class VMemStream : Stream
     {
-        private StreamEx m_BaseStream;
+        private Stream m_BaseStream;
 
-        protected VMemStream(StreamEx streamEx)
+        protected VMemStream(Stream stream)
         {
-            m_BaseStream = streamEx;
-        }
-
-        public override bool AlignmentMode {
-            get => m_BaseStream.AlignmentMode;
-            set => m_BaseStream.AlignmentMode = value;
+            m_BaseStream = stream;
         }
 
         protected abstract long TranslateAddress(long address);

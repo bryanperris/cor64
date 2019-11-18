@@ -6,29 +6,53 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
-using static cor64.IO.StreamEx;
 
 namespace cor64.Mips
 {
     public class DataMemory : IDisposable
     {
-        private StreamEx m_DataStream;
+        private Stream m_DataStream;
         private byte[] m_DataBuffer;
         private GCHandle m_BufferHandle;
         private IntPtr m_BufferPtr;
         public long LastAddress { get; private set; }
 
-        public DataMemory(StreamEx stream)
+        /* Configured memory accessors */
+        private Func<ushort> m_MemRead16;
+        private Action<ushort> m_MemWrite16;
+        private Func<uint> m_MemRead32;
+        private Action<uint> m_MemWrite32;
+        private Func<ulong> m_MemRead64;
+        private Action<ulong> m_MemWrite64;
+
+        public DataMemory(Stream stream)
         {
             m_DataStream = stream;
             m_DataBuffer = new byte[8];
             m_BufferHandle = GCHandle.Alloc(m_DataBuffer, GCHandleType.Pinned);
             m_BufferPtr = m_BufferHandle.AddrOfPinnedObject();
+
+            if (CoreConfig.Current.ByteSwap) {
+                m_MemRead16 = () => m_BufferPtr.AsType_16Swp();
+                m_MemRead32 = () => m_BufferPtr.AsType_32Swp();
+                m_MemRead64 = () => m_BufferPtr.AsType_64Swp();
+                m_MemWrite16 = (x) => m_BufferPtr.AsType_16Swp(x);
+                m_MemWrite32 = (x) => m_BufferPtr.AsType_32Swp(x);
+                m_MemWrite64 = (x) => m_BufferPtr.AsType_64Swp(x);
+            }
+            else {
+                m_MemRead16 = () => m_BufferPtr.AsType_16();
+                m_MemRead32 = () => m_BufferPtr.AsType_32();
+                m_MemRead64 = () => m_BufferPtr.AsType_64();
+                m_MemWrite16 = (x) => m_BufferPtr.AsType_16(x);
+                m_MemWrite32 = (x) => m_BufferPtr.AsType_32(x);
+                m_MemWrite64 = (x) => m_BufferPtr.AsType_64(x);
+            }
         }
 
-        public StreamEx BaseStream => m_DataStream;
+        public Stream BaseStream => m_DataStream;
 
-        public void ReadData(long address, int size, bool aligned)
+        public void ReadData(long address, int size)
         {
             // Clear buffer
             Data64 = 0;
@@ -44,7 +68,6 @@ namespace cor64.Mips
                     throw new ArgumentException();
                 }
 
-                m_DataStream.AlignmentMode = aligned;
                 m_DataStream.Position = address;
                 m_DataStream.Read(m_DataBuffer, 0, size);
 
@@ -56,7 +79,7 @@ namespace cor64.Mips
             }
         }
 
-        public void WriteData(long address, int size, bool aligned)
+        public void WriteData(long address, int size)
         {
             try
             {
@@ -70,7 +93,6 @@ namespace cor64.Mips
 
                 //Console.WriteLine("Write {0:X16} to {1:X8}", Data64, address);
 
-                m_DataStream.AlignmentMode = aligned;
                 m_DataStream.Position = address;
                 m_DataStream.Write(m_DataBuffer, 0, size);
             }
@@ -86,40 +108,19 @@ namespace cor64.Mips
             set => m_BufferPtr.AsType_8(value);
         }
 
-        public ushort Data16
-        {
-            get => m_BufferPtr.AsType_16();
-            set => m_BufferPtr.AsType_16(value);
+        public ushort Data16 {
+            get => m_MemRead16();
+            set => m_MemWrite16(value);
         }
 
-        public uint Data32
-        {
-            get => m_BufferPtr.AsType_32();
-            set => m_BufferPtr.AsType_32(value);
+        public uint Data32 {
+            get => m_MemRead32();
+            set => m_MemWrite32(value);
         }
 
-        public ulong Data64
-        {
-            get => m_BufferPtr.AsType_64();
-            set => m_BufferPtr.AsType_64(value);
-        }
-
-        public ushort Data16Swp
-        {
-            get => m_BufferPtr.AsType_16Swp();
-            set => m_BufferPtr.AsType_16Swp(value);
-        }
-
-        public uint Data32Swp
-        {
-            get => m_BufferPtr.AsType_32Swp();
-            set => m_BufferPtr.AsType_32Swp(value);
-        }
-
-        public ulong Data64Swp
-        {
-            get => m_BufferPtr.AsType_64Swp();
-            set => m_BufferPtr.AsType_64Swp(value);
+        public ulong Data64 {
+            get => m_MemRead64();
+            set => m_MemWrite64(value);
         }
 
         public byte[] ReadBuffer()

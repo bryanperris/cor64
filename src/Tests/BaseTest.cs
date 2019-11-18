@@ -3,6 +3,9 @@ using NUnit.Framework;
 using NLog;
 using NLog.Config;
 using NLog.Targets;
+using cor64;
+using cor64.BareMetal;
+using NLog.Filters;
 
 namespace Tests
 {
@@ -11,18 +14,20 @@ namespace Tests
         [SetUp]
         public void Setup()
         {
+            Console.SetOut(TestContext.Progress);
+
             LoggingConfiguration configuration = new LoggingConfiguration();
 
-            String layout = @"${date:format=HH\:mm\:ss} ${logger} ${message}";
+            String layout = @"${logger} ${message}";
 
-            NLogViewerTarget nLogViewerTarget = new NLogViewerTarget()
-            {
-                Layout = layout,
-                Address = "tcp4://localhost:9999"
-            };
+            // NLogViewerTarget nLogViewerTarget = new NLogViewerTarget()
+            // {
+            //     Layout = layout,
+            //     Address = "tcp4://localhost:9999"
+            // };
 
-            configuration.AddTarget("log4view", nLogViewerTarget);
-            configuration.LoggingRules.Add(new LoggingRule("*", LogLevel.Trace, nLogViewerTarget));
+            // configuration.AddTarget("log4view", nLogViewerTarget);
+            // configuration.LoggingRules.Add(new LoggingRule("*", LogLevel.Trace, nLogViewerTarget));
 
             ColoredConsoleTarget consoleTarget = new ColoredConsoleTarget()
             {
@@ -30,7 +35,19 @@ namespace Tests
             };
 
             configuration.AddTarget("console", consoleTarget);
-            configuration.LoggingRules.Add(new LoggingRule("*", LogLevel.Trace, consoleTarget));
+
+            var rule = new LoggingRule("*", LogLevel.Debug, consoleTarget)
+            {
+                DefaultFilterResult = FilterResult.Log
+            };
+
+            rule.Filters.Add(new ConditionBasedFilter()
+            {
+                Condition = "starts-with('${logger}','cor64.BassSharp')",
+                Action = FilterResult.Ignore
+            });
+
+            configuration.LoggingRules.Add(rule);
 
             LogManager.Configuration = configuration;
             LogManager.Flush();

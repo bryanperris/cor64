@@ -399,7 +399,6 @@ namespace cor64.Mips.R4300I.JitIL
             LogIL(opcode.Name + " " + meth.Name);
         }
 
-        [CLSCompliant(false)]
         protected void Emit(OpCode opcode, sbyte arg)
         {
             m_Generator.Emit(opcode, arg);

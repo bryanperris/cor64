@@ -1,3 +1,4 @@
 ﻿{
-  "romFile": "TestRoms/helloworld.z64"
+  "useInterpreter": false,
+  "romFile": "TestRoms/Mandelbrot32BPP640X480_D.N64"
 }

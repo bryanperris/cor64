@@ -29,5 +29,59 @@ namespace cor64
                            ((value& 0x00FF000000000000UL) >> 40) |
                            ((value& 0xFF00000000000000UL) >> 56);
         }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ushort ToUInt16(this byte[] buffer, int offset = 0) {
+            unsafe {
+                fixed (byte * ptr = buffer) {
+                    return *(ushort *)(ptr + offset);
+                }
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void ToUInt16(this byte[] buffer, ushort value, int offset = 0) {
+            unsafe {
+                fixed (byte * ptr = buffer) {
+                    *(ushort *)(ptr + offset) = value;
+                }
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static uint ToUInt32(this byte[] buffer, int offset = 0) {
+            unsafe {
+                fixed (byte * ptr = buffer) {
+                    return *(uint *)(ptr + offset);
+                }
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void ToUInt32(this byte[] buffer, uint value, int offset = 0) {
+            unsafe {
+                fixed (byte * ptr = buffer) {
+                    *(uint *)(ptr + offset) = value;
+                }
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ulong ToUInt64(this byte[] buffer, int offset = 0) {
+            unsafe {
+                fixed (byte * ptr = buffer) {
+                    return *(ulong *)(ptr + offset);
+                }
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void ToUInt64(this byte[] buffer, ulong value, int offset = 0) {
+            unsafe {
+                fixed (byte * ptr = buffer) {
+                    *(ulong *)(ptr + offset) = value;
+                }
+            }
+        }
     }
 }

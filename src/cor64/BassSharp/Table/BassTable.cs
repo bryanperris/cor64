@@ -142,16 +142,16 @@ namespace cor64.BassSharp.Table
                  * othwewise it is a match
                  */
 
-                foreach (var format in opcode.FormatList.Where((f) => f.FType == Format.Type.Absolute && f.FMatch == Format.Match.Weak )) {
+                foreach (var format in opcode.FormatList.Where((f) => f.FType == Format.Type.Absolute && f.FMatch != Format.Match.Weak )) {
                     String arg = args[format.Argument];
                     int bits = ArgumentBitLength(ref arg);
                     args[format.Argument] = arg;
+                    var expectedSize = opcode.NumberList[format.Argument].Bits;
 
-                    if (bits != opcode.NumberList[format.Argument].Bits) {
-                        if (format.FMatch == Format.Match.Exact || bits != 0) {
-                            mismatch = true;
-                            break;
-                        }
+                    /* We get a mismatch is the argument size is not an exact match */
+                    if (bits != expectedSize && (format.FMatch == Format.Match.Exact || bits != 0)) {
+                        mismatch = true;
+                        break;
                     }
                 }
 

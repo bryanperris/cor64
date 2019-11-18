@@ -43,9 +43,9 @@ namespace cor64.RCP
 
         private void WriteLengthWrite()
         {
-            SourceAddress = m_CartAddress.ReadPtr.AsType_32Swp();
-            DestAddress = m_DramAddress.ReadPtr.AsType_32Swp();
-            int size = (int)m_WriteLen.ReadPtr.AsType_32Swp() + 1;
+            SourceAddress = m_CartAddress.ReadPtr.RegRead();
+            DestAddress = m_DramAddress.ReadPtr.RegRead();
+            int size = (int)m_WriteLen.ReadPtr.RegRead() + 1;
 
             Debugger.Current.Track_DmaOperation("PI", SourceAddress, DestAddress, size);
 
@@ -54,9 +54,9 @@ namespace cor64.RCP
 
         private void ReadLengthWrite()
         {
-            SourceAddress = m_DramAddress.ReadPtr.AsType_32Swp();
-            DestAddress = m_CartAddress.ReadPtr.AsType_32Swp();
-            int size = (int)m_WriteLen.ReadPtr.AsType_32Swp() + 1;
+            SourceAddress = m_DramAddress.ReadPtr.RegRead();
+            DestAddress = m_CartAddress.ReadPtr.RegRead();
+            int size = (int)m_WriteLen.ReadPtr.RegRead() + 1;
 
             Debugger.Current.Track_DmaOperation("PI", SourceAddress, DestAddress, size);
 

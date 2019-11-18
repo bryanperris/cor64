@@ -43,5 +43,9 @@ namespace cor64.Mips
         {
             return !(a.Equals(b));
         }
+
+        public override int GetHashCode() {
+            return this.ID;
+        }
     }
 }
