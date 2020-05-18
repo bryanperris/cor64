@@ -9,6 +9,7 @@ using NLog;
 using System.IO;
 using cor64.Mips.R4300I;
 using cor64.Debugging;
+using cor64.RCP;
 
 namespace cor64
 {
@@ -34,32 +35,48 @@ namespace cor64
         {
             switch (kind)
             {
-                case BootManager.MMIORegWriteKind.MiVersion: DeviceMemory.Interface_MI.SetVersion(v); break;
-                case BootManager.MMIORegWriteKind.SpStatus: DeviceMemory.Interface_SP.SetStatus(v); break;
+                case BootManager.MMIORegWriteKind.MiVersion: DeviceRcp.RcpInterface.SetVersion(v); break;
+                case BootManager.MMIORegWriteKind.SpStatus: DeviceRcp.RspInterface.SetStatus(v); break;
                 default: break;
             }
         }
 
         public N64System CPU(InterpreterBaseR4300I interpreter)
         {
-            Log.Info("MIPS R4300I CPU Engine: {0}", interpreter.Description);
+            Log.Info("CPU Engine: {0}", interpreter.Description);
 
             DeviceCPU = interpreter;
 
-            interpreter.AttachIStream(DeviceMemory.CreateMemoryStream());
-            interpreter.AttachDStream(DeviceMemory.CreateMemoryStream());
-            interpreter.AttachSystemMemory(DeviceMemory);
             interpreter.AttachBootManager(m_BootManager);
             return this;
         }
 
         public N64System Boot(Cartridge cartridge)
         {
+            /* Attach cartridge to system */
             m_Cartridge = cartridge;
             DeviceMemory.MountCartridge(cartridge);
-            DeviceMemory.Init();
-            m_BootManager.BootCartridge(cartridge, true);
             DeviceCPU.SetProgramEntryPoint(cartridge.EntryPoint);
+
+            /* Attach RCP to memory */
+            DeviceRcp.AttachToMemory(DeviceMemory);
+
+            /* Initialize system memory */
+            DeviceMemory.Init();
+
+            /* Attach memory to CPU */
+            DeviceCPU.AttachIStream(DeviceMemory.CreateMemoryStream());
+            DeviceCPU.AttachDStream(DeviceMemory.CreateMemoryStream());
+
+            /* Attach RCP to CPU */
+            DeviceCPU.AttachRcp(DeviceRcp);
+
+            /* Perform system boot intialization (Motherboard IPl) */
+            m_BootManager.BootCartridge(cartridge, true);
+
+            /* Start the RCP Core */
+            DeviceRcp.Start();
+
             return this;
         }
 
@@ -84,11 +101,6 @@ namespace cor64
 
         // For supporting multiple threads, we need an event system to schedule ticks in parallel
 
-        public void DebugMode()
-        {
-            DeviceMemory.DebugMode();
-        }
-
         public void DumpExecutionLog(Stream stream)
         {
             StreamWriter writer = new StreamWriter(stream);
@@ -98,7 +110,12 @@ namespace cor64
                 if (DeviceCPU.TraceLog.Size > 0)
                 {
                     writer.WriteLine("Trace Log Dump:");
-                    writer.WriteLine(DeviceCPU.TraceLog.GenerateTraceLog());
+
+                    var tracelog = DeviceCPU.TraceLog.GenerateTraceLog();
+
+                    for (int i = 0; i < tracelog.Count; i++)
+                        writer.WriteLine(tracelog[i]);
+
                     writer.WriteLine("\n\n");
                     writer.Flush();
                 }
@@ -114,5 +131,7 @@ namespace cor64
         public InterpreterBaseR4300I DeviceCPU { get; private set; }
 
         public N64MemoryController DeviceMemory { get; }
+
+        public RcpCore DeviceRcp { get; } = new RcpCore();
     }
 }

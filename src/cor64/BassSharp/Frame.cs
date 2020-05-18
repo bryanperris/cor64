@@ -11,9 +11,9 @@ namespace cor64.BassSharp
         private int m_Ip;
         private bool m_Scoped;
         private Instruction m_InvokedBy;
-        private HashSet<Macro> m_Macros = new HashSet<Macro>();
-        private HashSet<Define> m_Defines = new HashSet<Define>();
-        private HashSet<Variable> m_Variables = new HashSet<Variable>();
+        private readonly HashSet<Macro> m_Macros = new HashSet<Macro>();
+        private readonly HashSet<Define> m_Defines = new HashSet<Define>();
+        private readonly HashSet<Variable> m_Variables = new HashSet<Variable>();
 
         public Frame()
         {

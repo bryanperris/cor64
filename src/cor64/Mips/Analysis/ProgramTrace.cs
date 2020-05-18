@@ -1,4 +1,6 @@
 ﻿using cor64.Debugging;
+using cor64.Mips.R4300I;
+using NLog;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -11,11 +13,28 @@ namespace cor64.Mips.Analysis
 
     public class ProgramTrace
     {
-        private Dictionary<ulong, InfoBasicBlock> m_BlockRef = new Dictionary<ulong, InfoBasicBlock>();
+        private readonly static Logger Log = LogManager.GetCurrentClassLogger();
+        private readonly Dictionary<ulong, InfoBasicBlock> m_InstMapping = new Dictionary<ulong, InfoBasicBlock>();
         private InfoBasicBlock m_Root;
-        private List<InfoBasicBlock> m_Blocks = new List<InfoBasicBlock>();
-        private List<String> m_RawTraceLog = new List<string>();
-        private BaseDisassembler m_Disassembler;
+        private readonly List<InfoBasicBlock> m_Blocks = new List<InfoBasicBlock>();
+        private readonly List<String> m_TestLog = new List<string>();
+        private readonly BaseDisassembler m_Disassembler;
+        private readonly List<InfoBasicBlockLink> m_Links = new List<InfoBasicBlockLink>();
+        private InfoBasicBlockLink m_LastLink;
+        private bool m_InServiceHandler;
+
+        /* Builder State */
+        private InfoBasicBlock m_CurrentBlock;
+        private InfoBasicBlockInstruction m_CurrentInst;
+        private bool m_EndOfBlock = false;
+        private bool m_InDelaySlot = false;
+        private bool m_EndedWithEret = false;
+        private ulong m_LastBranch = 0;
+        private bool m_Freeze;
+        private InfoBasicBlock m_LastBlock;
+
+        /* Debugging */
+        private bool m_TestMode = false;
 
         /* Meta attachments */
         private MemoryAccessMeta m_Attachment_MemAccess = null;
@@ -34,21 +53,9 @@ namespace cor64.Mips.Analysis
             MemoryAccess = 0b1
         }
 
-        /* Program Informaton */
-        private ulong m_EntryPoint;
-
-        /* Builder State */
-        private InfoBasicBlock m_CurrentBlock;
-        private InfoBasicBlockInstruction m_CurrentInst;
-        private bool m_EndOfBlock = false;
-        private bool m_InDelaySlot = false;
-        private ulong m_LastBranch = 0;
-        private bool m_Freeze;
-        private InfoBasicBlock m_LastBlock;
-        private InfoBasicBlockLink m_LastLink;
-
-        /* Debugging */
-        private bool m_DebugCheck = false;
+        public void SetTestMode() {
+            m_TestMode = true;
+        }
 
         public ProgramTrace(BaseDisassembler disassembler)
         {
@@ -57,42 +64,48 @@ namespace cor64.Mips.Analysis
 
         public void AppendInstruction(DecodedInstruction inst, bool nullified)
         {
-            //String blockHasInst = m_BlockRef.ContainsKey(inst.Address) ? "CACHED" : "APPEND";
+            if (m_TestMode) {
+                var label = m_Disassembler.GetLabel(inst.Address);
 
-            if (m_DebugCheck)
-                m_RawTraceLog.Add(new InfoBasicBlockInstruction(m_Disassembler, inst, nullified).ToString());
+                if (!String.IsNullOrEmpty(label)) {
+                    m_TestLog.Add(label + ":");
+                }
+
+                m_TestLog.Add(new InfoBasicBlockInstruction(m_Disassembler, inst, nullified).ToString());
+            }
 
             /* End of block indicated via delay slot signal */
             if (m_EndOfBlock)
             {
                 /* First determine if we truly are executing the delay slot */
-                if (!m_InDelaySlot && m_LastBranch + 4 == inst.Address)
+                if (!m_EndedWithEret && !m_InDelaySlot && m_LastBranch + 4 == inst.Address)
                 {
                     m_InDelaySlot = true;
-                    //Console.WriteLine("IN DELAY SLOT");
                 }
                 else
                 {
-                    m_LastBlock = m_CurrentBlock;
+                    /* End the block and move on to the next when we have moved out of the delay slot */
+                    if ((m_InDelaySlot && m_LastBranch + 4 != inst.Address) || m_EndedWithEret) {
+                        m_LastBlock = m_CurrentBlock;
 
-                    if (m_BlockRef.ContainsKey(inst.Address))
-                    {
-                        var block = m_BlockRef[inst.Address];
-                        m_CurrentBlock = block;
-                        m_Freeze = true;
+                        /* Check if the instruction has been associated with a block already */
+                        if (m_InstMapping.ContainsKey(inst.Address))
+                        {
+                            m_CurrentBlock = m_InstMapping[inst.Address];
+                            m_Freeze = true;
+                        }
+                        else
+                        {
+                            /* We jumped somewhere new */
+                            m_Freeze = false;
+                            m_CurrentBlock = null;
+                        }
+
+                        /* Ok we are on the next block */
+                        m_EndOfBlock = false;
+                        m_InDelaySlot = false;
+                        m_EndedWithEret = false;
                     }
-                    else
-                    {
-                        /* We jumped somewhere new */
-                        m_Freeze = false;
-                        m_CurrentBlock = null;
-                    }
-
-                    /* Ok we are on the next block */
-                    m_EndOfBlock = false;
-                    m_InDelaySlot = false;
-
-                    //Console.WriteLine("NEXT BLOCK");
                 }
             }
 
@@ -111,59 +124,95 @@ namespace cor64.Mips.Analysis
             /* Link blocks if not null */
             if (m_LastBlock != null)
             {
-                m_LastLink = m_LastBlock.LinkBlock(m_CurrentBlock, (int)(inst.Address - m_CurrentBlock.Address) / 4);
+                InfoBasicBlockLink link;
+                int blockIndex = 0;
+
+                /* Subtract 4 because hitting this spot should be after end of block */
+                if (inst.Address != m_CurrentBlock.Address) {
+                    var byteOffset = inst.Address - 4 - m_CurrentBlock.Address;
+                    blockIndex = (int)byteOffset / 4;
+                    link = new InfoBasicBlockLink(m_CurrentBlock, blockIndex);
+                }
+                else {
+                    link = new InfoBasicBlockLink(m_CurrentBlock, 0);
+                }
+
+                /* Detect a simple loop */
+                if (m_LastLink != null && link.LinkedBlock.Address == m_LastLink.LinkedBlock.Address /*&& link.BlockOffset == m_LastLink.BlockOffset*/) {
+                    m_LastLink.IncrementRepeat();
+                }
+                else {
+                    m_LastLink = link;
+                    m_Links.Add(m_LastLink);
+                    m_LastBlock.AppendBlockLink(link);
+                }
+
                 m_LastBlock = null;
             }
 
             if (!m_Freeze)
             {
                 m_CurrentInst = new InfoBasicBlockInstruction(m_Disassembler, inst, nullified);
-                m_CurrentBlock.Append(m_CurrentInst);
 
-                if (m_BlockRef.ContainsKey(inst.Address))
+                /* This happens when a block overlaps another block, they just get merged */
+                if (m_InstMapping.ContainsKey(inst.Address))
                 {
-                    /* This happens when a block overlaps another block, they just get merged */
+                    var originalBlock = m_InstMapping[inst.Address];
+                    var originalBlockAddress = originalBlock.Address;
 
-                    /* Merge the new block into the existing one */
-                    var block = m_BlockRef[inst.Address];
-                    block.MergeBlockToHead(m_CurrentBlock);
+                    /* Update block linking */
+                    foreach (var blockLink in m_Links) {
+                        /* Update links that have to be shifted to the correct offset */
+                        if (blockLink.TargetAddress == originalBlockAddress) {
+                            blockLink.Modify(originalBlock, blockLink.BlockOffset + m_CurrentBlock.InstructionList.Count);
+                        }
 
-                    /* Fix the block ref table */
-                    for (ulong i = block.Address; i <= (block.Address + (ulong)block.Size); i++)
-                    {
-                        m_BlockRef[i] = block;
+                        /* Update links that point to the block that will be removed */
+                        if (blockLink.TargetAddress == m_CurrentBlock.Address) {
+                            blockLink.Modify(originalBlock, 0);
+                        }
                     }
 
-                    /* Fix block linking */
-                    // TODO: Is it safe to assume block link offset is always 0?
-                    if (m_LastLink != null && m_LastLink.LinkedBlock == m_CurrentBlock)
+                    /* Merge the new block into the existing one */
+                    originalBlock.MergeBlockToHead(m_CurrentBlock);
+
+                    /* Update the instuction mapping */
+                    for (uint i = 0; i < originalBlock.Size; i++)
                     {
-                        m_LastLink.Modify(block, 0);
+                        m_InstMapping[originalBlock.Address + i] = originalBlock;
                     }
 
                     m_Freeze = true;
                     m_Blocks.Remove(m_CurrentBlock);
-                    m_CurrentBlock = block;
+                    m_CurrentBlock = originalBlock;
                 }
                 else
                 {
-                    m_BlockRef.Add(inst.Address, m_CurrentBlock);
+                    m_CurrentBlock.Append(m_CurrentInst);
+                    m_InstMapping.Add(inst.Address, m_CurrentBlock);
                 }
             }
             else
             {
-                var blockIndex = (inst.Address - m_CurrentBlock.Address) / 4;
-
-                if ((int)blockIndex >= m_CurrentBlock.InstructionList.Count)
-                {
-                    throw new ArgumentOutOfRangeException("block index is out of range");
+                if (!m_InstMapping.ContainsKey(inst.Address)) {
+                    throw new InvalidOperationException(String.Format("Instruction wasn't found in the instruction map: {0:X8} {1}", inst.Address, m_Disassembler.GetFullDisassembly(inst)));
                 }
 
-                m_CurrentInst = m_CurrentBlock.InstructionList[(int)blockIndex];
+                /* We don't modify anything here, just update the current block/inst we are in, so notes can be added to them */
+
+                m_CurrentBlock = m_InstMapping[inst.Address];
+                var blockIndex = (int) ((inst.Address - m_CurrentBlock.Address) / 4);
+                m_CurrentInst = m_CurrentBlock.InstructionList[blockIndex];
             }
 
             if (inst.IsBranch)
             {
+                m_EndOfBlock = true;
+                m_LastBranch = inst.Address;
+            }
+
+            if (inst.Opcode.StartsWith("eret")) {
+                m_EndedWithEret = true;
                 m_EndOfBlock = true;
                 m_LastBranch = inst.Address;
             }
@@ -174,24 +223,14 @@ namespace cor64.Mips.Analysis
                 m_CurrentInst.AppendMemoryAccess(m_Attachment_MemAccess);
                 m_Attachment_MemAccess = null;
             }
-
-            //String end = m_EndOfBlock ? "BLOCKEND" : "";
-            //String frozen = m_Freeze ? "FROZEN" : "NOTFROZEN";
-            //String status = blockHasInst + " " + frozen + " " + end;
-            //Console.WriteLine("{0:X8} {1} {2}", inst.Address, m_Disassembler.GetFullDisassembly(inst), status);
         }
 
-        internal void Backtrack()
+        public IList<String> GenerateTraceLog()
         {
-            throw new NotImplementedException();
-        }
-
-        public string GenerateTraceLog()
-        {
-            StringBuilder stringBuilder = new StringBuilder();
+            List<String> traceLog = new List<string>();
             Dictionary<ulong, int> blockHitCounter = new Dictionary<ulong, int>();
             var currBlock = m_Root;
-            var offset = 0;
+            var blockOffset = 0;
 
             while (currBlock != null)
             {
@@ -203,21 +242,59 @@ namespace cor64.Mips.Analysis
                     blockHitCounter.Add(currBlock.Address, 0);
                 }
 
-                var blockHit = blockHitCounter[currBlock.Address];
+                var linkIndex = blockHitCounter[currBlock.Address];
 
-                for (int i = offset; i < code.Length; i++)
+                for (int i = blockOffset; i < code.Length; i++)
                 {
                     var codeLine = code[i];
-                    stringBuilder.Append(codeLine.ToString());
                     codeLine.IncrementUsageRef();
+
+                    var label = m_Disassembler.GetLabel(codeLine.Address, false);
+
+                    if (!String.IsNullOrEmpty(label)) {
+                        traceLog.Add(label + ":");
+                    }
+
+                    if (FilterInterruptHandlers) {
+                        if (codeLine.Inst.Address == 0x80000180) {
+                            m_InServiceHandler = true;
+                        }
+                    }
+
+                    if (m_InServiceHandler) {
+                        if (codeLine.Inst.Op.ID == Opcodes.ERET.ID) {
+                            m_InServiceHandler = false;
+                            continue;
+                        }
+
+                        continue;
+                    }
+
+                    codeLine.AddToLog(traceLog);
                 }
 
-                if (blockHit < links.Count)
+                if (linkIndex < links.Count)
                 {
-                    var oldBlock = currBlock;
-                    currBlock = links[blockHit].LinkedBlock;
-                    offset = links[blockHit].BlockOffset;
-                    blockHitCounter[oldBlock.Address]++;
+                    /* Get the next link */
+                    var link = links[linkIndex];
+
+                    /* Does it repeat the last block? */
+                    if (link.Repeat > 0) {
+                        traceLog.Add(String.Format("( Repeats for {0} time(s) )", link.Repeat));
+                        blockHitCounter[currBlock.Address] += link.Repeat;
+
+                        if (link.LinkedBlock.Address == currBlock.Address) {
+                            if (linkIndex + 1 < link.LinkedBlock.Links.Count) {
+                                link = links[linkIndex + 1];
+                            }
+                        }
+                    }
+                    else {
+                        blockHitCounter[currBlock.Address]++;
+                    }
+
+                    currBlock = link.LinkedBlock;
+                    blockOffset = link.BlockOffset;
                 }
                 else
                 {
@@ -225,7 +302,7 @@ namespace cor64.Mips.Analysis
                 }
             }
 
-            return stringBuilder.ToString();
+            return traceLog;
         }
 
         public void AddInstructionMemAccess(ulong address, bool isWrite, String val)
@@ -239,6 +316,10 @@ namespace cor64.Mips.Analysis
         public int Size => m_Blocks.Count;
 
         public TraceDetails Details { get; set; }
+
+        public IList<String> TestLog => m_TestLog;
+
+        public bool FilterInterruptHandlers { get; set; }
 
         private void AddJumpArrow(IList<String> input, int start, int end, int repeat)
         {

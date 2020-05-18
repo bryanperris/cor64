@@ -9,7 +9,7 @@
             "type": "coreclr",
             "request": "launch",
             "windows": {
-                "program": "${workspaceFolder}/bin/RunN64.exe"
+                "program": "${workspaceFolder}/bin/RunN64.exe",
             },
             "linux": {
                 "program": "${workspaceFolder}/bin/RunN64"
@@ -18,7 +18,7 @@
             "args": [],
             "cwd": "${workspaceFolder}/bin",
             // For more information about the 'console' field, see https://aka.ms/VSCode-CS-LaunchJson-Console
-            "console": "internalConsole",
+            "console": "externalTerminal",
             "stopAtEntry": false
         },
         {

@@ -8,45 +8,32 @@ using System.Threading;
 using System.Threading.Tasks;
 using cor64.Debugging;
 using cor64.IO;
+using cor64.RCP;
 using NLog;
 using static cor64.Cartridge;
+
+using static cor64.Mips.OpcodesCommon;
 using static cor64.Mips.R4300I.Opcodes;
-
-public enum DebugInstMode
-{
-    None,
-    Full,
-    ProgramOnly
-}
-
 
 namespace cor64.Mips.R4300I
 {
-    public abstract class InterpreterBaseR4300I : R4300IBase
+    public abstract class InterpreterBaseR4300I : BaseInterpreter, IMipsOpcodes
     {
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
-        private Action<DecodedInstruction>[] m_CallTable;
+        protected readonly Opcodes.CallTable CallTable = Opcodes.CreateCallTable();
         private SystemController m_Coprocessor0;
         private Clock m_CoreClock;
         protected DataMemory m_DataMemory;
-        private Profiler m_Profiler = new Profiler();
         public bool StartedWithProfiler { get; protected set; }
         private CoreDebugger m_CoreDebugger = new CoreDebugger();
 
-        /* This is to ensures that the static opcode factory gets called before we the mapping */
-        private Dictionary<int, Action<DecodedInstruction>> m_SafeCallMap = new Dictionary<int, Action<DecodedInstruction>>();
 
         /* TODO: When we do have a cache system, 
          * some conditions of the cache can break
          * atomic operations (LLBit is set back to 0)
          */
 
-        protected bool EnableCp0 { get; set; } = true;
-        protected bool EnableCp1 { get; set; } = true;
-
         /* Debugging */
-
-        protected DebugInstMode core_InstDebugMode;
 
         protected InterpreterBaseR4300I(BaseDisassembler disassembler) : base(disassembler)
         {
@@ -56,68 +43,61 @@ namespace cor64.Mips.R4300I
             m_CoreClock = new Clock(10, 2);
             m_Coprocessor0 = new SystemController(State, m_CoreClock);
 
-            Map(Add32, ADD, ADDU, ADDI, ADDIU);
-            Map(BitwiseLogic, AND, ANDI, OR, ORI, NOR, XOR, XORI);
-            Map(Add64, DADD, DADDI, DADDIU, DADDU);
-            Map(Divide32, DIV, DIVU);
-            Map(Divide64, DDIV, DDIVU);
-            Map(Multiply32, MULT, MULTU);
-            Map(Multiply64, DMULT, DMULTU);
-            Map(Shift32, SLLV, SRLV, SRAV, SLL, SRL, SRA);
-            Map(Shift64, DSLLV, DSRLV, DSRAV, DSLL, DSRL, DSRA, DSLL32, DSRL32, DSRA32);
-            Map(Subtract32, SUB, SUBU);
-            Map(Subtract64, DSUB, DSUBU);
-            Map(SetOnLessThan, SLT, SLTI, SLTIU, SLTU);
-            Map(TransferReg, MFHI, MFLO, MTHI, MTLO, MTC0, MTC1, MFC0, MFC1, DMTC0, DMTC1, DMFC0, DMFC1, CTC1, CFC1);
-            Map(Branch, BC1F, BC1FL, BC1T, BC1TL, BEQ, BEQL, BGEZ, BGEZAL, BGEZALL, BGEZL, BGTZ, BGTZL, BLEZ, BLEZL, BLTZ, BLTZAL, BLTZALL, BLTZL, BNE, BNEL);
-            Map(Jump, J, JAL, JR, JALR);
-            Map(Store, SB, SH, SD, SW, SWL, SWR, SC, SCD);
-            Map(Load, LUI, LB, LBU, LH, LHU, LW, LWU, LWL, LWR, LD, LDL, LDR, LL, LLD);
-            Map(Cache, CACHE);
-            Map(Sync, SYNC);
-            Map(ExceptionReturn, ERET);
+            CallTable
+            .Map(Add32, ADD, ADDU, ADDI, ADDIU)
+            .Map(BitwiseLogic, AND, ANDI, OR, ORI, NOR, XOR, XORI)
+            .Map(Add64, DADD, DADDI, DADDIU, DADDU)
+            .Map(Divide32, DIV, DIVU)
+            .Map(Divide64, DDIV, DDIVU)
+            .Map(Multiply32, MULT, MULTU)
+            .Map(Multiply64, DMULT, DMULTU)
+            .Map(Shift32, SLLV, SRLV, SRAV, SLL, SRL, SRA)
+            .Map(Shift64, DSLLV, DSRLV, DSRAV, DSLL, DSRL, DSRA, DSLL32, DSRL32, DSRA32)
+            .Map(Subtract32, SUB, SUBU)
+            .Map(Subtract64, DSUB, DSUBU)
+            .Map(SetOnLessThan, SLT, SLTI, SLTIU, SLTU)
+            .Map(TransferReg, MFHI, MFLO, MTHI, MTLO, MTC0, MTC1, MFC0, MFC1, DMTC0, DMTC1, DMFC0, DMFC1, CTC1, CFC1)
+            .Map(Branch, BC1F, BC1FL, BC1T, BC1TL, BEQ, BEQL, BGEZ, BGEZAL, BGEZALL, BGEZL, BGTZ, BGTZL, BLEZ, BLEZL, BLTZ, BLTZAL, BLTZALL, BLTZL, BNE, BNEL)
+            .Map(Jump, J, JAL, JR, JALR)
+            .Map(Store, SB, SH, SD, SW, SWL, SWR, SC, SCD)
+            .Map(Load, LUI, LB, LBU, LH, LHU, LW, LWU, LWL, LWR, LD, LDL, LDR, LL, LLD)
+            .Map(Cache, CACHE)
+            .Map(Sync, SYNC)
+            .Map(ExceptionReturn, ERET)
 
             /* FPU Hooks */
-            Map(FloatLoad, LDC1, LWC1);
-            Map(FloatStore, SWC1, SDC1);
-            Map(Add, ADD_FPU);
-            Map(Subtract, SUB_FPU);
-            Map(Multiply, MUL_FPU);
-            Map(Divide, DIV_FPU);
-            Map(SqrRoot, SQRT);
-            Map(Abs, ABS);
-            Map(Mov, MOV);
-            Map(Neg, NEG);
-            Map(Round, ROUND_L, ROUND_W);
-            Map(Truncate, TRUNC_L, TRUNC_W);
-            Map(Ceil, CEIL_L, CEIL_W);
-            Map(Floor, FLOOR_L, FLOOR_W);
-            Map(Convert, CVT_D, CVT_L, CVT_S, CVT_W);
-            Map(Condition, C_F, C_UN, C_EQ, C_UEQ, C_OLT, C_ULT, C_OLE, C_ULE, C_SF, C_NGLE, C_SEQ, C_NGL, C_LT, C_NGE, C_LE, C_NGT);
+            .Map(FloatLoad, LDC1, LWC1)
+            .Map(FloatStore, SWC1, SDC1)
+            .Map(Add, ADD_FPU)
+            .Map(Subtract, SUB_FPU)
+            .Map(Multiply, MUL_FPU)
+            .Map(Divide, DIV_FPU)
+            .Map(SqrRoot, SQRT)
+            .Map(Abs, ABS)
+            .Map(Mov, MOV)
+            .Map(Neg, NEG)
+            .Map(Round, ROUND_L, ROUND_W)
+            .Map(Truncate, TRUNC_L, TRUNC_W)
+            .Map(Ceil, CEIL_L, CEIL_W)
+            .Map(Floor, FLOOR_L, FLOOR_W)
+            .Map(Convert, CVT_D, CVT_L, CVT_S, CVT_W)
+            .Map(Condition, C_F, C_UN, C_EQ, C_UEQ, C_OLT, C_ULT, C_OLE, C_ULE, C_SF, C_NGLE, C_SEQ, C_NGL, C_LT, C_NGE, C_LE, C_NGT)
 
-            /* Now convert the dictionary into the flat call table */
-            m_CallTable = new Action<DecodedInstruction>[OpcodeFactory.LastID + 1];
-            
-            foreach (var entry in m_SafeCallMap) {
-                m_CallTable[entry.Key] = entry.Value;
-            }
+            /* Things on the ignore list until future implentation */
+            .Map(InstructionIgnore, TLBWI, TLBP, TLBR)
+
+            .Finish();
         }
 
-        private void Map(Action<DecodedInstruction> instAction, params Opcode[] opcodes)
+        public void AttachRcp(RcpCore rcp)
         {
-            foreach (var op in opcodes)
-            {   
-                m_SafeCallMap.Add(op.ID, instAction);
-            }
+            m_Coprocessor0.AttachInterface(rcp.RcpInterface);
         }
 
-        public void AttachSystemMemory(N64MemoryController controller)
-        {
-            m_Coprocessor0.AttachInterface(controller.Interface_MI);
-        }
+        protected override void EntryPointHit() {
+            base.EntryPointHit();
 
-        protected override void ReportRdramSize()
-        {
+            /* Report RDRAM Size */
             var traceMode = TraceMode;
             SetTraceMode(Analysis.ProgramTrace.TraceMode.None);
             m_DataMemory.Data32 = 0x00800000;
@@ -154,16 +134,6 @@ namespace cor64.Mips.R4300I
             return value;
         }
 
-        protected bool ValidateInstruction(DecodedInstruction decoded)
-        {
-            return !decoded.IsValid && !decoded.IsNull;
-        }
-
-        protected Action<DecodedInstruction> GetInstructionMethod(DecodedInstruction decoded)
-        {
-            return m_CallTable[decoded.Op.ID];
-        }
-
         /********************************************************
          * Core FPU Logic
          ********************************************************/
@@ -176,41 +146,6 @@ namespace cor64.Mips.R4300I
         public void ClearExceptionFlags()
         {
             State.FCR.Cause = 0;
-        }
-
-        public static void RegTransferGprHelper(DecodedInstruction inst, out int gprSource, out int gprTarget)
-        {
-            gprSource = inst.Target;
-            gprTarget = inst.Destination;
-
-            if (inst.Op.XferSource == RegBoundType.Gpr)
-            {
-                switch (inst.Op.OperandFmt)
-                {
-                    default: break;
-                    case OperandType.R_S: gprSource = inst.Source; break;
-                }
-            }
-
-            if (inst.Op.XferTarget == RegBoundType.Gpr)
-            {
-                switch (inst.Op.OperandFmt)
-                {
-                    default: break;
-                    case OperandType.R_D: gprTarget = inst.Destination; break;
-                    case OperandType.Cop0_CT:
-                    case OperandType.Cop0_TC:
-                    case OperandType.Cop1_CT:
-                    case OperandType.Cop1_TC:
-                    case OperandType.Cop1_FromCtrl:
-                    case OperandType.Cop1_ToCtrl:
-                        {
-                            gprSource = inst.Target;
-                            gprTarget = inst.Target;
-                            break;
-                        }
-                }
-            }
         }
 
         /********************************************************
@@ -240,83 +175,6 @@ namespace cor64.Mips.R4300I
             UnconditionalJump = false;
             TakeBranch = false;
             NullifyNext = false;
-        }
-
-        protected bool ComputeBranchCondition(ulong source, ulong target, RegBoundType copSelect,  ArithmeticOp compareOp)
-        {
-            bool condition = false;
-
-            bool EQ_ZERO()
-            {
-                return source == 0;
-            }
-
-            bool GT_ZERO()
-            {
-                if (IsOperation64)
-                {
-                    ulong v = source;
-                    return (v >> 63) == 0 && v > 0;
-                }
-                else
-                {
-                    uint v = (uint)source;
-                    return (v >> 31) == 0 && v > 0;
-                }
-            }
-
-            bool LT_ZERO()
-            {
-                if (IsOperation64)
-                {
-                    ulong v = source;
-                    return (v >> 63) == 1 && v > 0;
-                }
-                else
-                {
-                    uint v = (uint)source;
-                    return (v >> 31) == 1 && v > 0;
-                }
-            }
-
-            bool COP_FLAG(bool compare)
-            {
-                switch (copSelect)
-                {
-                    case RegBoundType.Cp1:
-                        {
-                            var cond = State.FCR.Condition;
-
-                            if (!compare)
-                            {
-                                /* Expecting FALSE condition */
-                                return !cond && true;
-                            }
-                            else
-                            {
-                                /* Expecting TRUE condition */
-                                return cond && true;
-                            }
-                        }
-
-                    default: throw new NotSupportedException("MIPS does not support this kind of unit: " + copSelect.ToString());
-                }
-            }
-
-            switch (compareOp)
-            {
-                default: throw new NotSupportedException("MIPS does not support this branch operation");
-                case ArithmeticOp.EQUAL: condition = (source == target); break;
-                case ArithmeticOp.NOT_EQUAL: condition = (source != target); break;
-                case ArithmeticOp.GREATER_THAN: condition = GT_ZERO(); break;
-                case ArithmeticOp.LESS_THAN: condition = LT_ZERO(); break;
-                case ArithmeticOp.GREATER_THAN_OR_EQUAL: condition = (EQ_ZERO() || GT_ZERO()); break;
-                case ArithmeticOp.LESS_THAN_OR_EQUAL: condition = (EQ_ZERO() || LT_ZERO()); break;
-                case ArithmeticOp.FALSE: condition = COP_FLAG(false); break;
-                case ArithmeticOp.TRUE:  condition = COP_FLAG(true); break;
-            }
-
-            return condition;
         }
 
         /********************************************************
@@ -579,7 +437,7 @@ namespace cor64.Mips.R4300I
 
                 if (m_Core.IsMemTraceActive && m_IsDataPath)
                 {
-                    m_Core.AddMemAccess((uint)(ulong)m_BaseStream.Position, false, DebugValue(buffer, offset, count));
+                    m_Core.TraceMemoryHit((uint)(ulong)m_BaseStream.Position, false, DebugValue(buffer, offset, count));
                 }
 
                 return read;
@@ -591,7 +449,7 @@ namespace cor64.Mips.R4300I
 
                 if (m_Core.IsMemTraceActive && m_IsDataPath)
                 {
-                    m_Core.AddMemAccess((uint)(ulong)m_BaseStream.Position, true, DebugValue(buffer, offset, count));
+                    m_Core.TraceMemoryHit((uint)(ulong)m_BaseStream.Position, true, DebugValue(buffer, offset, count));
                 }
             }
 
@@ -665,26 +523,6 @@ namespace cor64.Mips.R4300I
             return ABI.GetLabel("o32", ABI.RegType.GPR, i);
         }
 
-        protected void BeginInstructionProfile(DecodedInstruction inst)
-        {
-            m_Profiler.StartSession(inst.Op);
-        }
-
-        protected void EndInstructionProfile()
-        {
-            m_Profiler.StopSession();
-        }
-
-        public String GetProfiledResults()
-        {
-            return m_Profiler.GenerateReport();
-        }
-
-        public void SetInstructionDebugMode(DebugInstMode mode)
-        {
-            core_InstDebugMode = mode;
-        }
-
         public String DebugMemReadHex(long address, int size)
         {
             m_DataMemory.ReadData(address, size);
@@ -692,5 +530,47 @@ namespace cor64.Mips.R4300I
         }
 
         public CoreDebugger CoreDbg => m_CoreDebugger;
+
+        protected void InstructionIgnore(DecodedInstruction inst) {
+            Log.Debug("Ignoring instruction: {0:X8} {1}", m_Pc, Disassembler.GetFullDisassembly(inst));
+        }
+
+
+        public abstract void BitwiseLogic(DecodedInstruction inst);
+        public abstract void Add32(DecodedInstruction inst);
+        public abstract void Add64(DecodedInstruction inst);
+        public abstract void Subtract32(DecodedInstruction inst);
+        public abstract void Subtract64(DecodedInstruction inst);
+        public abstract void Shift32(DecodedInstruction inst);
+        public abstract void Shift64(DecodedInstruction inst);
+        public abstract void Divide32(DecodedInstruction inst);
+        public abstract void Divide64(DecodedInstruction inst);
+        public abstract void Multiply32(DecodedInstruction inst);
+        public abstract void Multiply64(DecodedInstruction inst);
+        public abstract void SetOnLessThan(DecodedInstruction inst);
+        public abstract void TransferReg(DecodedInstruction inst);
+        public abstract void Branch(DecodedInstruction inst);
+        public abstract void Jump(DecodedInstruction inst);
+        public abstract void Store(DecodedInstruction inst);
+        public abstract void Load(DecodedInstruction inst);
+        public abstract void Cache(DecodedInstruction inst);
+        public abstract void Sync(DecodedInstruction inst);
+        public abstract void FloatLoad(DecodedInstruction inst);
+        public abstract void FloatStore(DecodedInstruction inst);
+        public abstract void Add(DecodedInstruction inst);
+        public abstract void Subtract(DecodedInstruction inst);
+        public abstract void Multiply(DecodedInstruction inst);
+        public abstract void Divide(DecodedInstruction inst);
+        public abstract void SqrRoot(DecodedInstruction inst);
+        public abstract void Abs(DecodedInstruction inst);
+        public abstract void Mov(DecodedInstruction inst);
+        public abstract void Neg(DecodedInstruction inst);
+        public abstract void Round(DecodedInstruction inst);
+        public abstract void Truncate(DecodedInstruction inst);
+        public abstract void Ceil(DecodedInstruction inst);
+        public abstract void Floor(DecodedInstruction inst);
+        public abstract void Convert(DecodedInstruction inst);
+        public abstract void Condition(DecodedInstruction inst);
+        public abstract void ExceptionReturn(DecodedInstruction inst);
     }
 }

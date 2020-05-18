@@ -63,5 +63,14 @@ namespace cor64.Mips
                 default: fmtType = FpuValueType.Reserved; break;
             }
         }
+
+        // Vector operands
+        public int e => rs & 0b01111; // Source element
+        public int vt => rt;
+        public int vs => rd;
+        public int vd => sa;
+        public int de => vs; // Destination Element
+        public int lsde => (int)((inst >> 7) & 0xF); // Destination Element for Load/Store
+        public int offset => (int)(inst & 0x7F);
     }
 }

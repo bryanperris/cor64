@@ -1,4 +1,5 @@
-﻿using cor64.Debugging;
+﻿using System.Data;
+using cor64.Debugging;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -41,24 +42,33 @@ namespace cor64.Mips.Analysis
             m_MemRef = 0;
         }
 
-        public override string ToString()
-        {
+        public void AddToLog(List<String> log) {
             m_StringBuilder.Clear();
-            m_StringBuilder.Append(Address.ToString("X8"));
-            m_StringBuilder.Append(" ");
-            m_StringBuilder.Append(m_IsNullifed ? "(NULLIFIED) " : "");
-            m_StringBuilder.AppendLine(m_Disassembler.GetFullDisassembly(Inst));
+            bool startComment = false;
 
-            if (m_MemAccessList.Count > 0)
-            {
-                if (m_MemRef < m_MemAccessList.Count)
-                {
-                    m_StringBuilder.Append("    >> ");
-                    m_StringBuilder.AppendLine(m_MemAccessList[m_MemRef].ReadMeta());
+            void CheckComment() {
+                if (!startComment) {
+                    startComment = true;
+                    m_StringBuilder.Append("     // ");
                 }
             }
 
-            return m_StringBuilder.ToString();
+            m_StringBuilder.Append(this.ToString());
+
+            if (m_MemAccessList.Count > 0 && m_MemRef < m_MemAccessList.Count)
+            {
+                CheckComment();
+
+                m_StringBuilder.Append(m_MemAccessList[m_MemRef].ReadMeta());
+                m_StringBuilder.Append("; ");
+            }
+
+            log.Add(m_StringBuilder.ToString());
+        }
+
+        public override string ToString()
+        {
+            return String.Format("{0:X8} {1}", Address, m_Disassembler.GetFullDisassembly(Inst));
         }
     }
 }

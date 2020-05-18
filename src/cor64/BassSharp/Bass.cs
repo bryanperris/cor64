@@ -17,24 +17,23 @@ namespace cor64.BassSharp
 
         private Directives m_Directives = new Directives();
         private ITarget m_Target;
-        private List<ISource> m_Sources = new List<ISource>();
-        private List<Instruction> m_Program = new List<Instruction>();
-
-        private HashSet<Define> m_Defines = new HashSet<Define>();
-        private HashSet<Constant> m_Constants = new HashSet<Constant>();
+        private readonly List<ISource> m_Sources = new List<ISource>();
+        private readonly List<Instruction> m_Program = new List<Instruction>();
+        private readonly HashSet<Define> m_Defines = new HashSet<Define>();
+        private readonly HashSet<Constant> m_Constants = new HashSet<Constant>();
 
         /* State machine stacks */
-        private Stack<Block> m_BlockStack = new Stack<Block>();
-        private Stack<Frame> m_FrameStack = new Stack<Frame>();
-        private Stack<bool> m_IfStack = new Stack<bool>();
-        private Stack<String> m_PushStack = new Stack<string>();
-        private Stack<String> m_ScopeStack = new Stack<string>();
+        private readonly Stack<Block> m_BlockStack = new Stack<Block>();
+        private readonly Stack<Frame> m_FrameStack = new Stack<Frame>();
+        private readonly Stack<bool> m_IfStack = new Stack<bool>();
+        private readonly Stack<String> m_PushStack = new Stack<string>();
+        private readonly Stack<String> m_ScopeStack = new Stack<string>();
 
         /* Debug stuff */
-        private List<String> m_PrintLines = new List<string>();
+        private readonly List<String> m_PrintLines = new List<string>();
 
 
-        private long[] m_StringTable = new long[256];
+        private readonly long[] m_StringTable = new long[256];
         private Phase m_Phase = Phase.Analyze;
         private Endian m_Endian = Endian.LSB;
         private int m_MacroInvocationCount;
@@ -44,7 +43,7 @@ namespace cor64.BassSharp
         private int m_LastLabelCounter = 1;
         private int m_NextLabelCounter = 1;
         private bool m_Strict;
-        private StringBuilder m_SymFileBuffer = new StringBuilder();
+        private readonly Dictionary<long, String> m_Symbols = new Dictionary<long, string>();
 
 
         public Stream Output => m_Target.GetStream();
@@ -122,7 +121,7 @@ namespace cor64.BassSharp
             int fileNumber = m_Sources.Count;
             m_Sources.Add(source);
 
-            StreamReader reader = new StreamReader(source.getStream());
+            StreamReader reader = new StreamReader(source.GetStream());
             reader.BaseStream.Position = 0;
             String textSource = reader.ReadToEnd();
 
@@ -293,5 +292,7 @@ namespace cor64.BassSharp
         public int MacroCount => m_Program.Where(x => x.statement == "} endmacro").ToList().Count;
 
         public IList<String> PrintLines => m_PrintLines.AsReadOnly();
+
+        public IReadOnlyDictionary<long, string> Symbols => m_Symbols;
     }
 }

@@ -1,4 +1,5 @@
 ﻿using cor64.IO;
+using NLog;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -11,6 +12,7 @@ namespace cor64.Mips
 {
     public class DataMemory : IDisposable
     {
+        private static readonly Logger Log = LogManager.GetCurrentClassLogger();
         private Stream m_DataStream;
         private byte[] m_DataBuffer;
         private GCHandle m_BufferHandle;
@@ -65,7 +67,7 @@ namespace cor64.Mips
 
                 if (size > m_DataBuffer.Length)
                 {
-                    throw new ArgumentException();
+                    throw new InvalidDataException("read size can't be bigger than internal data buffer");
                 }
 
                 m_DataStream.Position = address;
@@ -75,6 +77,7 @@ namespace cor64.Mips
             }
             catch (Exception e)
             {
+                Log.Error(e, e.Message);
                 throw new EmuException("ReadData: Hit an exception for " + address.ToString("X8"), e);
             }
         }
@@ -88,7 +91,7 @@ namespace cor64.Mips
 
                 if (size > m_DataBuffer.Length)
                 {
-                    throw new ArgumentException();
+                    throw new InvalidDataException("write size can't be bigger than internal data buffer");
                 }
 
                 //Console.WriteLine("Write {0:X16} to {1:X8}", Data64, address);
@@ -121,6 +124,50 @@ namespace cor64.Mips
         public ulong Data64 {
             get => m_MemRead64();
             set => m_MemWrite64(value);
+        }
+
+        public UInt128 ReadData128(long address) {
+            ulong a;
+            ulong b;
+            
+            ReadData(address, 8);
+            a = Data64;
+
+            ReadData(address + 8, 8);
+            b = Data64;
+
+            if (CoreConfig.Current.ByteSwap) {
+                return new UInt128() {
+                    lo = b,
+                    hi = a
+                };
+            }
+            else {
+                return new UInt128() {
+                    lo = a,
+                    hi = b
+                };
+            }
+        }
+
+        public void WriteData128(long address, UInt128 value) {
+            ulong a;
+            ulong b;
+
+            if (CoreConfig.Current.ByteSwap) {
+                a = value.hi;
+                b = value.lo;
+            }
+            else {
+                a = value.lo;
+                b = value.hi;
+            }
+
+            Data64 = a;
+            WriteData(address, 8);
+
+            Data64 = b;
+            WriteData(address + 8, 8);
         }
 
         public byte[] ReadBuffer()

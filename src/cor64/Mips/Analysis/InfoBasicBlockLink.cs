@@ -5,6 +5,7 @@ namespace cor64.Mips.Analysis
     {
         private InfoBasicBlock m_LinkedBlock;
         private int m_BlockOffset;
+        private int m_Repeat;
 
         public InfoBasicBlockLink(InfoBasicBlock block, int offset)
         {
@@ -18,10 +19,16 @@ namespace cor64.Mips.Analysis
 
         public ulong TargetAddress => m_LinkedBlock.Address + (ulong)m_BlockOffset;
 
+        public int Repeat => m_Repeat;
+
         public void Modify(InfoBasicBlock block, int offset)
         {
             m_BlockOffset = offset;
             m_LinkedBlock = block;
+        }
+
+        public void IncrementRepeat() {
+            m_Repeat++;
         }
 
         public override string ToString()

@@ -35,7 +35,7 @@ namespace cor64
             }
         }
 
-        public Stream getStream()
+        public Stream GetStream()
         {
             var s = new MemoryStream();
             StreamWriter writer = new StreamWriter(s);

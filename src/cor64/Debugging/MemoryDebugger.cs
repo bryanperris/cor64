@@ -51,11 +51,11 @@ namespace cor64.Debugging
             AddSection(0x04200008, 0x0420000B, "DP Span Test Address");
             AddSection(0x0420000C, 0x0420000F, "DP Span Test Data");
             AddSection(0x04200010, 0x042FFFFF, "DP Unused B");
-            AddSection(0x04300000, 0x04300003, "CPU MIPS Interface Reg: Init Mode");
-            AddSection(0x04300004, 0x04300007, "CPU MIPS Interface Reg: Version");
-            AddSection(0x04300008, 0x0430000B, "CPU MIPS Interface Reg: Interrupt");
-            AddSection(0x0430000C, 0x0430000F, "CPU MIPS Interface Reg: Interrupt Mask");
-            AddSection(0x04300010, 0x043FFFFF, "CPU MIPS Interface Unused");
+            AddSection(0x04300000, 0x04300003, "RCP Interface Reg: Init Mode");
+            AddSection(0x04300004, 0x04300007, "RCP Interface Reg: Version");
+            AddSection(0x04300008, 0x0430000B, "RCP Interface Reg: Interrupt");
+            AddSection(0x0430000C, 0x0430000F, "RCP Interface Reg: Interrupt Mask");
+            AddSection(0x04300010, 0x043FFFFF, "RCP Interface Unused");
             AddSection(0x04400000, 0x04400003, "Video Interface Reg: Status/Control");
             AddSection(0x04400004, 0x04400007, "Video Interface Reg: Framebuffer Address");
             AddSection(0x04400008, 0x0440000B, "Video Interface Reg: Horizonal Line Width");

@@ -82,26 +82,26 @@ namespace cor64.Mips
 
         public void SetVersion(uint value)
         {
-            m_Version.ReadPtr.RegWrite(value);
+            m_Version.ReadonlyRegisterValue = value;
         }
 
         private bool ReadIntBool(int index)
         {
-            uint val = m_Interrupt.ReadPtr.RegRead();
+            uint val = m_Interrupt.ReadonlyRegisterValue;
             m_IntFiddler.X(index, ref val);
             return !(val == 0);
         }
 
         private bool ReadMaskBool(int index)
         {
-            uint val = m_Mask.ReadPtr.RegRead();
+            uint val = m_Mask.ReadonlyRegisterValue;
             m_IntFiddler.X(index, ref val);
             return !(val == 0);
         }
 
         public void ProcessMaskClearSet()
         {
-            uint value = m_Mask.WritePtr.RegRead();
+            uint value = m_Mask.RegisterValue;
 
 #if DEBUG_FULL
             Log.Debug("MI Interrupt Mask was modified: " + value.ToString("X8"));
@@ -145,9 +145,9 @@ namespace cor64.Mips
             }
         }
 
-        public uint Interrupt => m_Interrupt.ReadPtr.RegRead();
+        public uint Interrupt => m_Interrupt.ReadonlyRegisterValue;
 
-        public uint Mask => m_Interrupt.ReadPtr.RegRead();
+        public uint Mask => m_Interrupt.ReadonlyRegisterValue;
 
         public bool IntSP => ReadIntBool(INT_SP);
 
@@ -176,9 +176,9 @@ namespace cor64.Mips
         public void SetInterrupt(int index, bool value)
         {
             uint val = value ? 1U : 0;
-            uint reg = m_Interrupt.ReadPtr.RegRead();
+            uint reg = m_Interrupt.ReadonlyRegisterValue;
             m_IntFiddler.J(index, ref reg, val);
-            m_Interrupt.ReadPtr.RegWrite(reg);
+            m_Interrupt.ReadonlyRegisterValue = reg;
         }
 
         private void SetMask(int index, bool value)
@@ -199,9 +199,9 @@ namespace cor64.Mips
 #endif
 
             uint val = value ? 1U : 0;
-            uint reg = m_Mask.ReadPtr.RegRead();
+            uint reg = m_Mask.ReadonlyRegisterValue;
             m_IntFiddler.J(index, ref reg, val);
-            m_Mask.ReadPtr.RegWrite(reg);
+            m_Mask.ReadonlyRegisterValue = reg;
         }
     }
 }

@@ -5,7 +5,7 @@ namespace cor64.Mips
     {
         Empty = 0,
         JUMP,
-        I_STI,
+        BRANCH,
         I_TSI,
         I_TI,
         I_TIS,
@@ -14,6 +14,15 @@ namespace cor64.Mips
 
         Cop0_CT,
         Cop0_TC,
+
+
+        VU_STD,
+        VU_SE_DE,
+        VU_LOADSTORE,
+        VU_CT,
+        VU_TC,
+        VU_FromCtrl,
+        VU_ToCtrl,
         TLB,
 
         Bc1,
@@ -35,6 +44,7 @@ namespace cor64.Mips
         R_DST,
         Code,
         Sync,
-        TrapWithCode
+        TrapWithCode,
+        VUFMT
     }
 }

@@ -26,9 +26,7 @@ gulp.task('dist:testroms', function() {
 });
 
 gulp.task('RunN64', ()=>{
-    return gulp.src('src/RunN64/RunN64.csproj', {read: false}).pipe(run({
-        'additionalArgs': "--noui"
-    }));
+    return gulp.src('src/RunN64/RunN64.csproj', {read: false}).pipe(run({}));
 });
 
 gulp.task('dist', gulp.series('dist:testroms'));

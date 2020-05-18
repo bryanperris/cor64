@@ -63,11 +63,6 @@ namespace cor64.Debugging
             }
         }
 
-        public void DumpState(IDictionary<String, String> dictionary)
-        {
-            AppendState(m_Target.DeviceCPU.SnapSave(), dictionary, "cpu");
-        }
-
         public String DisassembleCpuCode(ulong startAddress, int size)
         {
             StringBuilder sb = new StringBuilder();

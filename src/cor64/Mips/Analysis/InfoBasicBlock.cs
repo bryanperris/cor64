@@ -14,11 +14,9 @@ namespace cor64.Mips.Analysis
 
         }
 
-        public InfoBasicBlockLink LinkBlock(InfoBasicBlock basicBlock, int offset)
+        public void AppendBlockLink(InfoBasicBlockLink link)
         {
-            var link = new InfoBasicBlockLink(basicBlock, offset);
             m_Links.Add(link);
-            return link;
         }
 
         public void MergeBlockToHead(InfoBasicBlock block)
@@ -29,6 +27,10 @@ namespace cor64.Mips.Analysis
             {
                 RecordSet.Insert(i, code[i]);
                 Address -= 4;
+            }
+            
+            for (int i = 0; i < block.Links.Count; i++) {
+                m_Links.Add(block.Links[i]);
             }
         }
 

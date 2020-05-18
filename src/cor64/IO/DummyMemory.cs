@@ -8,8 +8,8 @@ namespace cor64.IO
 	public class DummyMemory : BlockDevice
     {
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
-		private long m_Size;
-        private string m_DummyName;
+		private readonly long m_Size;
+        private readonly string m_DummyName;
 
         public DummyMemory(long size, String dummyName)
         {
@@ -22,8 +22,7 @@ namespace cor64.IO
         public sealed override void Read(long position, byte[] buffer, int offset, int count)
 		{
 			Array.Clear(buffer, offset, count);
-
-            Log.Debug("Dummy read access: {0:X8} {1}", position, new MemoryAccessMeta((uint)BaseAddress, false, null).ToString());
+            Log.Info("Dummy read access: {0:X8} {1}", position, new MemoryAccessMeta((uint)BaseAddress, false, null).ToString());
 		}
 
         public sealed override void Write(long position, byte[] buffer, int offset, int count)

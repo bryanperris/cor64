@@ -24,11 +24,6 @@ namespace cor64.BassSharp.Eval
                 (n == '\\' || n == '\"');
         }
 
-        private static String Splice(this String str, int offset)
-        {
-            return null;
-        }
-
         public static String LiteralNumber(ref String s)
         {
             if (s.Length < 1) return s;
@@ -75,7 +70,7 @@ namespace cor64.BassSharp.Eval
             while ((o + 1) < p.Length && p[o] != escape) o++;
 
             if (p[o++] != escape) {
-                throw new InvalidOperationException("Unclosed String literal");
+                throw new Error("Unclosed String literal");
             }
 
             String result = s.Substring(p.Length - o);
@@ -108,7 +103,7 @@ namespace cor64.BassSharp.Eval
                 (p[0] >= 'A' && p[0] <= 'Z') || 
                 (p[0] >= 'a' && p[0] <= 'z')) return LiteralVariable(ref s);
 
-            throw new InvalidOperationException("Invalid literal");
+            throw new Error("Invalid literal");
         }
     }
 }

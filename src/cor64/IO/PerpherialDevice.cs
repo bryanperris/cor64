@@ -118,6 +118,7 @@ namespace cor64.IO
 
             int ind = (int)position / 4;
             Marshal.Copy(buffer, offset, m_WriteMap[ind], count);
+
             m_WriteFunc[ind].Invoke();
         }
 
@@ -137,32 +138,5 @@ namespace cor64.IO
         }
 
         public override long Size => m_Size;
-    }
-
-    public static class PerpherialDeviceHelper
-    {
-        public static uint RegRead(this IntPtr ptr)
-        {
-            if (CoreConfig.Current.ByteSwap)
-            {
-                return ptr.AsType_32Swp();
-            }
-            else
-            {
-                return ptr.AsType_32();
-            }
-        }
-
-        public static void RegWrite(this IntPtr ptr, uint value)
-        {
-            if (CoreConfig.Current.ByteSwap)
-            {
-                ptr.AsType_32Swp(value);
-            }
-            else
-            {
-                ptr.AsType_32(value);
-            }
-        }
     }
 }

@@ -9,14 +9,6 @@
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="Graphics\*.ttf" />
-    <Folder Include="Models\" />
-    <Compile Update="**\*.xaml.cs">
-      <DependentUpon>%(Filename)</DependentUpon>
-    </Compile>
-    <AvaloniaResource Include="**\*.xaml">
-      <SubType>Designer</SubType>
-    </AvaloniaResource>
-    <AvaloniaResource Include="Assets\**" />
     <None Update="config.json">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>

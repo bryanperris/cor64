@@ -6,6 +6,8 @@ using System.Text;
 using System.Threading.Tasks;
 using cor64.IO;
 
+using static cor64.Mips.Operands;
+
 namespace cor64.Mips
 {
     /// <summary>
@@ -15,38 +17,33 @@ namespace cor64.Mips
     {
         private Stream m_BinaryStream;
         private ulong m_BaseAddress;
-        private String m_Abi;
-        private Mode m_Mode;
+        private readonly String m_Abi;
         private ISymbolProvider m_SymbolProvider;
-        private byte[] m_InstBuffer = new Byte[4];
+        private readonly byte[] m_InstBuffer = new Byte[4];
         private Swap32Stream m_SwapStream;
-        private Func<uint> m_ReadInstFunc;
-
-        public enum Mode
-        {
-            Fast,
-            Debug,
-            DebugFast
-        }
+        private readonly Func<uint> m_ReadInstFunc;
 
         private static readonly String[] Cop1ConditionalTable = {
             "f", "un", "eq", "olt", "ult", "ole", "ule", "sf",
             "ngle", "sqe", "ngl", "lt", "nge", "le", "ngt"
         };
 
-        protected BaseDisassembler(String abi, Mode mode)
+        protected BaseDisassembler(String abi)
         {
             m_Abi = abi;
-            m_Mode = mode;
 
-            if (CoreConfig.Current.ByteSwap) {
-                m_ReadInstFunc = () => {
+            if (CoreConfig.Current.ByteSwap)
+            {
+                m_ReadInstFunc = () =>
+                {
                     m_SwapStream.Read(m_InstBuffer, 0, 4);
                     return m_InstBuffer.ToUInt32();
                 };
             }
-            else {
-                m_ReadInstFunc = () => {
+            else
+            {
+                m_ReadInstFunc = () =>
+                {
                     m_BinaryStream.Read(m_InstBuffer, 0, 4);
                     return m_InstBuffer.ToUInt32();
                 };
@@ -65,12 +62,72 @@ namespace cor64.Mips
 
         protected abstract Opcode DecodeOpcode(BinaryInstruction inst);
 
-        public abstract String GetFullDisassembly(DecodedInstruction inst);
+        public virtual String GetFullDisassembly(DecodedInstruction inst)
+        {
+            var opcode = inst.Op;
+            var bInst = inst.Inst;
+            var strict = this.ABI == "strict";
 
-        public String GetSymbol(ulong address)
+            if (opcode.Family != OperationFamily.Null)
+            {
+                String op = opcode.Op;
+                String operands = "";
+
+                op = op.Replace("condition", DecodeCop1Conditional(bInst));
+                op = op.Replace("fmt", DecodeCop1Format(bInst));
+
+                if (opcode.OperandFmt != OperandType.Empty)
+                {
+                    var fmt = Operands.GetFormat(opcode.OperandFmt);
+
+                    if (opcode.Family == OperationFamily.Branch && op.EndsWith("z"))
+                    {
+                        fmt.ModifyFormat(fmt.Format.Replace(",rt", ""));
+                    }
+
+                    /* Decode operands */
+                    operands = Operands.Decode(this.ABI, bInst, fmt, inst.Address, m_SymbolProvider);
+
+                    /* Append some branch/jump info */
+                    if (!strict && opcode.Family == OperationFamily.Branch)
+                    {
+                        /* Don't show target on jumps that use register based computations */
+                        if (!opcode.Op.EndsWith("r"))
+                        {
+                            operands += String.Format(
+                                " ----> 0x{0:X8}",
+                                opcode.Op.StartsWith("j") ? ComputeJumpTarget(inst) : ComputeBranchTarget(inst));
+                        }
+                    }
+
+                    /* Append debug symbol */
+                    operands += " ";
+                    operands += GetSymbol(inst.Address);
+                    operands += " ";
+                }
+
+                var dis = op + " " + operands;
+
+                dis = dis.Trim();
+
+                if (op == "sll" && inst.Source == 0 && inst.Target == 0 && inst.Destination == 0)
+                {
+                    return "nop";
+                }
+
+                return dis;
+
+            }
+            else
+            {
+                throw new InvalidOperationException("Invalid instruction");
+            }
+        }
+
+        public String GetSymbol(ulong address, bool vmem = true)
         {
             /* We must clamp the virtual address to what ELF expects */
-            if ((address & 0xF0000000UL) == 0xA0000000UL)
+            if (vmem && (address & 0xF0000000UL) == 0xA0000000UL)
             {
                 address <<= 8;
                 address >>= 8;
@@ -80,6 +137,28 @@ namespace cor64.Mips
             if (m_SymbolProvider != null)
             {
                 var sym = m_SymbolProvider.GetSymbol(address);
+
+                if (sym != null)
+                {
+                    return sym;
+                }
+            }
+
+            return "";
+        }
+
+        public String GetLabel(ulong address, bool vmem = true) {
+            /* We must clamp the virtual address to what ELF expects */
+            if (vmem && (address & 0xF0000000UL) == 0xA0000000UL)
+            {
+                address <<= 8;
+                address >>= 8;
+                address |= 0x80000000;
+            }
+
+            if (m_SymbolProvider != null)
+            {
+                var sym = m_SymbolProvider.GetLabel(address);
 
                 if (sym != null)
                 {
@@ -113,6 +192,9 @@ namespace cor64.Mips
 
         public DecodedInstruction Disassemble(ulong address)
         {
+            // if (address < 0x80000000) 
+            //     Console.WriteLine("PC Alert: " + address.ToString("X8"));
+
             if (address < 0 || address >= (ulong)m_BinaryStream.Length)
                 return new DecodedInstruction(0, new Opcode(), new BinaryInstruction(), true, false);
 
@@ -125,7 +207,8 @@ namespace cor64.Mips
             DecodedInstruction[] disassembly = new DecodedInstruction[count];
             m_BaseAddress = address;
 
-            for (int i = 0; i < count; i++) {
+            for (int i = 0; i < count; i++)
+            {
                 disassembly[i] = _Disassemble();
             }
 

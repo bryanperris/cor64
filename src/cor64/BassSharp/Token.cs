@@ -28,16 +28,16 @@ namespace cor64.BassSharp
 
         public override int GetHashCode()
         {
-            return m_Name.GetHashCode();
+            return HashCode.Combine(m_Name);
         }
 
         public override bool Equals(object obj)
         {
-            if (ReferenceEquals(obj, null))
+            if (obj is null)
                 return Object.Equals(this, obj);
 
-            if (obj is String) {
-                return m_Name == (String)obj;
+            if (obj is String @string) {
+                return m_Name == @string;
             }
             else {
                 return m_Name == ((Token)obj).m_Name;
@@ -46,8 +46,8 @@ namespace cor64.BassSharp
 
         public static bool operator ==(Token a, Token b)
         {
-            if (ReferenceEquals(a, null)) {
-                return ReferenceEquals(b, null);
+            if (a is null) {
+                return b is null;
             }
 
             return a.Equals(b);

@@ -4,6 +4,7 @@ using System.IO;
 using System.Text;
 using System.Threading;
 using cor64;
+using cor64.Mips;
 using cor64.Mips.Analysis;
 using cor64.Mips.R4300I;
 using cor64.Mips.R4300I.JitIL;
@@ -51,12 +52,8 @@ namespace RunN64
 
             configuration.AddTarget("file", fileTarget);
 
-            NLogViewer viewerTarget = new NLogViewer();
-            configuration.AddTarget("viewer", viewerTarget);
-
 
             /* Must configure rules here so that all targets get activated */
-            configuration.LoggingRules.Add(new LoggingRule("*", LogLevel.Trace, viewerTarget));
             configuration.LoggingRules.Add(new LoggingRule("*", LogLevel.Trace, consoleTarget));
             configuration.LoggingRules.Add(new LoggingRule("*", LogLevel.Trace, fileTarget));
 
@@ -113,20 +110,22 @@ namespace RunN64
             PhaseMsg("System Initialization");
 
             if (Configuration.UseInterpreter) {
-                m_CpuEngine = new Interpreter(false, false);
+                m_CpuEngine = new Interpreter();
             }
             else {
-                m_CpuEngine = new ILRecompiler(true);
+                m_CpuEngine = new ILRecompiler();
             }
 
-            m_CpuEngine.SetDebuggingMode(false);
-            m_CpuEngine.SetInstructionDebugMode(DebugInstMode.None);
+            m_CpuEngine.SetDebuggingMode(true);
+            m_CpuEngine.SetInstructionDebugMode(InstructionDebugMode.None);
             m_CpuEngine.SetTraceMode(ProgramTrace.TraceMode.None);
             m_CpuEngine.TraceLog.Details = ProgramTrace.TraceDetails.None;
 
-            //m_Interpreter.CoreDbg.AppendInstBreakpointByAddr(0x80001000);
+            //m_CpuEngine.CoreDbg.AppendInstBreakpointByAddr(0x800F71BC);
 
             m_System.CPU(m_CpuEngine);
+
+            Log.Info("Signal Processor Engine: {0}", m_System.DeviceRcp.DeviceRsp.Description);
 
             m_System.Boot(m_Cartridge);
 
@@ -143,7 +142,7 @@ namespace RunN64
         {
             Thread fbThread = new Thread(() =>
             {
-                m_FramebufferWindow = new GLFramebufferWindow(m_System.DeviceMemory.Interface_VI, m_Cartridge);
+                m_FramebufferWindow = new GLFramebufferWindow(m_System.DeviceRcp.VideoInterface, m_Cartridge);
                 m_FramebufferWindow.Start();
             });
 
@@ -186,10 +185,6 @@ namespace RunN64
 
         public void DumpStateToLog()
         {
-            Dictionary<string, string> snap = new Dictionary<string, string>();
-
-            m_System.Dbg.DumpState(snap);
-
             Log.Debug("\n********* Emulator State *********\n");
 
             StringBuilder sb = new StringBuilder();

@@ -8,9 +8,9 @@ namespace cor64.BassSharp.Table
 {
     public class Opcode
     {
-        private List<Prefix> m_PrefixList = new List<Prefix>();
-        private List<Number> m_NumberList = new List<Number>();
-        private List<Format> m_FormatList = new List<Format>();
+        private readonly List<Prefix> m_PrefixList = new List<Prefix>();
+        private readonly List<Number> m_NumberList = new List<Number>();
+        private readonly List<Format> m_FormatList = new List<Format>();
 
         public String Pattern
         {

@@ -53,13 +53,14 @@ namespace cor64.IO
             Map(RDRAMRegs,  0x03F0, 0x03FF);
             Map(SPRegs,     0x0400, 0x040F);
             Map(DPCmdRegs,  0x0410, 0x041F);
-            Map(DpSpanRegs, 0x0420, 0x042F);
+            Map(DPSpanRegs, 0x0420, 0x042F);
             Map(MIRegs,     0x0430, 0x043F);
             Map(VIRegs,     0x0440, 0x044F);
             Map(AIRegs,     0x0450, 0x045F);
             Map(PIRegs,     0x0460, 0x046F);
             Map(RIRegs,     0x0470, 0x047F);
             Map(SIRegs,     0x0480, 0x048F);
+            Map(DiskDriveRegisters,     0x0500, 0x05FF);
             Map(Cart,       0x1000, 0x1FBF);
             Map(PIF,        0x1FC0, 0x1FCF);
         }
@@ -93,7 +94,7 @@ namespace cor64.IO
 
         public T DPCmdRegs { get; set; }
 
-        public T DpSpanRegs { get; set; } 
+        public T DPSpanRegs { get; set; } 
 
         public T MIRegs { get; set; }
 
@@ -110,5 +111,7 @@ namespace cor64.IO
         public T Cart { get; set; }
 
         public T PIF { get; set; }
+
+        public T DiskDriveRegisters { get; set; }
     }
 }

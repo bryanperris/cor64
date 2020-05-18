@@ -10,7 +10,7 @@ using IL = System.Reflection.Emit.OpCodes;
 using System.Runtime.CompilerServices;
 using cor64.IO;
 using System.IO;
-using cor64.Mips.R4300I.JitCommon;
+using cor64.Mips.JitCommon;
 using System.Diagnostics;
 using System.Threading;
 using System.Security.Permissions;
@@ -51,8 +51,7 @@ namespace cor64.Mips.R4300I.JitIL
 
         // TODO: Cache both versions 32 and 64 of blocks
 
-        public ILRecompiler(bool debug) :
-            base(new Disassembler("o32", debug ? BaseDisassembler.Mode.Debug : BaseDisassembler.Mode.Fast))
+        public ILRecompiler() : base(new Disassembler("o32"))
         {
             m_Emitter32.GenerateOwnerBindings(this);
             m_Emitter64.GenerateOwnerBindings(this);
@@ -82,7 +81,7 @@ namespace cor64.Mips.R4300I.JitIL
             Directory.Delete(target_dir, false);
         }
 
-        public override string Description => "JitIL Recompiler";
+        public override string Description => "MIPS Recompiler (JitIL)";
 
         public void SetFallbackInterpreter(Interpreter interpreter)
         {
@@ -128,7 +127,7 @@ namespace cor64.Mips.R4300I.JitIL
             for (int i = 0; i < blockCount; i++)
             {
                 var inst = m_CurrentIntBlock.InstructionList[i];
-                var call = GetInstructionMethod(inst);
+                var call = CallTable[inst];
                 m_CurrentInstOffset = i;
 
                 if (call == null)

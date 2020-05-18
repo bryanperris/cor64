@@ -91,23 +91,23 @@ namespace cor64.RCP
     public class Video : PerpherialDevice
     {
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
-        private MemMappedBuffer m_ControlReg = new MemMappedBuffer(4);
-        private MemMappedBuffer m_Origin = new MemMappedBuffer(4); // Where framebuffer is
-        private MemMappedBuffer m_Width = new MemMappedBuffer(4);
-        private MemMappedBuffer m_Interrupt = new MemMappedBuffer(4);
-        private MemMappedBuffer m_CurrentLine = new MemMappedBuffer(4);
-        private MemMappedBuffer m_Timing = new MemMappedBuffer(4);
-        private MemMappedBuffer m_VSync = new MemMappedBuffer(4);
-        private MemMappedBuffer m_HSync = new MemMappedBuffer(4);
-        private MemMappedBuffer m_Leap = new MemMappedBuffer(4);
-        private MemMappedBuffer m_HStart = new MemMappedBuffer(4);
-        private MemMappedBuffer m_VStart = new MemMappedBuffer(4);
-        private MemMappedBuffer m_VBurst = new MemMappedBuffer(4);
-        private MemMappedBuffer m_XScale = new MemMappedBuffer(4);
-        private MemMappedBuffer m_YScale = new MemMappedBuffer(4);
-        private N64MemoryController m_Memory;
-        private VideoControlReg m_ControlRegStruct;
-        private MipsInterface m_Interface;
+        private readonly MemMappedBuffer m_ControlReg = new MemMappedBuffer(4);
+        private readonly MemMappedBuffer m_Origin = new MemMappedBuffer(4); // Where framebuffer is
+        private readonly MemMappedBuffer m_Width = new MemMappedBuffer(4);
+        private readonly MemMappedBuffer m_Interrupt = new MemMappedBuffer(4);
+        private readonly MemMappedBuffer m_CurrentLine = new MemMappedBuffer(4);
+        private readonly MemMappedBuffer m_Timing = new MemMappedBuffer(4);
+        private readonly MemMappedBuffer m_VSync = new MemMappedBuffer(4);
+        private readonly MemMappedBuffer m_HSync = new MemMappedBuffer(4);
+        private readonly MemMappedBuffer m_Leap = new MemMappedBuffer(4);
+        private readonly MemMappedBuffer m_HStart = new MemMappedBuffer(4);
+        private readonly MemMappedBuffer m_VStart = new MemMappedBuffer(4);
+        private readonly MemMappedBuffer m_VBurst = new MemMappedBuffer(4);
+        private readonly MemMappedBuffer m_XScale = new MemMappedBuffer(4);
+        private readonly MemMappedBuffer m_YScale = new MemMappedBuffer(4);
+        private readonly N64MemoryController m_Memory;
+        private readonly VideoControlReg m_ControlRegStruct;
+        private readonly MipsInterface m_Interface;
 
         public Video(N64MemoryController controller, MipsInterface mipsInterface) : base(controller, 0x100000)
         {
@@ -134,42 +134,42 @@ namespace cor64.RCP
 
             m_Width.Write += () =>
             {
-                Log.Debug("Framebuffer width set to " + m_Width.ReadPtr.RegRead().ToString("X8"));
+                Log.Debug("Framebuffer width set to " + m_Width.RegisterValue.ToString("X8"));
             };
 
             m_XScale.Write += () =>
             {
-                Log.Debug("Framebuffer xscale set to " + m_XScale.ReadPtr.RegRead().ToString("X8"));
+                Log.Debug("Framebuffer xscale set to " + m_XScale.RegisterValue.ToString("X8"));
             };
 
             m_HStart.Write += () =>
             {
-                Log.Debug("Framebuffer hstart set to " + m_HStart.ReadPtr.RegRead().ToString("X8"));
+                Log.Debug("Framebuffer hstart set to " + m_HStart.RegisterValue.ToString("X8"));
             };
 
             m_VStart.Write += () =>
             {
-                Log.Debug("Framebuffer vstart set to " + m_VStart.ReadPtr.RegRead().ToString("X8"));
+                Log.Debug("Framebuffer vstart set to " + m_VStart.RegisterValue.ToString("X8"));
             };
 
             m_YScale.Write += () =>
             {
-                Log.Debug("Framebuffer yscale set to " + m_YScale.ReadPtr.RegRead().ToString("X8"));
+                Log.Debug("Framebuffer yscale set to " + m_YScale.RegisterValue.ToString("X8"));
             };
 
             m_Memory = controller;
 
-            m_XScale.ReadPtr.RegWrite(0x100U * (640U / 160U));
-            m_YScale.ReadPtr.RegWrite(0x100U * (480U / 60U));
-            m_Width.ReadPtr.RegWrite(640);
+            m_XScale.RegisterValue = 0x100U * (640U / 160U);
+            m_YScale.RegisterValue = 0x100U * (480U / 60U);
+            m_Width.RegisterValue = 640;
 
 
-            m_ControlRegStruct = new VideoControlReg(m_ControlReg.ReadPtr);
+            m_ControlRegStruct = new VideoControlReg(m_ControlReg);
         }
 
         private void CurrentScanlineHandler()
         {
-            uint curr = m_CurrentLine.ReadPtr.RegRead();
+            uint curr = m_CurrentLine.RegisterValue;
 
             Log.Debug("Current scanline set to {0:X8}", curr);
         }
@@ -179,17 +179,17 @@ namespace cor64.RCP
             Log.Debug("Framebuffer pointer set to {0:X8}", FramebufferOffset);
         }
 
-        public int FramebufferOffset => (int)(m_Origin.ReadPtr.RegRead() << 8 >> 8);
+        public int FramebufferOffset => (int)(m_Origin.RegisterValue << 8 >> 8);
 
-        public uint XScale => m_XScale.ReadPtr.RegRead();
+        public uint XScale => m_XScale.RegisterValue;
 
-        public uint YScale => m_YScale.ReadPtr.RegRead();
+        public uint YScale => m_YScale.RegisterValue;
 
-        public uint HStart => m_HStart.ReadPtr.RegRead();
+        public uint HStart => m_HStart.RegisterValue;
 
-        public uint VStart => m_VStart.ReadPtr.RegRead();
+        public uint VStart => m_VStart.RegisterValue;
 
-        public uint WidthReg => m_Width.ReadPtr.RegRead();
+        public uint WidthReg => m_Width.RegisterValue;
 
         private int ComputeHWidth()
         {
@@ -232,12 +232,12 @@ namespace cor64.RCP
 
         public unsafe void CopyFramebufferRGB565(PinnedBuffer buffer)
         {
-            m_CurrentLine.ReadPtr.RegWrite(0);
+            m_CurrentLine.RegisterValue = 0;
 
             ushort* srcPixel = (ushort*)m_Memory.RDRAM.GetRamPointer(FramebufferOffset);
             ushort* dstPixel = (ushort*)buffer.GetPointer();
 
-            for (int i = 0; i < buffer.RawBuffer.Length / 2; i++)
+            for (int i = 0; i < buffer.Size / 2; i++)
             {
                 ushort pixel = *srcPixel;
 
@@ -261,17 +261,17 @@ namespace cor64.RCP
                 *dstPixel = pixel;
                 dstPixel++;
             }
-            m_CurrentLine.ReadPtr.RegWrite(m_Interrupt.ReadPtr.RegRead());
+            m_CurrentLine.RegisterValue = m_Interrupt.RegisterValue;
         }
 
         public unsafe void CopyFramebufferRGBA8888(PinnedBuffer buffer)
         {
-            m_CurrentLine.ReadPtr.RegWrite(0);
+            m_CurrentLine.RegisterValue = 0;
 
             uint* srcPixel = (uint*)m_Memory.RDRAM.GetRamPointer(FramebufferOffset);
             uint* dstPixel = (uint*)buffer.GetPointer();
 
-            for (int i = 0; i < buffer.RawBuffer.Length / 4; i++)
+            for (int i = 0; i < buffer.Size / 4; i++)
             {
                 uint pixel = *srcPixel;
 
@@ -285,7 +285,7 @@ namespace cor64.RCP
                 dstPixel++;
             }
 
-            m_CurrentLine.ReadPtr.RegWrite(m_Interrupt.ReadPtr.RegRead());
+            m_CurrentLine.RegisterValue = m_Interrupt.RegisterValue;
         }
 
         public void SetVideoInterrupt()

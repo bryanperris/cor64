@@ -10,8 +10,9 @@ namespace RunN64
 {
     public class DebugSymbolSource : ISymbolProvider
     {
-        private Dictionary<ulong, String> m_LocalSymbols = new Dictionary<ulong, string>();
-        private Dictionary<ulong, String> m_GlobalSymbols = new Dictionary<ulong, string>();
+        private readonly Dictionary<ulong, String> m_LocalSymbols = new Dictionary<ulong, string>();
+        private readonly Dictionary<ulong, String> m_GlobalSymbols = new Dictionary<ulong, string>();
+        private readonly Dictionary<ulong, String> m_Labels = new Dictionary<ulong, string>();
 
         public DebugSymbolSource(String  filePath)
         {
@@ -42,6 +43,8 @@ namespace RunN64
 
         private void AddSymbol(SymbolEntry<uint> entry, IDictionary<ulong, string> dict)
         {
+            m_Labels.Add(entry.Value, entry.Name);
+
             if (entry.Size > 0)
             {
                 for (uint i = 0; i < entry.Size; i++)
@@ -71,6 +74,16 @@ namespace RunN64
                 {
                     return "";
                 }
+            }
+        }
+
+        public string GetLabel(ulong address)
+        {
+            if (m_Labels.ContainsKey(address)) {
+                return m_Labels[address];
+            }
+            else {
+                return "";
             }
         }
     }

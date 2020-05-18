@@ -83,7 +83,7 @@ namespace cor64.Mips.Analysis
             {
                 case OperandType.I_TIS:
                 case OperandType.I_TSI:
-                case OperandType.I_STI:
+                case OperandType.BRANCH:
                 case OperandType.R_ST:
                     {
                         AddGprUsage(inst.Source);

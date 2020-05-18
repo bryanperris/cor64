@@ -42,9 +42,9 @@ namespace cor64.RCP
         {
             Map(m_Config, m_DeviceId, m_Delay, m_Mode, m_RefInterval, m_RefRow, m_RasInterval, m_MinInterval, m_AddressSelect, m_Manuf);
 
-            m_Config.ReadPtr.RegWrite(0xB4190010);
-            m_Delay.ReadPtr.RegWrite(0x2B3B1A0B);
-            m_RasInterval.ReadPtr.RegWrite(0x101C0A04);
+            m_Config.RegisterValue = 0xB4190010;
+            m_Delay.RegisterValue = 0x2B3B1A0B;
+            m_RasInterval.RegisterValue = 0x101C0A04;
         }
     }
 }

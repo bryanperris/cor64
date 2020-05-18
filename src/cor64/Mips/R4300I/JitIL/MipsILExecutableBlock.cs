@@ -4,8 +4,8 @@ using System.Linq;
 using System.Reflection.Emit;
 using System.Text;
 using System.Threading.Tasks;
-using cor64.Mips.R4300I.JitCommon;
-using DYNMETHOD = System.Action<cor64.Mips.R4300I.JitCommon.IDynamicMips, cor64.Mips.R4300I.JitIL.MipsILExecutableBlock>;
+using cor64.Mips.JitCommon;
+using DYNMETHOD = System.Action<cor64.Mips.JitCommon.IDynamicMips, cor64.Mips.R4300I.JitIL.MipsILExecutableBlock>;
 
 namespace cor64.Mips.R4300I.JitIL
 {

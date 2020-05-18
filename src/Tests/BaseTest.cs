@@ -20,14 +20,6 @@ namespace Tests
 
             String layout = @"${logger} ${message}";
 
-            // NLogViewerTarget nLogViewerTarget = new NLogViewerTarget()
-            // {
-            //     Layout = layout,
-            //     Address = "tcp4://localhost:9999"
-            // };
-
-            // configuration.AddTarget("log4view", nLogViewerTarget);
-            // configuration.LoggingRules.Add(new LoggingRule("*", LogLevel.Trace, nLogViewerTarget));
 
             ColoredConsoleTarget consoleTarget = new ColoredConsoleTarget()
             {
@@ -36,7 +28,7 @@ namespace Tests
 
             configuration.AddTarget("console", consoleTarget);
 
-            var rule = new LoggingRule("*", LogLevel.Debug, consoleTarget)
+            var rule = new LoggingRule("*", LogLevel.Trace, consoleTarget)
             {
                 DefaultFilterResult = FilterResult.Log
             };

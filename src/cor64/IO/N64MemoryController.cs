@@ -18,22 +18,18 @@ namespace cor64.IO
     public class N64MemoryController
     {
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
-        private bool m_Debug = false;
         private BlockDevice m_CartRom; // Domain 1, Address 2 region
-        private MemoryDebugger m_MemDebugger = new MemoryDebugger();
-        private UnifiedMemModel<BlockDevice> m_MemModel = new UnifiedMemModel<BlockDevice>();
+        private readonly static MemoryDebugger s_MemDebugger = new MemoryDebugger();
+        private readonly UnifiedMemModel<BlockDevice> m_MemModel = new UnifiedMemModel<BlockDevice>();
         private long m_CountWriters;
         private long m_CountReaders;
-        private FastMemMap m_FastMemMap = new FastMemMap();
+        private readonly FastMemMap m_FastMemMap = new FastMemMap();
 
         private Action<uint, byte[], int, int> m_Read;
         private Action<uint, byte[], int, int> m_Write;
 
-        private const int DUMMY_SECTION_SIZE = 0x100000;
-
         public N64MemoryController()
         {
-            Interface_MI = new MipsInterface(this);
             m_Read = m_FastMemMap.Read;
             m_Write = m_FastMemMap.Write;
         }
@@ -47,27 +43,13 @@ namespace cor64.IO
         public void Init()
         {
             m_MemModel.RDRAM = new Rdram();
-            m_MemModel.RDRAMRegs = new RdramRegisters(this);
-            m_MemModel.SPRegs = new SignalProcessorMemory(this);
-            m_MemModel.DPCmdRegs = new DummyMemory(DUMMY_SECTION_SIZE, "Display Command Interface"); ;
-            m_MemModel.DpSpanRegs = new DummyMemory(DUMMY_SECTION_SIZE, "Display Span Interface"); ;
-            m_MemModel.MIRegs = Interface_MI;
-            m_MemModel.VIRegs = new Video(this, Interface_MI);
-            m_MemModel.AIRegs = new DummyMemory(DUMMY_SECTION_SIZE, "Audio Interface");
-            m_MemModel.PIRegs = new PIMemory(this);
             m_MemModel.RIRegs = new RdramInterface(this);
-            m_MemModel.SIRegs = new SerialMemory(this);
-            m_MemModel.Cart = m_CartRom;
+            m_MemModel.RDRAMRegs = new RdramRegisters(this);
             m_MemModel.PIF = new PIFMemory(this);
+            m_MemModel.DiskDriveRegisters = new DummyMemory(0x1000000, "Cartridge Domain 2, Address 1");
             m_MemModel.Init();
 
             m_FastMemMap.Init(m_MemModel);
-        }
-
-
-        internal void DebugMode()
-        {
-            m_Debug = true;
         }
 
         public void Read(long address, byte[] buffer, int offset, int count)
@@ -97,6 +79,7 @@ namespace cor64.IO
         public void MountCartridge(Cartridge cartridge)
         {
             m_CartRom = cartridge.GetBlockDevice();
+            m_MemModel.Cart = m_CartRom;
         }
 
         private void _ReadMemAligned(uint address, byte[] buffer, int offset, int count)
@@ -106,7 +89,7 @@ namespace cor64.IO
 
             if (blkDevice == null)
             {
-                throw new IOException(String.Format("Device block for read not found for {0:X4} ({1})", blkDevice, m_MemDebugger.GetMemName(address)));
+                throw new IOException(String.Format("Device block for read not found for {0:X4} ({1})", blkDevice, s_MemDebugger.GetMemName(address)));
             }
 
             blkDevice.BaseAddress = address;
@@ -120,7 +103,7 @@ namespace cor64.IO
 
             if (blkDevice == null)
             {
-                throw new IOException(String.Format("Device block for write not found for {0:X4} ({1})", blkDevice, m_MemDebugger.GetMemName(address)));
+                throw new IOException(String.Format("Device block for write not found for {0:X4} ({1})", blkDevice, s_MemDebugger.GetMemName(address)));
             }
 
             blkDevice.BaseAddress = address;
@@ -152,13 +135,9 @@ namespace cor64.IO
             return copyTask;
         }
 
-        public MipsInterface Interface_MI { get; }
-
-        public SignalProcessorMemory Interface_SP => (SignalProcessorMemory)m_MemModel.SPRegs;
-
-        public Video Interface_VI => (Video)m_MemModel.VIRegs;
-
         public Rdram RDRAM => (Rdram)m_MemModel.RDRAM;
+
+        public UnifiedMemModel<BlockDevice> Model => m_MemModel;
 
         private sealed class _InternalStream : Stream
         {

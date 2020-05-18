@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+
+using static cor64.Mips.OpcodesCommon;
 using static cor64.Mips.R4300I.Opcodes;
 
 namespace cor64.Mips.R4300I

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -11,9 +11,9 @@ namespace cor64.Mips.R4300I
     {
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
         const int SIZE = 32;
-        private ulong[] m_Registers;
-        private Action<int, ulong>[] m_WriteMap;
-        private Func<int, ulong>[] m_ReadMap;
+        private readonly ulong[] m_Registers;
+        private readonly Action<int, ulong>[] m_WriteMap;
+        private readonly Func<int, ulong>[] m_ReadMap;
 
         public CauseRegister Cause { get; } = new CauseRegister();
         public StatusRegister Status { get; } = new StatusRegister();

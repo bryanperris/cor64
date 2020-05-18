@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace cor64.Mips
 {
-    public enum RegBoundType : byte
+    public enum RegBoundType : ushort
     {
         None =   0,
         Gpr =    1,
@@ -14,6 +14,8 @@ namespace cor64.Mips
         Hi =     0b1000,
         Cp0 =    0b10000,
         Cp1 =    0b100000,
-        Cp1Ctl = 0b1000000
+        Cp1Ctl = 0b1000000,
+        Cp2    = 0b10000000,
+        Cp2Ctl = 0b100000000
     }
 }

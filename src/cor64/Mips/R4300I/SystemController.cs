@@ -19,8 +19,9 @@ namespace cor64.Mips.R4300I
         private bool m_CacheErr;
         private bool m_NMI;
         private MipsInterface m_Interface;
-        private Clock m_Clock;
+        private readonly Clock m_Clock;
         private bool m_SoftReset;
+        private bool m_Pending = false;
 
 
         const int INTERRUPT_SW0 = 0;
@@ -43,6 +44,10 @@ namespace cor64.Mips.R4300I
         {
             m_State = coreState;
             m_Clock = clock;
+        }
+
+        public void ClearPending() {
+            m_Pending = false;
         }
 
         public void AttachInterface(MipsInterface mipsInterface)
@@ -92,6 +97,8 @@ namespace cor64.Mips.R4300I
         {
             REGS.Write(CTS.CP0_REG_COUNT, REGS.Read(CTS.CP0_REG_COUNT) + count);
         }
+
+        public bool InterruptsPending => m_Pending;
 
         private void CheckInterrupts(ulong pc, bool isDelaySlot)
         {
@@ -201,6 +208,7 @@ namespace cor64.Mips.R4300I
             /* If true, then prepare to jump to the dedicated exception handler */
             if (executeHandler)
             {
+                m_Pending = true;
                 SR.SetInterruptsEnabled(false);
 
                 if (!error)

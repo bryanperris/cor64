@@ -10,8 +10,10 @@ namespace cor64.Mips
     {
         UNK,
         AND,
+        NAND,
         OR,
         XOR,
+        NXOR,
         NOR,
         LSHIFT,
         RSHIFT,
@@ -23,6 +25,8 @@ namespace cor64.Mips
         LESS_THAN,
         TRUE,
         FALSE,
-        SIGNALING
+        SIGNALING,
+        ABSOLUTE,
+        MOVE
     }
 }

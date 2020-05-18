@@ -6,7 +6,7 @@ namespace cor64.RCP
 {
     public class VideoControlReg
     {
-        private IntPtr m_Ptr;
+        private MemMappedBuffer m_Buffer;
         public const int PIXELMODE_NONE = 0;
         public const int PIXELMODE_16BPP = 2;
         public const int PIXELMODE_32BPP = 3;
@@ -14,20 +14,15 @@ namespace cor64.RCP
 
         const int F_PIXELMODE = 0;
 
-        public uint Value {
-            get => m_Ptr.RegRead();
-            set => m_Ptr.RegWrite(value);
-        }
-
-        public VideoControlReg(IntPtr ptr)
+        public VideoControlReg(MemMappedBuffer buffer)
         {
-            m_Ptr = ptr;
+            m_Buffer = buffer;
             m_Fiddler.DefineField(0, 2);
         }
 
         public int GetPixelMode()
         {
-            uint v = Value;
+            uint v = m_Buffer.RegisterValue;
             return (int)m_Fiddler.X(F_PIXELMODE, ref v);
         }
     }

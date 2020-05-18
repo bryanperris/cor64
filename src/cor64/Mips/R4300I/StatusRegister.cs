@@ -19,8 +19,9 @@ namespace cor64.Mips.R4300I
         const int F_IM = 1;
         const int F_DS = 2;
         const int F_CU = 3;
-        const int F_ERL = 4;
-        const int F_EXL = 5;
+        const int F_EXL = 4;
+        const int F_ERL = 5;
+
 
         const int INT_0 = 0;
         const int INT_1 = 1;

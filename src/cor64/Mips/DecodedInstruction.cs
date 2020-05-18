@@ -81,6 +81,14 @@ namespace cor64.Mips
         public uint Immediate => m_Inst.imm;
         public int ShiftAmount => m_Inst.sa;
 
+        // Vector operands
+        public int Element => m_Inst.e;
+        public int DestElement => m_Inst.de;
+        public int VTarget => m_Inst.vt;
+        public int VSource => m_Inst.vs;
+        public int VDest => m_Inst.vd;
+        public int Offset => m_Inst.offset;
+
         public bool IsNull => m_Opcode.Family == OperationFamily.Null;
     }
 }

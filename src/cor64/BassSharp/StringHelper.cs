@@ -44,7 +44,7 @@ namespace cor64.BassSharp
         {
             var r = str.LeftMatchAndTrim(left, n).RightMatchAndTrim(right, n);
 
-            return n ? r : (r == null ? str : r);
+            return n ? r : (r ?? str);
         }
 
         public static String Merge(this Stack<String> stack, String seperator)

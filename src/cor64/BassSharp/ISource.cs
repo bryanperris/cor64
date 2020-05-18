@@ -9,6 +9,6 @@ namespace cor64.BassSharp
 {
     public interface ISource
     {
-        Stream getStream();
+        Stream GetStream();
     }
 }

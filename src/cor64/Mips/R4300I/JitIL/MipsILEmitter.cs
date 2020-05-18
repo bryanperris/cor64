@@ -1,5 +1,5 @@
 ﻿using cor64.Mips.Analysis;
-using cor64.Mips.R4300I.JitCommon;
+using cor64.Mips.JitCommon;
 using System;
 using System.Collections.Generic;
 using System.Linq;

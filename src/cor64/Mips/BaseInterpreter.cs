@@ -1,6 +1,7 @@
 using cor64.Debugging;
 using cor64.IO;
 using cor64.Mips.Analysis;
+using cor64.Mips.R4300I;
 using NLog;
 using System;
 using System.Collections.Generic;
@@ -12,30 +13,6 @@ using System.Text;
 using System.Threading.Tasks;
 using static cor64.Cartridge;
 
-/* TODO: List
- * Debugging
- * -----------
- * Debugger Step, Step In/Out, etc should use breakpoints for these functions
- * Breakpoints need to store the old instruction, insert the BP and then trigger an interrupt
- * Every Step (or cached/compiled instruction) has to check interrupts
- * Solve on how timing counts will work
- * Interrupts: Scan RDRAM and fill in vector table (HLE interrupt handlers will need special mem hooks)
- * Interrupts: Figure out how to emulate the IPL based vectors
- * Cache: Need a way to cache data memory in a cache line (if we want that)
- * Cache: Cache decoded instructions in the base, and other impementations can just provide their own and skip ours
- * Memory: When requesting a read/write to the MMU, we need to process the virtual address and then figure out what stream to access as RAM
- * Memory: We may need to wrap things so there is a layer of emulated DMA business
- * 
- */
-
-/* 
- * Some names notes:
- * CoreEvents - Management of interrupts, timing etc
- * MemManager - Management of virtual TLB, cache table, memory access, virtual memory stuff
- * CoreCache - Management of decoded instructions, and self modification aware
- * BaseDebugger - A way to maanger debugger state: set breakpoints, execution log, etc
- */
-
 // TODO: Disposal pattern for streams
 
 namespace cor64.Mips
@@ -43,24 +20,22 @@ namespace cor64.Mips
     public abstract class BaseInterpreter
     {
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
-        private BaseDisassembler m_Disassembler;
         protected ulong m_Pc;
         private Stream m_IMemory;
-        private StringBuilder m_ExecutionLog = new StringBuilder();
-        private ProgramTrace m_TraceLog;
-        public event Action<DecodedInstruction> TraceStep;
-        private ExecutionState m_State;
-        private Stopwatch m_InstructionStopWatch = new Stopwatch();
-        private MipsInterface m_Interface;
-        private bool m_DebugMode;
         private ulong m_ProgramStart;
-        private ProgramTrace.TraceMode m_TraceMode;
+        protected Profiler m_Profiler = new Profiler();
+
+        public event Action<DecodedInstruction> TraceStep;
 
         protected BaseInterpreter(BaseDisassembler disassembler)
         {
-            m_State = new ExecutionState();
-            m_Disassembler = disassembler;
-            m_TraceLog = new ProgramTrace(disassembler);
+            State = new ExecutionState();
+            Disassembler = disassembler;
+            
+            TraceLog = new ProgramTrace(disassembler)
+            {
+                FilterInterruptHandlers = true
+            };
         }
 
         public virtual void SafeSetPC(ulong address)
@@ -85,22 +60,37 @@ namespace cor64.Mips
 
         public void OverrideCoreState(ExecutionState state)
         {
-            m_State = state;
+            State = state;
         }
 
         public void SetDebuggingMode(bool mode)
         {
-            m_DebugMode = mode;
+            DebugMode = mode;
         }
 
         public void SetTraceMode(ProgramTrace.TraceMode mode)
         {
-            m_TraceMode = mode;
+            TraceMode = mode;
 
             if (mode != ProgramTrace.TraceMode.None)
             {
                 Log.Debug("Execution trace logging has been enabled");
             }
+        }
+
+        protected void BeginInstructionProfile(DecodedInstruction inst)
+        {
+            m_Profiler.StartSession(inst.Op);
+        }
+
+        protected void EndInstructionProfile()
+        {
+            m_Profiler.StopSession();
+        }
+
+        public String GetProfiledResults()
+        {
+            return m_Profiler.GenerateReport();
         }
 
         public DecodedInstruction CurrentInst { get; protected set; }
@@ -110,28 +100,22 @@ namespace cor64.Mips
         public virtual void AttachIStream(Stream memoryStream)
         {
             m_IMemory = memoryStream;
-            m_Disassembler.SetStreamSource(memoryStream);
+            Disassembler.SetStreamSource(memoryStream);
         }
-        
-        protected Stream IMemoryStream => m_IMemory;
 
         public abstract void AttachDStream(Stream memory);
 
         public abstract void AttachBootManager(BootManager bootManager);
 
-        /* The method is reponsible for setting up the reported rdram size */
-        protected abstract void ReportRdramSize();
-
         protected virtual void EntryPointHit()
         {
             InBootMode = false;
             Log.Debug("**** Program Entry Point Hit ****");
-            ReportRdramSize();
         }
 
         protected DecodedInstruction Decode()
         {
-            DecodedInstruction decode = m_Disassembler.Disassemble(m_Pc);
+            DecodedInstruction decode = Disassembler.Disassemble(m_Pc);
 
             if (InBootMode)
             {
@@ -144,30 +128,145 @@ namespace cor64.Mips
             return decode;
         }
 
-        public bool IsTraceActive => m_TraceMode == ProgramTrace.TraceMode.Full || (m_TraceMode == ProgramTrace.TraceMode.ProgramOnly && !InBootMode);
-
-        public bool IsMemTraceActive => IsTraceActive && ((m_TraceLog.Details & ProgramTrace.TraceDetails.MemoryAccess) == ProgramTrace.TraceDetails.MemoryAccess);
-
         protected void TraceInstruction(DecodedInstruction decode, bool nullifed)
         {
-            if (m_TraceMode != ProgramTrace.TraceMode.None && decode.Op.Family != OperationFamily.Null && IsTraceActive)
+            if (TraceMode != ProgramTrace.TraceMode.None && decode.Op.Family != OperationFamily.Null && IsTraceActive)
             {
-                m_TraceLog.AppendInstruction(decode, nullifed);
+                TraceLog.AppendInstruction(decode, nullifed);
                 TraceStep?.Invoke(decode);
             }
         }
 
-        protected void AddMemAccess(ulong address, bool isWrite, String val)
+        protected void TraceMemoryHit(ulong address, bool isWrite, String val)
         {
             if (IsMemTraceActive)
-                m_TraceLog.AddInstructionMemAccess(address, isWrite, val);
+                TraceLog.AddInstructionMemAccess(address, isWrite, val);
         }
 
         public virtual String GetGPRName(int i) {
             return i.ToString();
         }
 
-        protected ulong LastDataAddress { get; set; }
+        protected bool ValidateInstruction(DecodedInstruction decoded)
+        {
+            return !decoded.IsValid && !decoded.IsNull;
+        }
+
+        protected bool ComputeBranchCondition(bool isDword, ulong source, ulong target, RegBoundType copSelect,  ArithmeticOp compareOp)
+        {
+            bool condition = false;
+
+            bool EQ_ZERO()
+            {
+                return source == 0;
+            }
+
+            bool GT_ZERO()
+            {
+                if (isDword)
+                {
+                    ulong v = source;
+                    return (v >> 63) == 0 && v > 0;
+                }
+                else
+                {
+                    uint v = (uint)source;
+                    return (v >> 31) == 0 && v > 0;
+                }
+            }
+
+            bool LT_ZERO()
+            {
+                if (isDword)
+                {
+                    ulong v = source;
+                    return (v >> 63) == 1 && v > 0;
+                }
+                else
+                {
+                    uint v = (uint)source;
+                    return (v >> 31) == 1 && v > 0;
+                }
+            }
+
+            bool COP_FLAG(bool compare)
+            {
+                switch (copSelect)
+                {
+                    case RegBoundType.Cp1:
+                        {
+                            var cond = State.FCR.Condition;
+
+                            if (!compare)
+                            {
+                                /* Expecting FALSE condition */
+                                return !cond && true;
+                            }
+                            else
+                            {
+                                /* Expecting TRUE condition */
+                                return cond && true;
+                            }
+                        }
+
+                    default: throw new NotSupportedException("MIPS does not support this kind of unit: " + copSelect.ToString());
+                }
+            }
+
+            switch (compareOp)
+            {
+                default: throw new NotSupportedException("MIPS does not support this branch operation");
+                case ArithmeticOp.EQUAL: condition = (source == target); break;
+                case ArithmeticOp.NOT_EQUAL: condition = (source != target); break;
+                case ArithmeticOp.GREATER_THAN: condition = GT_ZERO(); break;
+                case ArithmeticOp.LESS_THAN: condition = LT_ZERO(); break;
+                case ArithmeticOp.GREATER_THAN_OR_EQUAL: condition = (EQ_ZERO() || GT_ZERO()); break;
+                case ArithmeticOp.LESS_THAN_OR_EQUAL: condition = (EQ_ZERO() || LT_ZERO()); break;
+                case ArithmeticOp.FALSE: condition = COP_FLAG(false); break;
+                case ArithmeticOp.TRUE:  condition = COP_FLAG(true); break;
+            }
+
+            return condition;
+        }
+
+        public static void RegTransferGprHelper(DecodedInstruction inst, out int gprSource, out int gprTarget)
+        {
+            gprSource = inst.Target;
+            gprTarget = inst.Destination;
+
+            if (inst.Op.XferSource == RegBoundType.Gpr)
+            {
+                switch (inst.Op.OperandFmt)
+                {
+                    default: break;
+                    case OperandType.R_S: gprSource = inst.Source; break;
+                }
+            }
+
+            if (inst.Op.XferTarget == RegBoundType.Gpr)
+            {
+                switch (inst.Op.OperandFmt)
+                {
+                    default: break;
+                    case OperandType.R_D: gprTarget = inst.Destination; break;
+                    case OperandType.Cop0_CT:
+                    case OperandType.Cop0_TC:
+                    case OperandType.Cop1_CT:
+                    case OperandType.Cop1_TC:
+                    //case OperandType.VU_CT:
+                    case OperandType.VU_FromCtrl:
+                    //case OperandType.VU_TC:
+                    case OperandType.VU_ToCtrl:
+                    case OperandType.Cop1_FromCtrl:
+                    case OperandType.Cop1_ToCtrl:
+                        {
+                            gprSource = inst.Target;
+                            gprTarget = inst.Target;
+                            break;
+                        }
+                }
+            }
+        }
 
         public virtual String Description
         {
@@ -176,56 +275,35 @@ namespace cor64.Mips
             }
         }
 
-        public BaseDisassembler Disassembler => m_Disassembler;
+        public BaseDisassembler Disassembler { get; }
 
-        public ProgramTrace TraceLog => m_TraceLog;
+        public ProgramTrace TraceLog { get; }
 
-        public ExecutionState State => m_State;
+        public ExecutionState State { get; private set; }
 
-        public MipsInterface Interface => m_Interface;
+        public bool DebugMode { get; private set; }
 
-        public bool DebugMode => m_DebugMode;
+        protected InstructionDebugMode core_InstDebugMode;
+        
+        public void SetInstructionDebugMode(InstructionDebugMode mode)
+        {
+            core_InstDebugMode = mode;
+        }
 
         public bool InBootMode { get; protected set; } = true;
 
-        public ProgramTrace.TraceMode TraceMode => m_TraceMode;
+        public ProgramTrace.TraceMode TraceMode { get; private set; }
 
-        public virtual IDictionary<string, string> SnapSave()
-        {
-            StringBuilder sb = new StringBuilder();
+        public bool IsTraceActive => TraceMode == ProgramTrace.TraceMode.Full || (TraceMode == ProgramTrace.TraceMode.ProgramOnly && !InBootMode);
 
-            Dictionary<string, string> snap = new Dictionary<string, string>
-            {
-                { "pc", m_Pc.ToString("X16") },
-                { "lo", m_State.GetLo().ToString("X16") },
-                { "hi", m_State.GetHi().ToString("X16") },
-                { "llbit", m_State.LLBit ? "1" : "0" }
-            };
+        public bool IsMemTraceActive => IsTraceActive && ((TraceLog.Details & ProgramTrace.TraceDetails.MemoryAccess) == ProgramTrace.TraceDetails.MemoryAccess);
 
-            for (int i = 0; i < 32; i++)
-            {
-                sb.Clear();
-                sb.Append(m_State.GetGpr64(i).ToString("X16"));
-                sb.Append(";");
-                sb.Append(((long)m_State.GetGpr64(i)).ToString());
-                sb.Append(";");
-                sb.Append(((int)m_State.GetGpr32(i)).ToString());
+        protected bool EnableCp0 { get; set; } = true;
 
-                snap.Add("gpr" + i.ToString(), sb.ToString());
-            }
+        protected bool EnableCp1 { get; set; } = true;
 
-            for (int i = 0; i < 32; i++)
-            {
-                sb.Clear();
-                sb.Append(m_State.GetFprDW(i).ToString("X16"));
-                sb.Append(";");
-                sb.Append(DoubleConverter.ToExactString(m_State.GetFprD(i)));
-                
+        protected bool EnableCp2 { get; set; } = true;
 
-                snap.Add("fpr" + i.ToString(), sb.ToString());
-            }
-
-            return snap;
-        }
+        protected Stream IMemoryStream => m_IMemory;
     }
 }

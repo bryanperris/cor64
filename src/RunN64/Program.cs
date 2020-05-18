@@ -3,9 +3,6 @@ using System.IO;
 using cor64.Mips;
 using Newtonsoft.Json;
 using NLog;
-using Avalonia;
-using Avalonia.Logging.Serilog;
-using RunN64.Views;
 using CommandLine;
 
 namespace RunN64
@@ -17,8 +14,7 @@ namespace RunN64
 
         public class Options
         {
-            [Option('x', "noui", Required = false, HelpText = "Disable UI")]
-            public bool NoUI { get; set; }
+            
         }
 
 
@@ -26,6 +22,7 @@ namespace RunN64
         {
             Console.ForegroundColor = ConsoleColor.Cyan;
             Console.WriteLine("\n\n****** The program has ended");
+            Environment.Exit(0);
         }
 
         static void Main(string[] args)
@@ -45,22 +42,12 @@ namespace RunN64
                 {
                     s_Emulator.Start();
 
-                    if (options.NoUI) {
-                        CommandLoop();
+                    CommandLoop();
 
-                        if (Environment.OSVersion.Platform == PlatformID.Win32NT)
-                        {
-                            Console.ReadLine();
-                        }
-                    }
-                    else {
-                        AppBuilder.Configure<App>()
-                        .UsePlatformDetect()
-                        .LogToDebug()
-                        .UseSkia()
-                        .UseReactiveUI()
-                        .Start(AppMain, args);
-                    }
+                    // if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+                    // {
+                    //     Console.ReadLine();
+                    // }
                 }
                 catch (Exception e)
                 {
@@ -72,12 +59,6 @@ namespace RunN64
 
 
             });
-        }
-
-        private static void AppMain(Application app, String[] args)
-        {
-            //var window = new MainWindow(s_Emulator);
-            app.Run(new LogWindow());
         }
 
         private static void CommandLoop()

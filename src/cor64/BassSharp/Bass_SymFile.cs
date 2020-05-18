@@ -6,11 +6,6 @@ namespace cor64.BassSharp
 {
     public abstract partial class Bass
     {
-        void AppendSymFile(String entry)
-        {
-            m_SymFileBuffer.Append(entry);
-        }
-
         void AppendSymFile(String label, long data)
         {
             if (IsWritePhase) {
@@ -20,18 +15,12 @@ namespace cor64.BassSharp
                     scopedName = String.Format("{0}.{1}", m_ScopeStack.Merge("."), label);
                 }
 
-                String entry = String.Format("{0:8X} {1}\n", data, scopedName);
+                //String entry = String.Format("{0:8X} {1}\n", data, scopedName);
 
-                m_SymFileBuffer.Append(entry);
+                m_Symbols.Add(data, scopedName);
 
-                Log.Debug("Symbol Added: {0}:{1}", label, data);
+                Log.Debug("Symbol Added: {0}:{1}", scopedName, data);
             }
-        }
-
-
-        bool WriteSymFile(String filename, bool create)
-        {
-            throw new NotImplementedException();
         }
     }
 }

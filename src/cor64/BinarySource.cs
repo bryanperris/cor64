@@ -22,7 +22,7 @@ namespace cor64
             m_BinarySteam.Position = 0;
         }
 
-        public Stream getStream()
+        public Stream GetStream()
         {
             return m_BinarySteam;
         }

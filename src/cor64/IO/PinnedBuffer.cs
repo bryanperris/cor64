@@ -1,4 +1,5 @@
-﻿using System;
+﻿using System.Buffers;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -12,15 +13,39 @@ namespace cor64.IO
     public class PinnedBuffer : IDisposable
     {
         private byte[] m_Buffer;
-        private GCHandle m_Handle;
         private IntPtr m_Ptr;
         private bool m_Disposed = false;
+        private readonly Memory<byte> m_MemoryBlock;
+        private readonly MemoryHandle m_PinHandle;
+        private PinnedBuffer m_Parent;
 
         public PinnedBuffer(int size)
         {
+            Size = size;
             m_Buffer = new byte[size];
-            m_Handle = GCHandle.Alloc(m_Buffer, GCHandleType.Pinned);
-            m_Ptr = m_Handle.AddrOfPinnedObject();
+            m_MemoryBlock = new Memory<byte>(m_Buffer, 0, m_Buffer.Length);
+            m_PinHandle = m_MemoryBlock.Pin();
+
+            unsafe {
+                m_Ptr = (IntPtr)m_PinHandle.Pointer;
+            }
+        }
+
+        public PinnedBuffer(PinnedBuffer parent, int offset, int size) {
+            Size = size;
+            m_Parent = parent;
+            m_Ptr = parent.m_Ptr.Offset(offset);
+        }
+
+        public void Clear()
+        {
+            for (int i = 0; i < Size; i++) {
+                Marshal.WriteByte(m_Ptr + i, 0);
+            }
+        }
+
+        public void CopyTo(Memory<byte> destination) {
+            m_MemoryBlock.CopyTo(destination);
         }
 
         public void CopyInto(byte[] buffer)
@@ -28,32 +53,18 @@ namespace cor64.IO
             Marshal.Copy(buffer, 0, m_Ptr, buffer.Length);
         }
 
-        public byte this[int index]
-        {
-            get {
-                return m_Buffer[index];
-            }
-
-            set {
-                m_Buffer[index] = value;
-            }
-        }
-
-        public byte[] RawBuffer => m_Buffer;
-
-        public void Clear()
-        {
-            Array.Clear(m_Buffer, 0, m_Buffer.Length);
-        }
-
         public IntPtr GetPointer()
         {
             return m_Ptr;
         }
 
+        public int Size { get; }
+
+        public bool IsDisposed => m_Disposed || (m_Parent != null && m_Parent.m_Disposed);
+
         protected virtual void Dispose(bool disposing)
         {
-            if (!m_Disposed)
+            if (!IsDisposed)
             {
                 if (disposing)
                 {
@@ -61,13 +72,11 @@ namespace cor64.IO
                     m_Ptr = IntPtr.Zero;
                 }
 
-                m_Handle.Free();
+                m_PinHandle.Dispose();
 
                 m_Disposed = true;
             }
         }
-
-
 
         ~PinnedBuffer()
         {

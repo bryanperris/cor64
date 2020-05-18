@@ -13,7 +13,6 @@ namespace cor64.BassSharp.Table
     public abstract partial class BassTable : Bass
     {
         private static Logger Log = LogManager.GetCurrentClassLogger();
-        private static Logger TableLog = LogManager.GetLogger("TableAssembler");
         private List<Opcode> m_Table = new List<Opcode>();
         private ulong m_BitVal;
         private long m_BitPos;
@@ -30,7 +29,7 @@ namespace cor64.BassSharp.Table
                 m_Stream = new MemoryStream(buffer, 0, buffer.Length);
             }
 
-            public Stream getStream()
+            public Stream GetStream()
             {
                 return m_Stream;
             }

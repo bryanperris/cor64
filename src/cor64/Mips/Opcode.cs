@@ -15,9 +15,10 @@ namespace cor64.Mips
         public readonly ArithmeticOp ArithmeticType;
         public readonly RegBoundType XferSource;
         public readonly RegBoundType XferTarget;
+        public readonly VectorOpFlags VectorFlags;
         public readonly int ID;
 
-        public Opcode(string op, ExecutionFlags flags, OperandType operandFmt, OperationFamily family, ArithmeticOp arithmeticType, RegBoundType xferSource, RegBoundType xferTarget, int iD)
+        public Opcode(string op, ExecutionFlags flags, OperandType operandFmt, OperationFamily family, ArithmeticOp arithmeticType, RegBoundType xferSource, RegBoundType xferTarget, VectorOpFlags vuFlags, int iD)
         {
             Op = op;
             Flags = flags;
@@ -27,6 +28,7 @@ namespace cor64.Mips
             XferSource = xferSource;
             XferTarget = xferTarget;
             ID = iD;
+            VectorFlags = vuFlags;
         }
 
         public override bool Equals(object obj)

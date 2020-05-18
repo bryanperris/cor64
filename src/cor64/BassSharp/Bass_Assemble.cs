@@ -192,7 +192,7 @@ namespace cor64.BassSharp
                 if (source == null)
                     throw new Error("Source not found");
                 else
-                    stream = source.getStream();
+                    stream = source.GetStream();
 
                 if (stream == null)
                     throw new Error("Source found, but stream is null");

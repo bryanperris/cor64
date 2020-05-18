@@ -43,7 +43,7 @@ namespace cor64.BassSharp.Eval
                         return result.Replace(", ", "") + ")";
                     }
 
-                default: throw new InvalidOperationException("Invalid operator");
+                default: throw new Error("Invalid operator");
             }
         }
 
@@ -110,7 +110,7 @@ namespace cor64.BassSharp.Eval
                 case Node.Type.AssignBitwiseOr: return p(0) | p(1);
                 case Node.Type.AssignBitwiseXor: return p(0) ^ p(1);
 
-                default: throw new InvalidOperationException("Invalid operator");
+                default: throw new Error("Invalid operator");
             }
         }
 
@@ -154,7 +154,7 @@ namespace cor64.BassSharp.Eval
                 case Node.Type.AssignDivide: return p(0) / p(1);
                 case Node.Type.AssignAdd: return p(0) + p(1);
                 case Node.Type.AssignSubtract: return p(0) - p(1);
-                default: throw new InvalidOperationException("Invalid operator");
+                default: throw new Error("Invalid operator");
             }
         }
 

@@ -1,3 +1,4 @@
+using System.Text;
 using cor64.IO;
 using cor64.RCP;
 using GLFW;
@@ -8,11 +9,13 @@ using System.Runtime.InteropServices;
 using System.Drawing;
 using RunN64;
 using System.Threading;
+using NLog;
 
 namespace RunN64.Graphics
 {
     public class GLFramebufferWindow
     {
+        private static readonly Logger Log = LogManager.GetCurrentClassLogger();
         private readonly NativeWindow m_Window;
         private readonly Video m_VideoInterface;
         private readonly PinnedBuffer m_FBData;
@@ -49,7 +52,23 @@ namespace RunN64.Graphics
             m_Cart = cart;
 
             m_GLContext = GetNativeContext(m_Window);
-            m_GLInterface = GRGlInterface.AssembleGlInterface(m_GLContext, (contextHandle, name) => Glfw.GetProcAddress(name));
+
+            StringBuilder glFunctions = new StringBuilder();
+            glFunctions.Append("GL Function Attachments: ");
+
+            m_GLInterface = GRGlInterface.AssembleGlInterface(m_GLContext, (_, name) => {
+                /* Skip the egl ones, this prevents crashing */
+                if (name.StartsWith("egl")) {
+                    return IntPtr.Zero;
+                }
+                else {
+                    glFunctions.Append(' ').Append(name);
+                    return Glfw.GetProcAddress(name);
+                }
+            });
+
+            //Log.Debug(glFunctions.ToString());
+
             m_SkiaContext = GRContext.Create(GRBackend.OpenGL, m_GLInterface);
             m_Surface = GenerateSkiaSurface(m_SkiaContext, new Size(RES_X, RES_Y + BAR_HEIGHT));
         }
@@ -158,18 +177,19 @@ namespace RunN64.Graphics
             }
             else
             {
-                if (m_FramebufferBitmap != null)
-                    m_FramebufferBitmap.Dispose();
-
+                m_FramebufferBitmap?.Dispose();
                 m_FramebufferBitmap = null;
             }
 
             if (m_FrameCount >= 60)
             {
-                TriggerVI();
+                if (m_VideoInterface.ControlReg.GetPixelMode() != VideoControlReg.PIXELMODE_NONE)
+                    TriggerVI();
             }
             else
+            {
                 m_FrameCount++;
+            }
         }
 
         public void TriggerVI()

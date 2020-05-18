@@ -129,11 +129,11 @@ namespace cor64
             throw new NotImplementedException();
         }
 
-        public static uint AssembleSingleInstruction(String asmLine)
+        public static uint AssembleSingleInstruction(String asmLine, String arch="n64.cpu")
         {
             N64Assembler assembler = new N64Assembler();
             var source = new AssemblyTextSource("main");
-            source += "arch n64.cpu";
+            source += "arch " + arch;
             source += "endian msb";
             source += asmLine;
 

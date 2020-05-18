@@ -3,6 +3,4 @@ Newtonsoft.Json
 ELFSharp
 SkiaSharp.NativeAssets.Linux
 glfw-net
-Avalonia.Desktop
-Avalonia.ReactiveUI
 CommandLineParser
