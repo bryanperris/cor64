@@ -67,47 +67,111 @@ namespace cor64.Mips.R4300I
 
         public void CheckForInterrupts()
         {
-            if (m_TakenException)
+            // Do not do anything if the system controll has not signeled interrupts that need servicing
+            if (!Cop0.InterpreterPendingInterrupts) {
                 return;
+            }
 
-            if (!Cop0.InterruptsPending)
-                return;
+            // if (m_TakenException)
+            //     return;
+
+            // if (!State.Cp0.Status.ErrorLevel && !State.Cp0.Status.ExceptionLevel) {
+            //     return;
+            // }
+
+            Cop0.InterpreterPendingInterrupts = false;
 
             if (State.Cp0.Status.ErrorLevel)
             {
                 m_Pc = Cop0.ExceptionHandlerAddress;
-                m_TakenException = true;
-                Cop0.ClearPending();
-                //Log.Debug("Error handler set pc to " + m_Pc.ToString("X8"));
+
+                #if DEBUG_INTERRUPTS
+                Log.Debug("Error Handler Taken: " + m_Pc.ToString("X8"));
+                #endif
             }
 
-            if (State.Cp0.Status.ExceptionLevel && !m_TakenException)
+            if (State.Cp0.Status.ExceptionLevel)
             {
                 m_Pc = Cop0.ExceptionHandlerAddress;
-                m_TakenException = true;
-                Cop0.ClearPending();
-                //Log.Debug("Exception handler set pc to " + m_Pc.ToString("X8"));
+
+                #if DEBUG_INTERRUPTS
+                Log.Debug("Exception Handler Taken: " + m_Pc.ToString("X8"));
+                #endif
             }
 
-            m_Pc -= 4;
+            m_TakenException = true;
+
+            //m_Pc -= 4;
 
             //SetInstructionDebugMode(DebugInstMode.Full);
 
             /* Save the branch unit context */
-            if (m_TakenException)
-            {
-                bSave_TakeBranch = TakeBranch;
-                bSave_BranchDelay = BranchDelay;
-                bSave_UnconditionalJump = UnconditionalJump;
-                bSDave_TargetAddress = TargetAddress;
-                bSave_NullifyNext = NullifyNext;
+            bSave_TakeBranch = TakeBranch;
+            bSave_BranchDelay = BranchDelay;
+            bSave_UnconditionalJump = UnconditionalJump;
+            bSDave_TargetAddress = TargetAddress;
+            bSave_NullifyNext = NullifyNext;
 
-                TakeBranch = false;
-                BranchDelay = false;
-                UnconditionalJump = false;
-                TargetAddress = 0;
-                NullifyNext = false;
+            TakeBranch = false;
+            BranchDelay = false;
+            UnconditionalJump = false;
+            TargetAddress = 0;
+            NullifyNext = false;
+        }
+
+        public sealed override void ExceptionReturn(DecodedInstruction inst)
+        {
+            if (State.Cp0.Status.ErrorLevel)
+            {
+                // when servicing an error trap
+                m_Pc = (uint)State.Cp0.RegRead(CTS.CP0_REG_ERROR_EPC);
+                State.Cp0.Status.ErrorLevel = false;
             }
+            else
+            {
+                m_Pc = (uint)State.Cp0.RegRead(CTS.CP0_REG_EPC);
+                State.Cp0.Status.ExceptionLevel = false;
+
+                // if (m_TakenException)
+                //     State.Cp0.Cause.ClearAllPending();
+            }
+
+            m_Pc &= 0xFFFFFFFF;
+
+            // We must subtract by 4 due to the PC increment made after the instuction call
+            m_Pc -= 4;
+
+            #if DEBUG_INTERRUPTS
+
+            if (State.Cp0.Status.ErrorLevel) {
+                Log.Debug("Jump to Error EPC: " + m_Pc.ToString("X16"));
+            }
+            else {
+                Log.Debug("Jump to EPC: " + m_Pc.ToString("X16"));
+            }
+
+            if (!m_TakenException) {
+                Log.Debug("ERET called outside a handler: {0:X8}", m_Pc);
+            }
+            else {
+                Log.Debug("ERET called inside a handler");
+            }
+
+            #endif
+
+            if (m_TakenException) {
+                TakeBranch = bSave_TakeBranch;
+                BranchDelay = bSave_BranchDelay;
+                UnconditionalJump = bSave_UnconditionalJump;
+                TargetAddress = bSDave_TargetAddress;
+                NullifyNext = NullifyNext;
+
+                #if DEBUG_INTERRUPTS
+                Log.Debug("Interrupt service finished");
+                #endif
+            }
+
+            m_TakenException = false;
         }
 
         protected void ExecuteNextInst() {
@@ -174,6 +238,11 @@ namespace cor64.Mips.R4300I
                 decoded = Decode();
             }
 
+            // Process NOP
+            if (decoded.Inst.op == 0) {
+                Cop0.MipsTimerTick(1);
+            }
+
             if (ValidateInstruction(decoded))
             {
                 var call = CallTable[decoded];
@@ -190,7 +259,7 @@ namespace cor64.Mips.R4300I
                     {
                         CoreDbg.TestForInstBreakpoint(decoded);
 
-                        TraceInstruction(decoded, false);
+                        TraceInstruction(decoded, false, m_TakenException);
 
                         BeginInstructionProfile(decoded);
                         call(decoded);
@@ -201,7 +270,7 @@ namespace cor64.Mips.R4300I
                     else
                     {
                         NullifyNext = false;
-                        TraceInstruction(decoded, true);
+                        TraceInstruction(decoded, true, m_TakenException);
                     }
                         
                     return true;
@@ -228,6 +297,11 @@ namespace cor64.Mips.R4300I
                 decoded = Decode();
             }
 
+            // Process NOP
+            if (decoded.Inst.op == 0) {
+                Cop0.MipsTimerTick(1);
+            }
+
             if (ValidateInstruction(decoded))
             {
                 var call = CallTable[decoded];
@@ -243,14 +317,15 @@ namespace cor64.Mips.R4300I
                     if (!NullifyNext)
                     {
                         CoreDbg.TestForInstBreakpoint(decoded);
-                        TraceInstruction(decoded, false);
-                        call(decoded);
                         DebugInstruction(decoded);
+                        TraceInstruction(decoded, false, m_TakenException);
+
+                        call(decoded);
                     }
                     else
                     {
                         NullifyNext = false;
-                        TraceInstruction(decoded, true);
+                        TraceInstruction(decoded, true, m_TakenException);
                     }
                     
                     return true;
@@ -268,8 +343,13 @@ namespace cor64.Mips.R4300I
         {
             if (core_InstDebugMode != InstructionDebugMode.None)
             {
-                if (core_InstDebugMode == InstructionDebugMode.Full || (core_InstDebugMode == InstructionDebugMode.ProgramOnly && !InBootMode))
-                    Console.WriteLine("{0:X8} |{2}| {1}", m_Pc, Disassembler.GetFullDisassembly(instruction), InBootMode ? "BOOT" : "PROG");
+                if (core_InstDebugMode == InstructionDebugMode.Full || (core_InstDebugMode == InstructionDebugMode.ProgramOnly && !InBootMode)) {
+                    Console.WriteLine("{0:X8} |{1}| {2}",
+                        m_Pc,
+                        m_TakenException ? "INTR" : (InBootMode ? "BOOT" : "PROG"),
+                        Disassembler.GetFullDisassembly(instruction)
+                        );
+                }
             }
         }
 
@@ -1832,35 +1912,83 @@ namespace cor64.Mips.R4300I
             }
         }
 
-        public sealed override void ExceptionReturn(DecodedInstruction inst)
-        {
-            if (State.Cp0.Status.ErrorLevel)
-            {
-                // when servicing an error trap
-                m_Pc = (uint)State.Cp0.RegRead(CTS.CP0_REG_ERROR_EPC);
-                //Log.Debug("Jump to Error EPC: " + m_Pc.ToString("X16"));
-                State.Cp0.Status.ErrorLevel = false;
+        public sealed override void Trap(DecodedInstruction inst) {
+            bool isImmediate = inst.IsImmediate();
+            bool isUnsigned = inst.IsUnsigned();
+            var result = false;
+
+            void Compare64() {
+                if (isUnsigned) {
+                    var source = ReadGPR64(inst.Source);
+                    var target = isImmediate ? (ulong)(short)inst.Immediate : ReadGPR64(inst.Target);
+
+                    result = inst.Op.ArithmeticType switch
+                    {
+                        ArithmeticOp.EQUAL => source == target,
+                        ArithmeticOp.LESS_THAN => source < target,
+                        ArithmeticOp.GREATER_THAN => source > target,
+                        ArithmeticOp.NOT_EQUAL => source != target,
+                        _ => throw new EmuException("Invalid trap condition type"),
+                    };
+                }
+                else {
+                    var source = (long)ReadGPR64(inst.Source);
+                    var target = isImmediate ? (long)(short)inst.Immediate : (long)ReadGPR64(inst.Target);
+
+                    result = inst.Op.ArithmeticType switch
+                    {
+                        ArithmeticOp.EQUAL => source == target,
+                        ArithmeticOp.LESS_THAN => source < target,
+                        ArithmeticOp.GREATER_THAN => source > target,
+                        ArithmeticOp.NOT_EQUAL => source != target,
+                        _ => throw new EmuException("Invalid trap condition type"),
+                    };
+                }
             }
-            else
-            {
-                m_Pc = (uint)State.Cp0.RegRead(CTS.CP0_REG_EPC);
-                //Log.Debug("Jump to EPC: " + m_Pc.ToString("X"));
-                State.Cp0.Status.ExceptionLevel = false;
+
+            void Compare32() {
+                if (isUnsigned) {
+                    var source = ReadGPR32(inst.Source);
+                    var target = isImmediate ? (uint)(short)inst.Immediate : ReadGPR32(inst.Target);
+
+                    result = inst.Op.ArithmeticType switch
+                    {
+                        ArithmeticOp.EQUAL => source == target,
+                        ArithmeticOp.LESS_THAN => source < target,
+                        ArithmeticOp.GREATER_THAN => source > target,
+                        ArithmeticOp.NOT_EQUAL => source != target,
+                        _ => throw new EmuException("Invalid trap condition type"),
+                    };
+                }
+                else {
+                    var source = (int)ReadGPR32(inst.Source);
+                    var target = isImmediate ? (int)(short)inst.Immediate : (int)ReadGPR32(inst.Target);
+
+                    result = inst.Op.ArithmeticType switch
+                    {
+                        ArithmeticOp.EQUAL => source == target,
+                        ArithmeticOp.LESS_THAN => source < target,
+                        ArithmeticOp.GREATER_THAN => source > target,
+                        ArithmeticOp.NOT_EQUAL => source != target,
+                        _ => throw new EmuException("Invalid trap condition type"),
+                    };
+                }
             }
 
-            m_Pc -= 4;
+            if (IsOperation64) {
+                Compare64();
+            }
+            else {
+                Compare32();
+            }
 
-            m_TakenException = false;
+            if (result) {
+                SetExceptionState(ExceptionType.Trap);
+            }
+        }
 
-            TakeBranch = bSave_TakeBranch;
-            BranchDelay = bSave_BranchDelay;
-            UnconditionalJump = bSave_UnconditionalJump;
-            TargetAddress = bSDave_TargetAddress;
-            NullifyNext = NullifyNext;
-
-#if DEBUG_FULL
-            Log.Debug("Interrupt service finished");
-#endif
+        public override sealed void Break(DecodedInstruction inst) {
+            SetExceptionState(ExceptionType.Breakpoint);
         }
 
         public bool InfiniteLoopWarn => m_WarnInfiniteJump;

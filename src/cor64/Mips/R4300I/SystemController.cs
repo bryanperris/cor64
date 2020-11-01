@@ -1,4 +1,5 @@
-﻿using System;
+using System.Runtime.ConstrainedExecution;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -21,17 +22,17 @@ namespace cor64.Mips.R4300I
         private MipsInterface m_Interface;
         private readonly Clock m_Clock;
         private bool m_SoftReset;
-        private bool m_Pending = false;
+        private bool m_RcpHandlerTaken = false;
+        private bool m_Direct;
 
-
-        const int INTERRUPT_SW0 = 0;
-        const int INTERRUPT_SW1 = 1;
-        const int INTERRUPT_RCP = 2;
-        const int INTERRUPT_CART = 3;
-        const int INTERRUPT_RESET = 4;
-        const int INTERRUPT_RDB_READ = 5;
-        const int INTERRUPT_RDB_WRITE = 6;
-        const int INTERRUPT_TIMER = 7;
+        const int INTERRUPT_SW0 = 0;  // An interrupt set by user
+        const int INTERRUPT_SW1 = 1;  // An interrupt set by user
+        const int INTERRUPT_RCP = 2;  // RCP Hardware Events
+        const int INTERRUPT_CART = 3; // Cartidge Events
+        const int INTERRUPT_RESET = 4; // Reset Button
+        const int INTERRUPT_RDB_READ = 5; // Debugger Read
+        const int INTERRUPT_RDB_WRITE = 6; // Debugger Write
+        const int INTERRUPT_TIMER = 7; // MIPS Timer
 
 
         protected CauseRegister CR => m_State.Cp0.Cause;
@@ -44,10 +45,6 @@ namespace cor64.Mips.R4300I
         {
             m_State = coreState;
             m_Clock = clock;
-        }
-
-        public void ClearPending() {
-            m_Pending = false;
         }
 
         public void AttachInterface(MipsInterface mipsInterface)
@@ -75,6 +72,10 @@ namespace cor64.Mips.R4300I
             m_SoftReset = true;
         }
 
+        public void UseDirectAddresses() {
+            m_Direct = true;
+        }
+
         public void SetNonMaskableInterrupt()
         {
             m_NMI = true;
@@ -93,17 +94,62 @@ namespace cor64.Mips.R4300I
             CheckInterrupts(pc, isDelaySlot);
         }
 
-        private void MipsTimerTick(ulong count)
+        public void MipsTimerTick(ulong count)
         {
+            #if HACK_FASTER_TIMER
+            count += 1;
+            #endif
+
             REGS.Write(CTS.CP0_REG_COUNT, REGS.Read(CTS.CP0_REG_COUNT) + count);
         }
 
-        public bool InterruptsPending => m_Pending;
+        public uint TimerCount => (uint)REGS.Read(CTS.CP0_REG_COUNT);
+
+        public uint TimerMax => (uint)REGS.Read(CTS.CP0_REG_COMPARE);
 
         private void CheckInterrupts(ulong pc, bool isDelaySlot)
         {
-            if (!SR.InterruptsEnabled)
+            // XXX: It seems we should always check for pending RCP updates
+            //      even when interrupts have been disabled
+
+            /* RCP Hardware Interrupt */
+            if (m_Interface != null) {
+                if ((m_Interface.Interrupt & m_Interface.Mask) != 0)
+                {
+                    #if !FILTER_RCP_INTERRUPTS
+                    CR.SetInterruptPending(INTERRUPT_RCP);
+                    #endif
+                }
+                else {
+                    #if !FILTER_RCP_INTERRUPTS
+                    CR.ClearPendingInterrupt(INTERRUPT_RCP);
+                    #endif
+                }
+            }
+
+            bool timerPending = false;
+
+            /* Timer Interrupt */
+            if ( REGS.RegRead(CTS.CP0_REG_COMPARE) != 0) {
+                if (REGS.RegRead(CTS.CP0_REG_COUNT) >= REGS.RegRead(CTS.CP0_REG_COMPARE))
+                {
+                    REGS.RegWrite(CTS.CP0_REG_COUNT, 0);
+                    timerPending = true;
+                }
+            }
+
+
+            if (!SR.InterruptsEnabled) {
                 return;
+            }
+
+            if (SR.ErrorLevel) {
+                return;
+            }
+
+            if (SR.ExceptionLevel) {
+                return;
+            }
 
             uint target;
             uint cacheTarget;
@@ -121,12 +167,19 @@ namespace cor64.Mips.R4300I
                 target = 0x80000000;
             }
 
-            /* NMI MIPS Interrupt */
+            /* Non-maskable MIPS interrupt, this cannot be ignored */
+            /* This forces the MIPS to do a reset */
             if (m_NMI)
             {
                 target = 0xBFC00000;
                 m_NMI = false;
                 error = true;
+            }
+
+            // If this has been set manually, don't use any base address
+            if (m_Direct) {
+                target = 0;
+                cacheTarget = 0;
             }
 
             /* 32-bit TLB Exception */
@@ -157,42 +210,31 @@ namespace cor64.Mips.R4300I
             else if (CR.ExceptionThrown)
             {
                 CR.ClearThrownException();
-
                 target += 0x180;
-
-                if (isDelaySlot)
-                {
-                    REGS.Write(CTS.CP0_REG_EPC, pc - 4);
-                    CR.SetBranchDelayBit();
-                }
-                else
-                {
-                    REGS.Write(CTS.CP0_REG_EPC, pc);
-                    CR.ClearBranchDelayBit();
-                }
-
                 executeHandler = true;
+                //error = true;
             }
 
             /* Interrupts */
             else
             {
                 target += 0x180;
-                
+                error = false;
+
+                /* MIPS timer has generated an event, set its interrupt */
+                if (timerPending) {
+                    CR.SetInterruptPending(INTERRUPT_TIMER);
+
+                    timerPending = false;
+
+                    #if DEBUG_MIPS_TIMER
+                        Log.Debug("Mips Timer interrupt trigger");
+                    #endif
+                }
+
+                /* Reset button has been pushed, set its interrupt */
                 if (SR.InterruptMask != 0)
                 {
-                    /* RCP Hardware Interrupt */
-                    if ((m_Interface.Interrupt & m_Interface.Mask) != 0)
-                    {
-                        CR.SetInterruptPending(INTERRUPT_RCP);
-                    }
-
-                    /* Timer Interrupt */
-                    if (REGS.RegRead(CTS.CP0_REG_COMPARE) == REGS.RegRead(CTS.CP0_REG_COUNT))
-                    {
-                        CR.SetInterruptPending(INTERRUPT_TIMER);
-                    }
-
                     /* SoftReset */
                     if (m_SoftReset)
                     {
@@ -202,25 +244,53 @@ namespace cor64.Mips.R4300I
                     }
                 }
 
+                // This should handle interrupts SW0 and SW1 set by the user
                 executeHandler = (CR.InterruptPending & SR.InterruptMask) != 0;
             }
 
             /* If true, then prepare to jump to the dedicated exception handler */
             if (executeHandler)
             {
-                m_Pending = true;
-                SR.SetInterruptsEnabled(false);
+                #if DEBUG_INTERRUPTS
+                Log.Debug("Execute Interrupt Handler");
+                #endif
+
+                InterpreterPendingInterrupts = true;
 
                 if (!error)
                 {
-                    REGS.RegWrite(CTS.CP0_REG_EPC, pc);
                     SR.ExceptionLevel = true;
+
+                    if (isDelaySlot)
+                    {
+                        REGS.Write(CTS.CP0_REG_EPC, pc - 4);
+                        CR.SetBranchDelayBit();
+                    }
+                    else
+                    {
+                        REGS.Write(CTS.CP0_REG_EPC, pc);
+                        CR.ClearBranchDelayBit();
+                    }
                 }
                 else
                 {
-                    REGS.RegWrite(CTS.CP0_REG_ERROR_EPC, pc);
                     SR.ErrorLevel = true;
+
+                    if (isDelaySlot)
+                    {
+                        REGS.Write(CTS.CP0_REG_ERROR_EPC, pc - 4);
+                        CR.SetBranchDelayBit();
+                    }
+                    else
+                    {
+                        REGS.Write(CTS.CP0_REG_ERROR_EPC, pc);
+                        CR.ClearBranchDelayBit();
+                    }
                 }
+
+                #if DEBUG_INTERRUPTS
+                Log.Debug("PC to return {0:X8} after servicing interrupt", REGS.RegRead(error ? CTS.CP0_REG_ERROR_EPC : CTS.CP0_REG_EPC));
+                #endif
 
                 ExceptionHandlerAddress = target;
             }
@@ -231,5 +301,10 @@ namespace cor64.Mips.R4300I
         public bool IsSupervisorMode => SR.ModeBits == 1;
 
         public bool IsUserMode => SR.ModeBits == 2;
+
+        /// <summary>
+        /// This should be only set when the system controller detects interrupts waiting to be serviced
+        /// </summary>
+        public bool InterpreterPendingInterrupts;
     }
 }

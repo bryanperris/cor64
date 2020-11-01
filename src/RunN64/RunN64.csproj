@@ -18,6 +18,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\cor64\cor64.csproj" />
+    <ProjectReference Include="..\cor64.BareMetal\cor64.BareMetal.csproj"/>
   </ItemGroup>
   <PropertyGroup>
     <RunWorkingDirectory>$(OutputPath)</RunWorkingDirectory>

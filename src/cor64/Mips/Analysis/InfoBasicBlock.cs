@@ -1,4 +1,5 @@
-﻿using System;
+﻿using System.Reflection.Emit;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -7,7 +8,7 @@ namespace cor64.Mips.Analysis
 {
     public class InfoBasicBlock : BasicBlock<InfoBasicBlockInstruction>
     {
-        private List<InfoBasicBlockLink> m_Links = new List<InfoBasicBlockLink>();
+        private readonly List<InfoBasicBlockLink> m_Links = new List<InfoBasicBlockLink>();
 
         public InfoBasicBlock(ulong address) : base(address)
         {
@@ -28,7 +29,7 @@ namespace cor64.Mips.Analysis
                 RecordSet.Insert(i, code[i]);
                 Address -= 4;
             }
-            
+
             for (int i = 0; i < block.Links.Count; i++) {
                 m_Links.Add(block.Links[i]);
             }
@@ -50,6 +51,14 @@ namespace cor64.Mips.Analysis
         {
             m_Links.Clear();
             m_Links.AddRange(newLinks);
+        }
+
+        public bool StartsInterruptServicing { get; set; }
+
+        public bool EndsWithExceptionReturn {
+            get {
+                return InstructionList.Last().Inst.Opcode.StartsWith("eret");
+            }
         }
     }
 }

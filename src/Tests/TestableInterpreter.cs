@@ -266,8 +266,7 @@ namespace Tests
             {
                 if ((m_TestCase.ExpectationFlags & TestCase.Expectations.BranchTaken) == TestCase.Expectations.BranchTaken)
                 {
-                    Assert.AreEqual(8UL, BranchTarget);
-                    //Assert.Equal(4L, m_Pc);
+                    Assert.AreEqual(4UL, BranchTarget);
                 }
                 else
                 {
@@ -301,7 +300,7 @@ namespace Tests
                 if ((m_TestCase.ExpectationFlags & TestCase.Expectations.Link) == TestCase.Expectations.Link)
                 {
                     /* Return address check */
-                    Assert.AreEqual(L(8UL), L(ReadRA()));
+                    Assert.AreEqual(L(4UL), L(ReadRA()));
                 }
                 else
                 {

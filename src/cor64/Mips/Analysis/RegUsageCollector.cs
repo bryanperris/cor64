@@ -1,23 +1,29 @@
-﻿using cor64.Mips.R4300I;
+﻿using System.Reflection.Metadata.Ecma335;
+using cor64.Mips.R4300I;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using NLog;
 
 namespace cor64.Mips.Analysis
 {
     public class RegUsageCollector
     {
+        private static readonly Logger Log = LogManager.GetCurrentClassLogger();
         private HashSet<int> m_UniqueGprSet = new HashSet<int>();
         private HashSet<int> m_UniqueCp0Set = new HashSet<int>();
         private HashSet<int> m_UniqueFprDSet = new HashSet<int>();
         private HashSet<int> m_UniqueFprFSet = new HashSet<int>();
         private HashSet<string> m_LoSet = new HashSet<string>();
         private HashSet<string> m_HiSet = new HashSet<string>();
+        private readonly BaseDisassembler m_Disassembler;
 
-        public RegUsageCollector()
+        public RegUsageCollector(BaseDisassembler disassembler)
         {
+            m_Disassembler = disassembler;
+            
             m_LoSet.Add(Opcodes.MFLO.Op);
             m_LoSet.Add(Opcodes.MTLO.Op);
             m_LoSet.Add(Opcodes.DMULT.Op);
@@ -217,7 +223,7 @@ namespace cor64.Mips.Analysis
             }
             else
             {
-                throw new Exception();
+                Log.Warn("Cannot track FPR Word or Dword usage");
             }
         }
 

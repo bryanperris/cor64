@@ -1,4 +1,5 @@
-﻿using System;
+﻿using System.Diagnostics;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -122,17 +123,85 @@ namespace cor64.BassSharp.Table
 
             long pc = this.Pc;
 
+            var args = new List<String>();
+
             foreach (var opcode in m_Table) {
-                if (!s.Tokenize(opcode.Pattern))
+                args.Clear();
+
+                var expectedArgCount = opcode.NumberList.Count;
+                var opName = opcode.GetOpName();
+                var opNameLen = opName.Length;
+                var pattern = opcode.Pattern;
+                var sanitizedPattern = Regex.Unescape(pattern);
+
+                /* Check is prefix matches */
+                if (!Regex.Match(s, String.Format("^{0}(?=$|\\s)", opName)).Success)
                     continue;
 
-                List<String> args = new List<string>();
-                args.Tokenize(s, opcode.Pattern);
+                DebugPrint("Opcode: " + opName);
 
-                if (args.Count != opcode.NumberList.Count)
-                    continue;
+                if (expectedArgCount > 0) {
+                    // Check if number of arguments match pattern
+                    var s_args = s.Substring(opNameLen).Trim();
+                    List<String> prefixList = new List<string>(opcode.PrefixList.Skip(1).Select(x => x.Text));
+                    var firstArgIndex = sanitizedPattern.IndexOf("(");
+
+                    DebugPrint("*******: " + sanitizedPattern);
+
+                    string initialPrefix = "";
+
+                    if (firstArgIndex >= 0) {
+                        initialPrefix = sanitizedPattern[(opNameLen+1)..firstArgIndex].Trim();
+                        DebugPrint("Initial Prefix: " + initialPrefix);
+                        DebugPrint("Initial Prefix Len: " + initialPrefix.Length);
+                    }
+
+                    foreach (var p in prefixList) {
+                        DebugPrint("Prefix: " + p);
+
+                        if (s_args.Length > 0) {
+                            var index = s_args.IndexOf(p);
+
+                            DebugPrint("Index: " + index);
+
+                            /* If the number of arguments are short, its not a match */
+                            if (index < 0) {
+                                break;
+                            }
+
+                            String arg = s_args.Substring(0, index);
+
+                            DebugPrint("B: " + s_args);
+                            var cutLen = arg.Length + p.Length;
+                            s_args = s_args[cutLen..];
+                            DebugPrint("A: " + s_args);
+
+                            if (initialPrefix.Length > 0) {
+                                arg = arg[initialPrefix.Length..];
+                                initialPrefix = "";
+                                DebugPrint("initial prefix cut");
+                            }
+
+                            args.Add(arg);
+                            DebugPrint("ARG: " + arg);
+                        }
+                    }
+
+                    if (s_args.Length > 0) {
+                        DebugPrint("Last Arg:" + s_args);
+                        args.Add(s_args);
+                    }
+
+                    DebugPrint("------");
+
+                    if (args.Count != expectedArgCount) {
+                        continue;
+                    }
+                }
 
                 bool mismatch = false;
+
+                DebugPrint("Argument Count: " + args.Count);
 
 
                 /* This checks if the active operands match the opcode's operand format
@@ -143,6 +212,9 @@ namespace cor64.BassSharp.Table
 
                 foreach (var format in opcode.FormatList.Where((f) => f.FType == Format.Type.Absolute && f.FMatch != Format.Match.Weak )) {
                     String arg = args[format.Argument];
+
+                    DebugPrint("Arg Format check: " + arg);
+
                     int bits = ArgumentBitLength(ref arg);
                     args[format.Argument] = arg;
                     var expectedSize = opcode.NumberList[format.Argument].Bits;
@@ -150,17 +222,41 @@ namespace cor64.BassSharp.Table
                     /* We get a mismatch is the argument size is not an exact match */
                     if (bits != expectedSize && (format.FMatch == Format.Match.Exact || bits != 0)) {
                         mismatch = true;
+                        DebugPrint("Arg is mismatched");
                         break;
                     }
                 }
 
                 if (mismatch) continue;
 
+                if (ExtraDebugMessages) {
+                    var argFormats = from format in opcode.FormatList where format.FType != Format.Type.Static select format;
+                    var argIndicies = from format in opcode.FormatList where format.FType != Format.Type.Static orderby format.Argument select format.Argument;
+
+                    DebugPrint("Arg Formatters Count: " + argFormats.Count());
+                    StringBuilder sb = new StringBuilder();
+
+                    foreach (var argi in argIndicies) {
+                        
+                        sb.Append(argi);
+                        sb.Append(" ");
+                    }
+
+                    DebugPrint("Arg Format Indicies: " + sb.ToString());
+                }
+
+
                 foreach (var format in opcode.FormatList) {
 
-                    var arg = format.Argument;
-                    var num = arg < opcode.NumberList.Count ? opcode.NumberList[arg] : null;
-                    var bits = num == null ? 0 : num.Bits;
+                    var argIndex = format.Argument;
+                    var num = argIndex < opcode.NumberList.Count ? opcode.NumberList[argIndex] : null;
+                    var bits = (num?.Bits) ?? 0;
+
+                    DebugPrint("Format " + format.FType.ToString());
+
+                    if (format.FType != Format.Type.Static) {
+                        DebugPrint("Write bits for argument: " + args[argIndex]);
+                    }
 
                     switch (format.FType) {
                         case Format.Type.Static: {
@@ -169,13 +265,13 @@ namespace cor64.BassSharp.Table
                             }
 
                         case Format.Type.Absolute: {
-                                var data = (uint) Evaluate(args[arg]);
+                                var data = (uint) Evaluate(args[argIndex]);
                                 WriteBits(data, bits);
                                 break;
                             }
 
                         case Format.Type.Relative: {
-                                var data = (int) Evaluate(args[arg]) - (pc + format.Displacement);
+                                var data = (int) Evaluate(args[argIndex]) - (pc + format.Displacement);
                                 var min = -(1 << (bits - 1));
                                 var max = Math.Abs(1 << (bits - 1)) - 1;
 
@@ -187,7 +283,7 @@ namespace cor64.BassSharp.Table
                             }
 
                         case Format.Type.Repeat: {
-                                var data = (uint) Evaluate(args[arg]);
+                                var data = (uint) Evaluate(args[argIndex]);
                                 
                                 for (uint n = 0; n < data; n++) {
                                     WriteBits(format.Data, bits);
@@ -197,24 +293,24 @@ namespace cor64.BassSharp.Table
                             }
 
                         case Format.Type.ShiftRight: {
-                                var data = (ulong)Evaluate(args[arg]);
+                                var data = (ulong)Evaluate(args[argIndex]);
                                 WriteBits(data >> (int)format.Data, bits);
                                 break;
                             }
 
                         case Format.Type.ShiftLeft: {
-                                var data = (ulong)Evaluate(args[arg]);
+                                var data = (ulong)Evaluate(args[argIndex]);
                                 WriteBits(data << (int)format.Data, bits);
                                 break;
                             }
 
                         case Format.Type.RelativeShiftRight: {
-                                var data = (int)Evaluate(args[arg]) - (pc + format.Displacement);
+                                var data = (int)(Evaluate(args[argIndex]) - (pc + format.Displacement));
                                 var min = -(1 << (bits - 1));
                                 var max = Math.Abs(1 << (bits - 1)) - 1;
 
                                 if (data < min || data > max)
-                                    throw new Error("branch out of bounds");
+                                    throw new Error("branch out of bounds: {0} < {1} || {0} > {2}", data, min, max);
 
                                 bits -= (int)format.Data;
 
@@ -230,13 +326,13 @@ namespace cor64.BassSharp.Table
                             }
 
                         case Format.Type.Negative: {
-                                var data = (int)Evaluate(args[arg]);
+                                var data = (int)Evaluate(args[argIndex]);
                                 WriteBits((uint)-data, bits);
                                 break;
                             }
 
                         case Format.Type.NegativeShiftRight: {
-                                var data = Evaluate(args[arg]);
+                                var data = Evaluate(args[argIndex]);
                                 WriteBits((((ulong)-data) >> (int)format.Data), bits);
                                 break;
                             }
@@ -348,6 +444,9 @@ namespace cor64.BassSharp.Table
 
         protected void WriteBits(ulong data, int length)
         {
+            var hexOffset = 16 - (length / 8 * 2);
+            DebugPrint("Writing out assembler bits: " + data.ToString("X16").Substring(hexOffset));
+
             Func<int, ulong> setBits = n => {
                 /* Create a bit mask with the n least significant bits set */
                 return (1UL << n) - 1;
@@ -493,11 +592,11 @@ namespace cor64.BassSharp.Table
                 String item,
                 Format.Type type,
                 Format.Match match,
-                int m,
+                int selectedOperandIndex,
                 bool displacement,
                 bool argument)
         {
-            return AppendFormat(opcode, item, type, match, m, displacement, argument, false);
+            return AppendFormat(opcode, item, type, match, selectedOperandIndex, displacement, argument, false);
         }
 
         private unsafe Format AppendFormat(
@@ -505,7 +604,7 @@ namespace cor64.BassSharp.Table
                 String item,
                 Format.Type type,
                 Format.Match match,
-                int m,
+                int selectedOperandIndex,
                 bool displacement,
                 bool argument,
                 bool postiveDisplacment)
@@ -514,15 +613,16 @@ namespace cor64.BassSharp.Table
             opcode.FormatList.Add(format);
 
             if (argument) {
-                char operand = item[m];
+                char operand = item[selectedOperandIndex];
+                format.Argument = operand;
 
-                /* if the letter is upper case, make it lowercase */
+                /* If the letter is capitolized, fix its index base */
                 if (operand >= 'A' && operand <= 'Z') {
-                    operand = operand.ToString().ToLower()[0];
+                    format.Argument += 123 - 'A';
                 }
 
                 /* Now convert the letter into an index (based on alphabet) */
-                format.Argument = operand - 'a';
+                format.Argument -= 'a';
             }
 
             if (displacement) {
@@ -601,17 +701,17 @@ namespace cor64.BassSharp.Table
                 // +X>>YYa
                 if (item[0] == '+' && item[2] == '>' && item[3] == '>') {
                     var format = AppendFormat(opcode, item,
-                        Format.Type.RelativeShiftRight, Format.Match.Weak, 6, false, true, true);
+                        Format.Type.RelativeShiftRight, Format.Match.Weak, 6, true, true, true);
 
-                    format.Data = (uint)((item[4] - '0') * 10 + (item[5] - '0'));
+                    format.Data = (uint)(((item[4] - '0') * 10) + (item[5] - '0'));
                 }
 
                 // N>>XXa
                 if (item[0] == 'N' && item[1] == '>' && item[2] == '>') {
                     var format = AppendFormat(opcode, item,
-                        Format.Type.NegativeShiftRight, Format.Match.Weak, 5, false, true, true);
+                        Format.Type.NegativeShiftRight, Format.Match.Weak, 5, false, true, false);
 
-                    format.Data = (uint)((item[3] - '0') * 10 + (item[4] - '0'));
+                    format.Data = (uint)(((item[3] - '0') * 10) + (item[4] - '0'));
                 }
 
                 // Na

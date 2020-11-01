@@ -142,6 +142,25 @@ namespace Tests.Assembler
         }
 
         [Test]        
+        public void MacroNoArgsTest()
+        {
+            var a = new AssemblyTextSource("main");
+            a += "macro foo() {";
+            a += "db 0xE";
+            a += "db 0xA";
+            a += "}";
+            a += "foo()";
+
+            var result = Asm.AssembleAndPeek(a);
+            Assert.AreEqual(1, result.MacroCount);
+
+            var result2 = Asm.Assemble(a);
+            Assert.AreEqual(2, result2.Length);
+            Assert.AreEqual(new byte[] { 0xE, 0xA }, result2);
+        }
+
+
+        [Test]        
         public void DefineTest()
         {
             var a = new AssemblyTextSource("main");

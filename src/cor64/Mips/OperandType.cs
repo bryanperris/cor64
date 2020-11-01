@@ -15,6 +15,9 @@ namespace cor64.Mips
         Cop0_CT,
         Cop0_TC,
 
+        SpCop0_CT,
+        SpCop_TC,
+
 
         VU_STD,
         VU_SE_DE,

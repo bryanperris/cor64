@@ -6,11 +6,23 @@
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <OutputPath>../../bin</OutputPath>
   </PropertyGroup>
-
   <ItemGroup>
     <EmbeddedResource Include="BassSharp\Table\*.md" />
     <EmbeddedResource Include="BassSharp\Table\*.arch" />
   </ItemGroup>
-
+  <!-- Emulator debugging compiler flags -->
+  <PropertyGroup>
+    <!-- <DefineConstants>$(DefineConstants);DEBUG_COPROCESSOR</DefineConstants> -->
+    <!-- <DefineConstants>$(DefineConstants);DEBUG_MIPS_TIMER</DefineConstants> -->
+    <!-- <DefineConstants>$(DefineConstants);DEBUG_INTERRUPTS</DefineConstants> -->
+    <!-- <DefineConstants>$(DefineConstants);DEBUG_STATUS_REGISTER</DefineConstants> -->
+    <!-- <DefineConstants>$(DefineConstants);TIMESTAMPS_IN_LOG</DefineConstants> -->
+    <!-- <DefineConstants>$(DefineConstants);FILTER_RCP_INTERRUPTS</DefineConstants> -->
+    <!-- <DefineConstants>$(DefineConstants);DEBUG_INTERRUPTS_PENDING</DefineConstants> -->
+    <!-- <DefineConstants>$(DefineConstants);HACK_FASTER_TIMER</DefineConstants> -->
+    <!-- <DefineConstants>$(DefineConstants);DEBUG_TRACE_LOG</DefineConstants> -->
+    <!-- <DefineConstants>$(DefineConstants);DEBUG_TRACE_LOG_GEN</DefineConstants> -->
+    <!-- <DefineConstants>$(DefineConstants);TRACE_LOG_HALT</DefineConstants> -->
+  </PropertyGroup>
   <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>

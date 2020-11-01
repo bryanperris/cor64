@@ -68,6 +68,12 @@ namespace cor64.Mips
             var bInst = inst.Inst;
             var strict = this.ABI == "strict";
 
+            var symbol = GetSymbol(inst.Address);
+
+            if (!String.IsNullOrEmpty(symbol)) {
+                symbol = String.Format("<{0}> ", symbol);
+            }
+
             if (opcode.Family != OperationFamily.Null)
             {
                 String op = opcode.Op;
@@ -92,31 +98,24 @@ namespace cor64.Mips
                     if (!strict && opcode.Family == OperationFamily.Branch)
                     {
                         /* Don't show target on jumps that use register based computations */
-                        if (!opcode.Op.EndsWith("r"))
+                        if (!opcode.Op.EndsWith("r") && !opcode.Op.StartsWith("eret"))
                         {
-                            operands += String.Format(
-                                " ----> 0x{0:X8}",
-                                opcode.Op.StartsWith("j") ? ComputeJumpTarget(inst) : ComputeBranchTarget(inst));
+                            if (String.IsNullOrEmpty(symbol)) {
+                                operands += String.Format(
+                                    " ----> 0x{0:X8}",
+                                    opcode.Op.StartsWith("j") ? ComputeJumpTarget(inst) : ComputeBranchTarget(inst));
+                            }
                         }
                     }
-
-                    /* Append debug symbol */
-                    operands += " ";
-                    operands += GetSymbol(inst.Address);
-                    operands += " ";
                 }
-
-                var dis = op + " " + operands;
-
-                dis = dis.Trim();
 
                 if (op == "sll" && inst.Source == 0 && inst.Target == 0 && inst.Destination == 0)
                 {
-                    return "nop";
+                    op = "nop";
+                    operands = "";
                 }
 
-                return dis;
-
+                return String.Format("{0}{1} {2}", symbol, op, operands).Trim();
             }
             else
             {

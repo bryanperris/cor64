@@ -1,4 +1,6 @@
-﻿using cor64.IO;
+﻿using System.Runtime.InteropServices;
+using System.Threading;
+using cor64.IO;
 using cor64.Mips;
 using NLog;
 using System;
@@ -132,30 +134,17 @@ namespace cor64.RCP
             m_Origin.Write += FramebufferAddressHandler;
             m_CurrentLine.Write += CurrentScanlineHandler;
 
-            m_Width.Write += () =>
-            {
-                Log.Debug("Framebuffer width set to " + m_Width.RegisterValue.ToString("X8"));
-            };
+            m_Width.Write += () => Log.Debug("Framebuffer width set to " + m_Width.RegisterValue.ToString("X8"));
 
-            m_XScale.Write += () =>
-            {
-                Log.Debug("Framebuffer xscale set to " + m_XScale.RegisterValue.ToString("X8"));
-            };
+            m_XScale.Write += () => Log.Debug("Framebuffer xscale set to " + m_XScale.RegisterValue.ToString("X8"));
 
-            m_HStart.Write += () =>
-            {
-                Log.Debug("Framebuffer hstart set to " + m_HStart.RegisterValue.ToString("X8"));
-            };
+            m_HStart.Write += () => Log.Debug("Framebuffer hstart set to " + m_HStart.RegisterValue.ToString("X8"));
 
-            m_VStart.Write += () =>
-            {
-                Log.Debug("Framebuffer vstart set to " + m_VStart.RegisterValue.ToString("X8"));
-            };
+            m_VStart.Write += () => Log.Debug("Framebuffer vstart set to " + m_VStart.RegisterValue.ToString("X8"));
 
-            m_YScale.Write += () =>
-            {
-                Log.Debug("Framebuffer yscale set to " + m_YScale.RegisterValue.ToString("X8"));
-            };
+            m_YScale.Write += () => Log.Debug("Framebuffer yscale set to " + m_YScale.RegisterValue.ToString("X8"));
+
+            m_Interrupt.Write += () => Log.Debug("Framebuffer interrupt set to " + m_Interrupt.RegisterValue.ToString("X8"));
 
             m_Memory = controller;
 
@@ -169,9 +158,9 @@ namespace cor64.RCP
 
         private void CurrentScanlineHandler()
         {
-            uint curr = m_CurrentLine.RegisterValue;
-
-            Log.Debug("Current scanline set to {0:X8}", curr);
+            if (m_Interface.IntVI) {
+                m_Interface.ClearInterrupt(MipsInterface.INT_VI);
+            }
         }
 
         private void FramebufferAddressHandler()
@@ -180,6 +169,8 @@ namespace cor64.RCP
         }
 
         public int FramebufferOffset => (int)(m_Origin.RegisterValue << 8 >> 8);
+
+        public uint Origin => m_Origin.RegisterValue;
 
         public uint XScale => m_XScale.RegisterValue;
 
@@ -196,17 +187,15 @@ namespace cor64.RCP
             if (XScale == 0)
                 return 320;
 
-            var start = ((HStart & 0x03FF0000) >> 16) & 0x3FF;
-            var end = (HStart & 0x3FF);
-            var delta = end - start;
-            var scale = (XScale & 0xFFF);
+            int start = (int)((HStart >> 16) & 0x3FF);
+            int end = (int)(HStart & 0x3FF);
+            int res = end - start;
+            int scale = (int)(XScale & 0xFFF);
+            int offset = (int)((XScale >> 16) & 0x3FF);
 
-            if (delta == 0)
-            {
-                delta = WidthReg;
-            }
+            //start -= 108;
 
-            return (int)((delta * scale) / 0x400);
+            return res * scale / 1024;
         }
 
         private int ComputeVHeight()
@@ -226,66 +215,109 @@ namespace cor64.RCP
 
         public int Height => ComputeVHeight();
 
+        public uint Interrupt => m_Interrupt.RegisterValue;
+
+        public uint Line {
+            get => m_CurrentLine.RegisterValue;
+            set => m_CurrentLine.RegisterValue = value;
+        }
+
         public VideoControlReg ControlReg => m_ControlRegStruct;
 
         public IntPtr FramebufferPtr => m_Memory.RDRAM.GetRamPointer(FramebufferOffset);
 
-        public unsafe void CopyFramebufferRGB565(PinnedBuffer buffer)
+        public unsafe void CopyFramebufferRGB5551_16(PinnedBuffer buffer)
         {
-            m_CurrentLine.RegisterValue = 0;
+            // Converts RGB5551 to RGB565
 
             ushort* srcPixel = (ushort*)m_Memory.RDRAM.GetRamPointer(FramebufferOffset);
             ushort* dstPixel = (ushort*)buffer.GetPointer();
 
             for (int i = 0; i < buffer.Size / 2; i++)
             {
-                ushort pixel = *srcPixel;
+                ushort read = *srcPixel++;
+                int pixel = 0;
 
                 if (CoreConfig.Current.ByteSwap)
                 {
-                    pixel.ByteSwapped();
+                    pixel = read.ByteSwapped();
                 }
 
-                srcPixel++;
+                int r = (pixel >> 11) & 0x1F;
+                int g = (pixel >> 6)  & 0x1F;
+                int b = (pixel >> 1)  & 0x1F;
 
-                if ((pixel & 1) == 1)
-                {
-                    pixel >>= 1;
-                    pixel <<= 1;
-                }
-                else
-                {
-                    pixel = 0;
-                }
+                // Sign extend the green field to the 6th bit
+                g |= (g & 0x10) << 1;
 
-                *dstPixel = pixel;
-                dstPixel++;
+                *dstPixel++ = (ushort)((r << 11) | (g << 6) | b);
             }
-            m_CurrentLine.RegisterValue = m_Interrupt.RegisterValue;
+        }
+
+        public unsafe void CopyFramebufferRGB5551_32(PinnedBuffer buffer)
+        {
+            ushort* srcPixel = (ushort*)m_Memory.RDRAM.GetRamPointer(FramebufferOffset);
+            uint* dstPixel = (uint*)buffer.GetPointer();
+
+            for (int i = 0; i < buffer.Size / 2; i++)
+            {
+                ushort read = *srcPixel++;
+               int pixel = 0;
+
+                if (CoreConfig.Current.ByteSwap)
+                {
+                    pixel = read.ByteSwapped();
+                }
+
+                // Transparancy Toggle
+                // XXX: This prevents SkiaSharp from crashing
+                // XXX: This breaks some rendering
+                // XXX: Forcing alpha to 1 won't help either
+                // if ((pixel & 1) == 0) {
+                //     *dstPixel++ = 0;
+                //     return;
+                // }
+
+                int r = (pixel >> 8) & 0xF8;
+                int g = (pixel & 0x7C0) >> 3;
+                int b = (pixel & 0x3E) << 2;
+
+                int color = (b << 16) | (g << 8) | r;
+
+                *dstPixel++ = (uint)color;
+            }
         }
 
         public unsafe void CopyFramebufferRGBA8888(PinnedBuffer buffer)
         {
-            m_CurrentLine.RegisterValue = 0;
-
             uint* srcPixel = (uint*)m_Memory.RDRAM.GetRamPointer(FramebufferOffset);
             uint* dstPixel = (uint*)buffer.GetPointer();
 
             for (int i = 0; i < buffer.Size / 4; i++)
             {
-                uint pixel = *srcPixel;
+                uint pixel = *srcPixel++;
 
                 if (!CoreConfig.Current.ByteSwap)
                 {
                     pixel = pixel.ByteSwapped();
                 }
 
-                srcPixel++;
-                *dstPixel = pixel;
-                dstPixel++;
+                *dstPixel++ = pixel;
             }
+        }
 
-            m_CurrentLine.RegisterValue = m_Interrupt.RegisterValue;
+        // public void ScanlineStart() {
+        //     m_CurrentLine.RegisterValue = 0;
+        // }
+
+        // public void ScanlineEnd() {
+        //     m_CurrentLine.RegisterValue = m_Interrupt.RegisterValue;
+        // }
+
+        public void SimulateFullScan() {
+            for (m_CurrentLine.RegisterValue = 0; m_CurrentLine.RegisterValue < m_Interrupt.RegisterValue; m_CurrentLine.RegisterValue++) {
+                //Thread.Sleep(1);
+            }
         }
 
         public void SetVideoInterrupt()

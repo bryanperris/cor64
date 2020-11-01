@@ -72,10 +72,10 @@ namespace cor64.Mips.Rsp
         };
 
         private readonly static Opcode[] Cop0Table = {
-            MFC0,  NULL,  NULL, NULL, MTC0, NULL,  NULL, NULL,
-            NULL,  NULL,  NULL, NULL, NULL, NULL,  NULL, NULL,
-            NULL,  NULL,  NULL, NULL, NULL, NULL,  NULL, NULL,
-            NULL,  NULL,  NULL, NULL, NULL, NULL,  NULL, NULL
+            SPMFC0,  NULL,  NULL, NULL, SPMTC0, NULL,  NULL, NULL,
+            NULL,    NULL,  NULL, NULL, NULL,   NULL,  NULL, NULL,
+            NULL,    NULL,  NULL, NULL, NULL,   NULL,  NULL, NULL,
+            NULL,    NULL,  NULL, NULL, NULL,   NULL,  NULL, NULL
         };
         
         private readonly static Opcode[] Cop2Table = {

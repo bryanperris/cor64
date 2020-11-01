@@ -84,15 +84,22 @@ namespace cor64.Mips.R4300I
         public void Initialize()
         {
             /* Hardware initial value */
-            SetFlags(StatusFlags.UsableCop0 | 
-                     StatusFlags.UsableCop1 | 
+            SetFlags(StatusFlags.UsableCop0 |
+                     StatusFlags.UsableCop1 |
                      StatusFlags.InterruptsEnabled);
         }
 
         public void Write(uint value)
         {
-            DebugChanges(value, m_Value);
+            uint old = m_Value;
             m_Value = value;
+
+            #if DEBUG_STATUS_REGISTER
+            Log.Debug("Status Register Write: {0:X8}", m_Value);
+            #endif
+
+
+            DebugChanges(m_Value, old);
         }
 
         public uint Read()
@@ -107,12 +114,16 @@ namespace cor64.Mips.R4300I
         }
 
         [Conditional("DEBUG")]
-        private void DebugChanges(uint newValue, uint currentValue)
+        private void DebugChanges(uint newValue, uint oldValue)
         {
-            if (TestChange(StatusFlags.UseBootstrapVectors, currentValue, newValue))
+            if (TestChange(StatusFlags.UseBootstrapVectors, oldValue, newValue))
             {
                 Log.Debug("CPU code changed boot vector bit to: {0}", TestFlags(StatusFlags.UseBootstrapVectors));
             }
+
+            // if (TestChange(StatusFlags.InterruptsEnabled, oldValue, newValue)) {
+            //     Log.Debug("CPU Interrupt Enable: {0}", InterruptsEnabled);
+            // }
         }
 
         private bool TestChange(StatusFlags testFlags, uint oldVal, uint newVal) 
@@ -135,21 +146,37 @@ namespace cor64.Mips.R4300I
 
         public void SetFlags(StatusFlags flags)
         {
+            #if DEBUG_STATUS_REGISTER
+            Log.Debug("SR SetFlags: {0}", flags.ToString());
+            #endif
+
             m_Value |= (uint)flags;
         }
 
         public void ClearFlags(StatusFlags flags)
         {
+            #if DEBUG_STATUS_REGISTER
+            Log.Debug("SR ClearFlags: {0}", flags.ToString());
+            #endif
+
             m_Value &= ~(uint)flags;
         }
 
         public void ToggleFlags(StatusFlags flags)
         {
+            #if DEBUG_STATUS_REGISTER
+            Log.Debug("SR ToggleFlags: {0}", flags.ToString());
+            #endif
+
             m_Value ^= (uint)flags;
         }
 
         public void SetInterruptsEnabled(bool value)
         {
+            #if DEBUG_INTERRUPTS
+            Log.Debug("SR SetInterruptsEnabled: {0}", value);
+            #endif
+
             SetOrClearFlags(value, StatusFlags.InterruptsEnabled);
         }
 
@@ -157,7 +184,7 @@ namespace cor64.Mips.R4300I
 
         public bool IsOperation64 => ModeBits == 0 || TestFlags(StatusFlags.User64Mode) || TestFlags(StatusFlags.Supervisor64Mode);
 
-        public bool InterruptsEnabled => TestFlags(StatusFlags.InterruptsEnabled) && !ExceptionLevel && !ErrorLevel; 
+        public bool InterruptsEnabled => TestFlags(StatusFlags.InterruptsEnabled);
 
         public void DebugSet_Address64(bool mode)
         {
@@ -194,23 +221,42 @@ namespace cor64.Mips.R4300I
         public int ModeBits
         {
             get => (int)m_Fiddler.X(F_KSU, ref m_Value);
-            set => m_Fiddler.J(F_KSU, ref m_Value, (uint)value);
+            set {
+                #if DEBUG_STATUS_REGISTER
+                Log.Debug("SR ModeBits: {0}", value);
+                #endif
+                m_Fiddler.J(F_KSU, ref m_Value, (uint)value);
+            }
         }
 
         public bool ExceptionLevel
         {
-            get => !(m_Fiddler.X(F_EXL, ref m_Value) == 0);
-            set => m_Fiddler.J(F_EXL, ref m_Value, value ? 1U : 0);
+            get => m_Fiddler.X(F_EXL, ref m_Value) != 0;
+            set {
+                #if DEBUG_STATUS_REGISTER
+                Log.Debug("SR ExceptionLevel: {0}", value);
+                #endif
+                m_Fiddler.J(F_EXL, ref m_Value, value ? 1U : 0);
+            }
         }
 
         public bool ErrorLevel
         {
-            get => !(m_Fiddler.X(F_ERL, ref m_Value) == 0);
-            set => m_Fiddler.J(F_ERL, ref m_Value, value ? 1U : 0);
+            get => m_Fiddler.X(F_ERL, ref m_Value) != 0;
+            set {
+                #if DEBUG_STATUS_REGISTER
+                Log.Debug("SR ErrorLevel: {0}", value);
+                #endif
+                m_Fiddler.J(F_ERL, ref m_Value, value ? 1U : 0);
+            }
         }
 
         public void SetInterruptMask(int index)
         {
+            #if DEBUG_STATUS_REGISTER
+            Log.Debug("SR SetInterruptMask: {0}", index);
+            #endif
+
             uint val = m_Fiddler.X(F_IM, ref m_Value);
             m_IntFiddler.J(index, ref val, 1);
             m_Fiddler.J(F_IM, ref m_Value, val);
@@ -218,6 +264,10 @@ namespace cor64.Mips.R4300I
 
         public void ClearInterruptMask(int index)
         {
+            #if DEBUG_STATUS_REGISTER
+            Log.Debug("SR ClearInterruptMask: {0}", index);
+            #endif
+
             uint val = m_Fiddler.X(F_IM, ref m_Value);
             m_IntFiddler.J(index, ref val, 0);
             m_Fiddler.J(F_IM, ref m_Value, val);

@@ -1,11 +1,10 @@
 .vs
 bin
 obj
-b/
 packages
 package-lock.json
-node_modules
 dist
 paket-files
 mono_crash.mem*
-src/RunN64/TestRoms/m64p_test_rom.v64
+plumber.z64
+.tmp/

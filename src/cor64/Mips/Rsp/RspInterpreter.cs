@@ -28,6 +28,8 @@ namespace cor64.Mips.Rsp
         private int m_DivOut = 0;
         private bool m_lastDoublePrecision = false;
 
+        private readonly EventWaitHandle m_CpuRspWait = new EventWaitHandle(false, EventResetMode.ManualReset);
+
         
         /* RSP Flag Registers */
         private readonly RspCarryFlag m_VCarry = new RspCarryFlag();      // VCO
@@ -51,9 +53,9 @@ namespace cor64.Mips.Rsp
             }
         }
 
-        public override void AttachInterface(SPInterface iface)
+        public override void AttachInterface(SPInterface iface, DPCInterface rdpInterface)
         {
-            base.AttachInterface(iface);
+            base.AttachInterface(iface, rdpInterface);
 
             Status.Change += () =>
             {
@@ -70,7 +72,7 @@ namespace cor64.Mips.Rsp
 
                 if (Status.TestCmdFlags(StatusCmdFlags.ClearHalt))
                 {
-                    SetHaltMode(false);
+                    UnhaltFromCpu();
                 }
 
                 if (Status.TestCmdFlags(StatusCmdFlags.ClearBroke))
@@ -90,8 +92,9 @@ namespace cor64.Mips.Rsp
 
         public override void Step()
         {
-            if (IsHalted)
+            if (IsHalted) {
                 return;
+            }
 
             /* Execute next instruction */
             ExecuteNextInst();
@@ -232,16 +235,21 @@ namespace cor64.Mips.Rsp
             if (halted)
             {
                 Status.StatusFlags |= StatusFlags.Halt;
+                m_CpuRspWait.Set();
             }
             else
             {
-
-                // XXX: This hack forces some CPU/RSP synchronization
-                Thread.Sleep(100);
-
                 m_Pc = Interface.PC;
-                Status.StatusFlags ^= StatusFlags.Halt;
+                Status.StatusFlags &= ~StatusFlags.Halt;
             }
+        }
+
+        private void UnhaltFromCpu() {
+            SetHaltMode(false);
+
+            // Force CPU to wait for RSP to finish 
+            m_CpuRspWait.Reset();
+            m_CpuRspWait.WaitOne();
         }
 
         public override void AttachBootManager(BootManager bootManager)
@@ -633,7 +641,23 @@ namespace cor64.Mips.Rsp
 
                 case RegBoundType.Cp0:
                     {
-                        throw new NotImplementedException();
+                        if (gpr_Target >= 0 && gpr_Target < 8)
+                    	{
+                    		//sp_write_reg(rsp, reg, data);
+                            Console.WriteLine("RSP COP0 Write: TODO RSP Reg");
+                    	}
+                    	else if (gpr_Target >= 8 && gpr_Target < 16)
+                    	{
+                            var cmd = gpr_Target - 8;
+                            //Log.Debug("RSP -> RDP Command: {0} {1:X8}", cmd, value);
+                            RdpInterface.RegWriteFromRsp(cmd, value);
+                    	}
+                    	else
+                    	{
+                    		Log.Error("Unknown RSP COP0 Write: " + gpr_Target.ToString());
+                    	}
+
+                        break;
                     }
 
                 case RegBoundType.Cp2:

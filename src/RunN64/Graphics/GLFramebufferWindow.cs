@@ -1,3 +1,9 @@
+// #define USE_RGBA8888_FOR_16BPP
+
+// XXX: We can convert RGB5551 to RGBA8888 instead of RGB565, which is faster
+//      However this conversion is unstable, as SkiaSharp seems to get mad at the 1 bit alpha
+//      We can check the 1 bit alpha and return 0, but it can break some 16-bit RDP rendering
+
 using System.Text;
 using cor64.IO;
 using cor64.RCP;
@@ -10,17 +16,21 @@ using System.Drawing;
 using RunN64;
 using System.Threading;
 using NLog;
+using static cor64.RCP.DPCInterface;
 
 namespace RunN64.Graphics
 {
     public class GLFramebufferWindow
     {
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
+        private readonly N64System m_System;
         private readonly NativeWindow m_Window;
         private readonly Video m_VideoInterface;
+        private readonly DPCInterface m_RdpInterface;
         private readonly PinnedBuffer m_FBData;
         private SKBitmap m_SourceBitmap;
         private SKBitmap m_FramebufferBitmap;
+        private int m_FramebufferColorMode = 0;
         private readonly Cartridge m_Cart;
         private int m_FrameCount;
         private const int RES_X = 640;
@@ -33,30 +43,35 @@ namespace RunN64.Graphics
         private readonly GRGlInterface m_GLInterface;
         private readonly Object m_GLContext;
 
-        private ulong m_ViTime = 0;
+        private double m_ViTime = 0;
         private bool m_Created = false;
 
 
-        public GLFramebufferWindow(Video videoInterface, Cartridge cart) 
+        public GLFramebufferWindow(N64System system)
         {
+            m_System = system;
+
             Glfw.WindowHint(Hint.ContextVersionMajor, 2);
             Glfw.WindowHint(Hint.ContextVersionMinor, 1);
             Glfw.WindowHint(Hint.Focused, true);
             Glfw.WindowHint(Hint.Resizable, false);
 
             m_Window = new NativeWindow(RES_X + 1, RES_Y + BAR_HEIGHT, "N64 Framebuffer");
+
+            Glfw.IconifyWindow(m_Window);
         
             m_FBData = new PinnedBuffer(RES_X * RES_Y * 4);
             m_SourceBitmap = null;
-            m_VideoInterface = videoInterface;
-            m_Cart = cart;
+            m_VideoInterface = system.DeviceRcp.VideoInterface;
+            m_RdpInterface = system.DeviceRcp.DisplayProcessorCommandInterface;
+            m_Cart = system.AttachedCartridge;
 
             m_GLContext = GetNativeContext(m_Window);
 
             StringBuilder glFunctions = new StringBuilder();
             glFunctions.Append("GL Function Attachments: ");
 
-            m_GLInterface = GRGlInterface.AssembleGlInterface(m_GLContext, (_, name) => {
+            m_GLInterface = GRGlInterface.Create((name) => {
                 /* Skip the egl ones, this prevents crashing */
                 if (name.StartsWith("egl")) {
                     return IntPtr.Zero;
@@ -69,24 +84,33 @@ namespace RunN64.Graphics
 
             //Log.Debug(glFunctions.ToString());
 
-            m_SkiaContext = GRContext.Create(GRBackend.OpenGL, m_GLInterface);
+            m_SkiaContext = GRContext.CreateGl(m_GLInterface);
             m_Surface = GenerateSkiaSurface(m_SkiaContext, new Size(RES_X, RES_Y + BAR_HEIGHT));
         }
 
         public void Start() {
-            m_ViTime = Glfw.TimerValue;
+            double lastTime = Glfw.Time;
+            double delta = 0;
 
             m_Created = true;
 
             while (!m_Window.IsClosing)
             {
-                if (Glfw.TimerValue - m_ViTime >= 17)
+                var now = Glfw.Time;
+                delta += (now - lastTime) / (1.0 / 60.0);
+                lastTime = now;
+
+                while (delta >= 1.0)
                 {
+                    //m_System.DeviceCPU.Cycles = 0;
+
                     Scan();
-                    m_ViTime = Glfw.TimerValue;
+                    delta--;
                 }
-                
+
                 Render();
+
+                // Thread.Sleep(100);
             }
         }
 
@@ -122,21 +146,31 @@ namespace RunN64.Graphics
 
         private static SKSurface GenerateSkiaSurface(GRContext skiaContext, Size surfaceSize)
         {
-            var frameBufferInfo = new GRGlFramebufferInfo((uint)new UIntPtr(0), GRPixelConfig.Rgba8888.ToGlSizedFormat());
+            var frameBufferInfo = new GRGlFramebufferInfo((uint)new UIntPtr(0), SKColorType.Rgba8888.ToGlSizedFormat());
             var backendRenderTarget = new GRBackendRenderTarget(surfaceSize.Width, surfaceSize.Height, 0, 8, frameBufferInfo);
             return SKSurface.Create(skiaContext, backendRenderTarget, GRSurfaceOrigin.BottomLeft, SKImageInfo.PlatformColorType);
         }
 
         private void ReadRGB555()
         {
-            m_VideoInterface.CopyFramebufferRGB565(m_FBData);
+            #if USE_RGBA8888_FOR_16BPP
+            m_VideoInterface.CopyFramebufferRGB5551_32(m_FBData);
+            #else
+            m_VideoInterface.CopyFramebufferRGB5551_16(m_FBData);
+            #endif
 
-            if (m_SourceBitmap == null || m_VideoInterface.Width != m_SourceBitmap.Width || m_VideoInterface.Height != m_SourceBitmap.Height || m_SourceBitmap.Info.ColorType != SKColorType.Rgb565)
+            if (m_SourceBitmap == null || m_VideoInterface.Width != m_SourceBitmap.Width || m_VideoInterface.Height != m_SourceBitmap.Height || m_FramebufferColorMode != VideoControlReg.PIXELMODE_16BPP)
             {
                 if (m_SourceBitmap != null)
                     m_SourceBitmap.Dispose();
 
+                #if USE_RGBA8888_FOR_16BPP
+                m_SourceBitmap = new SKBitmap(m_VideoInterface.Width, m_VideoInterface.Height, SKColorType.Rgba8888, SKAlphaType.Opaque);
+                #else
                 m_SourceBitmap = new SKBitmap(m_VideoInterface.Width, m_VideoInterface.Height, SKColorType.Rgb565, SKAlphaType.Opaque);
+                #endif
+
+                m_FramebufferColorMode = VideoControlReg.PIXELMODE_16BPP;
             }
         }
 
@@ -144,17 +178,31 @@ namespace RunN64.Graphics
         {
             m_VideoInterface.CopyFramebufferRGBA8888(m_FBData);
 
-            if (m_SourceBitmap == null || m_VideoInterface.Width != m_SourceBitmap.Width || m_VideoInterface.Height != m_SourceBitmap.Height || m_SourceBitmap.Info.ColorType != SKColorType.Rgba8888)
+            if (m_SourceBitmap == null || m_VideoInterface.Width != m_SourceBitmap.Width || m_VideoInterface.Height != m_SourceBitmap.Height || m_FramebufferColorMode != VideoControlReg.PIXELMODE_32BPP)
             {
                 if (m_SourceBitmap != null)
                     m_SourceBitmap.Dispose();
 
-                m_SourceBitmap = new SKBitmap(m_VideoInterface.Width, m_VideoInterface.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
+                m_SourceBitmap = new SKBitmap(m_VideoInterface.Width, m_VideoInterface.Height, SKColorType.Rgba8888, SKAlphaType.Opaque);
+                m_FramebufferColorMode = VideoControlReg.PIXELMODE_32BPP;
             }
         }
 
         private void Scan()
         {
+            if (m_VideoInterface.ControlReg.GetPixelMode() != VideoControlReg.PIXELMODE_NONE && m_VideoInterface.Interrupt != 0) {
+                while ((m_RdpInterface.RFlags & ReadStatusFlags.CmdBusy) == ReadStatusFlags.CmdBusy) {
+                    Thread.Sleep(100);
+                }
+
+                // Run through the scanlines
+                for (uint i = 0; i <= m_VideoInterface.Interrupt; i++) {
+                    m_VideoInterface.Line = i;
+                }
+
+                TriggerVI();
+            }
+
             switch (m_VideoInterface.ControlReg.GetPixelMode())
             {
                 default:
@@ -163,6 +211,7 @@ namespace RunN64.Graphics
                             m_SourceBitmap.Dispose();
 
                         m_SourceBitmap = null;
+                        m_FramebufferColorMode = 0;
                         break;
                     }
                 case VideoControlReg.PIXELMODE_16BPP: ReadRGB555(); break;
@@ -180,22 +229,11 @@ namespace RunN64.Graphics
                 m_FramebufferBitmap?.Dispose();
                 m_FramebufferBitmap = null;
             }
-
-            if (m_FrameCount >= 60)
-            {
-                if (m_VideoInterface.ControlReg.GetPixelMode() != VideoControlReg.PIXELMODE_NONE)
-                    TriggerVI();
-            }
-            else
-            {
-                m_FrameCount++;
-            }
         }
 
         public void TriggerVI()
         {
             m_VideoInterface.SetVideoInterrupt();
-            m_FrameCount = 0;
         }
 
         private static float ComputeScaleFactor(float srcW, float srcH, float dstW, float dstH)
@@ -240,17 +278,18 @@ namespace RunN64.Graphics
             if (m_FramebufferBitmap != null)
             {
                 String res = String.Format("{0}x{1}", m_SourceBitmap.Width, m_SourceBitmap.Height);
+                String mipsCount = String.Format("MIPS TMR {0:X8}:{1:X8}", m_System.DeviceCPU.Cop0.TimerCount,  m_System.DeviceCPU.Cop0.TimerMax);
 
                 strPos += StrLen(vidType) + 5;
                 DrawString(res, canvas, strPos, 0);
 
                 String colorMode = null;
 
-                switch (m_FramebufferBitmap.Info.ColorType)
+                switch (m_FramebufferColorMode)
                 {
                     default: break;
-                    case SKColorType.Rgb565: colorMode = "16BPP"; break;
-                    case SKColorType.Rgba8888: colorMode = "32BPP"; break;
+                    case VideoControlReg.PIXELMODE_16BPP: colorMode = "16BPP"; break;
+                    case VideoControlReg.PIXELMODE_32BPP: colorMode = "32BPP"; break;
                 }
 
                 strPos += StrLen(res);
@@ -263,7 +302,14 @@ namespace RunN64.Graphics
 
                 DrawString(addr, canvas, strPos, 0);
 
+                strPos += StrLen(addr);
+
+                DrawString(mipsCount, canvas, strPos, 0);
+
                 float sf = ComputeScaleFactor(m_SourceBitmap.Width, m_SourceBitmap.Height, RES_X, RES_Y);
+                
+                // DEBUG: Zoom in
+                //sf = 18.0f;
 
                 canvas.Scale(sf);
 
@@ -271,6 +317,9 @@ namespace RunN64.Graphics
 
                 canvas.ResetMatrix();
             }
+
+            // DEBUG: Move to specific area
+            //canvas.Translate(-225.0f * 18.0f, -38.0f * 18.0f);
 
             canvas.Flush();
         }

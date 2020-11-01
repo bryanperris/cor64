@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -8,10 +9,12 @@ using cor64.Mips;
 using cor64.Mips.Analysis;
 using cor64.Mips.R4300I;
 using cor64.Mips.R4300I.JitIL;
+using cor64.Rdp.LLE;
 using NLog;
 using NLog.Config;
 using NLog.Targets;
 using RunN64.Graphics;
+using cor64.BareMetal;
 
 namespace RunN64
 {
@@ -28,11 +31,15 @@ namespace RunN64
 
         public void SetupLogging()
         {
-            var logLevel = LogLevel.Info;
+            //var logLevel = LogLevel.Info;
 
             LoggingConfiguration configuration = new LoggingConfiguration();
 
             String layout = @"${message}";
+
+            #if TIMESTAMPS_IN_LOG
+            layout = "${date:format=HH\:MM\:ss} " + layout;
+            #endif
 
             ConsoleTarget consoleTarget = new ConsoleTarget()
             {
@@ -62,11 +69,18 @@ namespace RunN64
 
         private Cartridge MountCartridge(String path)
         {
+
             using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read))
             {
                 MemoryStream rom = new MemoryStream();
                 fs.Position = 0;
                 fs.CopyTo(rom);
+
+                // N64BareMetalAssembler assembler = new N64BareMetalAssembler("foorom");
+                // assembler.AddAssemblySource(new AssemblyStreamSource("test", fs));
+                // assembler.AssembleCode(true);
+                // Stream rom = assembler.Output;
+                //rom.Position = 0;
 
                 var cart = new Cartridge(rom);
 
@@ -99,14 +113,6 @@ namespace RunN64
 
             m_Cartridge = MountCartridge(Configuration.RomFilepath);
 
-            if (!String.IsNullOrEmpty(Configuration.ElfFilepath))
-            {
-                var elfFilePath = Environment.CurrentDirectory + Path.DirectorySeparatorChar + Configuration.ElfFilepath;
-
-                if (File.Exists(elfFilePath))
-                    m_CpuEngine.Disassembler.AttachSymbolProvider(new DebugSymbolSource(elfFilePath));
-            }
-
             PhaseMsg("System Initialization");
 
             if (Configuration.UseInterpreter) {
@@ -116,16 +122,33 @@ namespace RunN64
                 m_CpuEngine = new ILRecompiler();
             }
 
+            if (!String.IsNullOrEmpty(Configuration.ElfFilepath))
+            {
+                var elfFilePath = Environment.CurrentDirectory + Path.DirectorySeparatorChar + Configuration.ElfFilepath;
+
+                if (File.Exists(elfFilePath)) {
+                    m_CpuEngine.Disassembler.AttachSymbolProvider(new DebugSymbolSource(elfFilePath));
+
+                    Log.Info("Found provided ELF debug symbols");
+                }
+            }
+
             m_CpuEngine.SetDebuggingMode(true);
             m_CpuEngine.SetInstructionDebugMode(InstructionDebugMode.None);
-            m_CpuEngine.SetTraceMode(ProgramTrace.TraceMode.None);
+            // m_CpuEngine.SetTraceMode(ProgramTrace.TraceMode.ProgramOnly);
             m_CpuEngine.TraceLog.Details = ProgramTrace.TraceDetails.None;
+            // m_CpuEngine.TraceLog.EnableLogVerfication();
 
             //m_CpuEngine.CoreDbg.AppendInstBreakpointByAddr(0x800F71BC);
 
             m_System.CPU(m_CpuEngine);
 
+            m_System.DeviceRcp.SetRdpDevice(new MadCatRdp());
+            
+            m_System.DeviceRcp.DeviceRdp.SetDLDebug(true);
+
             Log.Info("Signal Processor Engine: {0}", m_System.DeviceRcp.DeviceRsp.Description);
+            Log.Info("Rasterizer Engine: {0}", m_System.DeviceRcp.DeviceRdp.Description);
 
             m_System.Boot(m_Cartridge);
 
@@ -142,9 +165,12 @@ namespace RunN64
         {
             Thread fbThread = new Thread(() =>
             {
-                m_FramebufferWindow = new GLFramebufferWindow(m_System.DeviceRcp.VideoInterface, m_Cartridge);
+                m_FramebufferWindow = new GLFramebufferWindow(m_System);
                 m_FramebufferWindow.Start();
-            });
+            })
+            {
+                Name = "Framebuffer Thread"
+            };
 
             fbThread.Start();
 
@@ -204,6 +230,10 @@ namespace RunN64
                 m_FramebufferWindow.TriggerVI();
                 m_System.DeviceCPU.State.Cp0.Status.SetInterruptsEnabled(true);
             }
+        }
+
+        public void ForceInterruptsEnable() {
+            m_System.DeviceCPU.State.Cp0.Status.SetInterruptsEnabled(true);
         }
 
         public SingleThreadHost Host => m_EmuHost;

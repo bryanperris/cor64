@@ -1413,5 +1413,7 @@ namespace cor64.Mips.R4300I.JitIL
         public abstract void Ceil(DecodedInstruction inst);
         public abstract void Floor(DecodedInstruction inst);
         public abstract void Convert(DecodedInstruction inst);
+        public abstract void Trap(DecodedInstruction inst);
+        public abstract void Break(DecodedInstruction inst);
     }
 }

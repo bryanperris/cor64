@@ -10,6 +10,7 @@ using System.IO;
 using cor64.Mips.R4300I;
 using cor64.Debugging;
 using cor64.RCP;
+using cor64.Rdp.LLE;
 
 namespace cor64
 {
@@ -64,6 +65,9 @@ namespace cor64
             /* Initialize system memory */
             DeviceMemory.Init();
 
+            /* Init the RDP */
+            DeviceRcp.DeviceRdp.Init();
+
             /* Attach memory to CPU */
             DeviceCPU.AttachIStream(DeviceMemory.CreateMemoryStream());
             DeviceCPU.AttachDStream(DeviceMemory.CreateMemoryStream());
@@ -74,8 +78,24 @@ namespace cor64
             /* Perform system boot intialization (Motherboard IPl) */
             m_BootManager.BootCartridge(cartridge, true);
 
-            /* Start the RCP Core */
-            DeviceRcp.Start();
+            return this;
+        }
+
+        public N64System BootForTesting() {
+            /* Attach RCP to memory */
+            DeviceRcp.AttachToMemory(DeviceMemory);
+
+            /* Initialize system memory */
+            DeviceMemory.Init();
+
+            if (DeviceCPU != null) {
+                /* Attach memory to CPU */
+                DeviceCPU.AttachIStream(DeviceMemory.CreateMemoryStream());
+                DeviceCPU.AttachDStream(DeviceMemory.CreateMemoryStream());
+
+                /* Attach RCP to CPU */
+                DeviceCPU.AttachRcp(DeviceRcp);
+            }
 
             return this;
         }
@@ -107,9 +127,11 @@ namespace cor64
 
             if (DeviceCPU != null)
             {
-                if (DeviceCPU.TraceLog.Size > 0)
+                if (DeviceCPU.TraceLog.HasContent)
                 {
                     writer.WriteLine("Trace Log Dump:");
+
+                    DeviceCPU.TraceLog.StoppedAt = DeviceCPU.ReadPC();
 
                     var tracelog = DeviceCPU.TraceLog.GenerateTraceLog();
 
@@ -133,5 +155,7 @@ namespace cor64
         public N64MemoryController DeviceMemory { get; }
 
         public RcpCore DeviceRcp { get; } = new RcpCore();
+
+        public Cartridge AttachedCartridge => m_Cartridge;
     }
 }

@@ -35,21 +35,21 @@ namespace cor64.Mips.R4300I
         public static readonly Opcode TLBP = Define(Tlb, "tlbp ", TLB);
 
         /* Operating system */
-        public static readonly Opcode ERET = Define(Tlb, "eret ", TLB);
+        public static readonly Opcode ERET = Define(Branch, "eret ", TLB);
 
         /* Trapping */
-        public static readonly Opcode TGEI = Define(Trap, "tgei", I_SI);
-        public static readonly Opcode TGEIU = Define(Trap, "tgeiu", I_SI);
-        public static readonly Opcode TLTI = Define(Trap, "tlti", I_SI);
-        public static readonly Opcode TLTIU = Define(Trap, "tltiu", I_SI);
-        public static readonly Opcode TEQI = Define(Trap, "teqi", I_SI);
-        public static readonly Opcode TNEI = Define(Trap, "tnei", I_SI);
-        public static readonly Opcode TGE = Define(Trap, "tge", TrapWithCode);
-        public static readonly Opcode TGEU = Define(Trap, "tgeu", TrapWithCode);
-        public static readonly Opcode TLT = Define(Trap, "tlt", TrapWithCode);
-        public static readonly Opcode TLTU = Define(Trap, "tltu", TrapWithCode);
-        public static readonly Opcode TEQ = Define(Trap, "teq", TrapWithCode);
-        public static readonly Opcode TNE = Define(Trap, "tne", TrapWithCode);
+        public static readonly Opcode TGEI = Define(Trap, "tgei", I_SI, ArithmeticOp.GREATER_THAN, Immediate);
+        public static readonly Opcode TGEIU = Define(Trap, "tgeiu", I_SI, ArithmeticOp.GREATER_THAN, Immediate | Unsigned);
+        public static readonly Opcode TLTI = Define(Trap, "tlti", I_SI, ArithmeticOp.LESS_THAN, Immediate);
+        public static readonly Opcode TLTIU = Define(Trap, "tltiu", I_SI, ArithmeticOp.LESS_THAN, Immediate | Unsigned);
+        public static readonly Opcode TEQI = Define(Trap, "teqi", I_SI, ArithmeticOp.EQUAL, Immediate);
+        public static readonly Opcode TNEI = Define(Trap, "tnei", I_SI, ArithmeticOp.NOT_EQUAL, Immediate);
+        public static readonly Opcode TGE = Define(Trap, "tge", TrapWithCode, ArithmeticOp.GREATER_THAN);
+        public static readonly Opcode TGEU = Define(Trap, "tgeu", TrapWithCode, ArithmeticOp.GREATER_THAN, Unsigned);
+        public static readonly Opcode TLT = Define(Trap, "tlt", TrapWithCode, ArithmeticOp.LESS_THAN);
+        public static readonly Opcode TLTU = Define(Trap, "tltu", TrapWithCode, ArithmeticOp.LESS_THAN, Unsigned);
+        public static readonly Opcode TEQ = Define(Trap, "teq", TrapWithCode, ArithmeticOp.EQUAL);
+        public static readonly Opcode TNE = Define(Trap, "tne", TrapWithCode, ArithmeticOp.NOT_EQUAL);
 
         /* FPU */
         public static readonly Opcode ADD_FPU = Define(Fpu, "add.fmt", Cop1_DST);

@@ -64,6 +64,8 @@ namespace cor64.Mips.R4300I
             .Map(Cache, CACHE)
             .Map(Sync, SYNC)
             .Map(ExceptionReturn, ERET)
+            .Map(Trap, TGEI, TGEIU, TLTI, TLTIU, TEQI, TNEI, TGE, TGEU, TLT, TLTU, TEQ, TNE)
+            .Map(Break, BREAK)
 
             /* FPU Hooks */
             .Map(FloatLoad, LDC1, LWC1)
@@ -572,5 +574,7 @@ namespace cor64.Mips.R4300I
         public abstract void Convert(DecodedInstruction inst);
         public abstract void Condition(DecodedInstruction inst);
         public abstract void ExceptionReturn(DecodedInstruction inst);
+        public abstract void Trap(DecodedInstruction inst);
+        public abstract void Break(DecodedInstruction inst);
     }
 }

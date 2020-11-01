@@ -51,6 +51,8 @@ namespace cor64
             source.Read(bytes, 0, bytes.Length);
             PiBusConfig = ((uint)bytes[0] << 24) | ((uint)bytes[1] << 16) | ((uint)bytes[2] << 8) | bytes[3];
 
+            Log.Debug("PiBusConfig: {0:X8}", PiBusConfig);
+
             Stream gameSource;
             Stream nativeSource;
             RomEndianess endianess;

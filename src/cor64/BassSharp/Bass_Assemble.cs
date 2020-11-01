@@ -57,13 +57,14 @@ namespace cor64.BassSharp
 
             /* - or - { */
             if (s.Match("^-( {)?")) {
-                SetConstant("lastLabel#" + (m_LastLabelCounter++).ToString(), Pc);
+                SetConstant("lastLabel#" + m_LastLabelCounter++.ToString(), Pc + 4);
+                Log.Trace("WARNING: - label hacked to do pc + 4");
                 return true;
             }
 
             /* + or + { */
             if (s.Match("^\\+( {)?")) {
-                SetConstant("nextlabel#" + (m_NextLabelCounter++).ToString(), Pc);
+                SetConstant("nextlabel#" + m_NextLabelCounter++.ToString(), Pc);
                 return true;
             }
 

@@ -48,12 +48,12 @@ namespace cor64.Mips
     public class MipsInterface : PerpherialDevice
     {
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
-        private MemMappedBuffer m_Mode = new MemMappedBuffer(4, MemMappedBuffer.MemModel.DUAL_READ_WRITE);
-        private MemMappedBuffer m_Version = new MemMappedBuffer(4, MemMappedBuffer.MemModel.SINGLE_READONLY);
-        private MemMappedBuffer m_Interrupt = new MemMappedBuffer(4, MemMappedBuffer.MemModel.SINGLE_READONLY);
-        private MemMappedBuffer m_Mask = new MemMappedBuffer(4, MemMappedBuffer.MemModel.DUAL_READ_WRITE);
-        private BitFiddler m_IntFiddler = new BitFiddler();
-        private BitFiddler m_MaskFiddler = new BitFiddler();
+        private readonly MemMappedBuffer m_Mode = new MemMappedBuffer(4, MemMappedBuffer.MemModel.DUAL_READ_WRITE);
+        private readonly MemMappedBuffer m_Version = new MemMappedBuffer(4, MemMappedBuffer.MemModel.SINGLE_READONLY);
+        private readonly MemMappedBuffer m_Interrupt = new MemMappedBuffer(4, MemMappedBuffer.MemModel.SINGLE_READONLY);
+        private readonly MemMappedBuffer m_Mask = new MemMappedBuffer(4, MemMappedBuffer.MemModel.DUAL_READ_WRITE);
+        private readonly BitFiddler m_IntFiddler = new BitFiddler();
+        private readonly BitFiddler m_MaskFiddler = new BitFiddler();
 
         public const int INT_SP = 0;
         public const int INT_SI = 1;
@@ -75,9 +75,7 @@ namespace cor64.Mips
                 m_MaskFiddler.DefineField(i * 2, 2);
             }
 
-            m_Mask.Write += () => {
-                ProcessMaskClearSet();
-            };
+            m_Mask.Write += ProcessMaskClearSet;
         }
 
         public void SetVersion(uint value)
@@ -89,21 +87,27 @@ namespace cor64.Mips
         {
             uint val = m_Interrupt.ReadonlyRegisterValue;
             m_IntFiddler.X(index, ref val);
-            return !(val == 0);
+            return val != 0;
         }
 
         private bool ReadMaskBool(int index)
         {
             uint val = m_Mask.ReadonlyRegisterValue;
             m_IntFiddler.X(index, ref val);
-            return !(val == 0);
+            return val != 0;
+        }
+
+        public void ClearInterrupt(int index) {
+            uint val = m_Interrupt.ReadonlyRegisterValue;
+            m_IntFiddler.J(index, ref val, 0);
+            m_Interrupt.ReadonlyRegisterValue = val;
         }
 
         public void ProcessMaskClearSet()
         {
             uint value = m_Mask.RegisterValue;
 
-#if DEBUG_FULL
+#if DEBUG_INTERRUPTS
             Log.Debug("MI Interrupt Mask was modified: " + value.ToString("X8"));
 #endif
 
@@ -183,7 +187,7 @@ namespace cor64.Mips
 
         private void SetMask(int index, bool value)
         {
-#if DEBUG_FULL
+#if DEBUG_INTERRUPTS
             string v = value ? "Enabled" : "Disabled";
 
             switch (index)

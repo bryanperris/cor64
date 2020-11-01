@@ -107,6 +107,11 @@ namespace RunN64
                         Log.Info("Forcing video interrupt to fire");
                         s_Emulator.ForceVideoInterrupt();
                     }
+
+                    if (key.Key == ConsoleKey.I) {
+                        Log.Info("Forcing interrupts enable");
+                        s_Emulator.ForceInterruptsEnable();
+                    }
                 }
 
                 if (s_Emulator.Host.ThrownException != null)
@@ -122,7 +127,7 @@ namespace RunN64
                     Console.ForegroundColor = ConsoleColor.Red;
                     Log.Error("\n--- An emulator error occured! ---");
                     Log.Error("Exception: {0}", s_Emulator.Host.ThrownException.Message);
-                    Log.Error("Stack Trace: {0}", s_Emulator.Host.ThrownException.StackTrace.ToString());
+                    Log.Error("Stack Trace: {0}", s_Emulator.Host.ThrownException.StackTrace);
 
                     try
                     {

@@ -79,5 +79,9 @@ namespace cor64.Mips.R4300I
         void Condition(DecodedInstruction inst);
 
         void ExceptionReturn(DecodedInstruction inst);
+
+        void Trap(DecodedInstruction inst);
+
+        void Break(DecodedInstruction inst);
     }
 }

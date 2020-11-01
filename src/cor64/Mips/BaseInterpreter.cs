@@ -128,13 +128,18 @@ namespace cor64.Mips
             return decode;
         }
 
-        protected void TraceInstruction(DecodedInstruction decode, bool nullifed)
+        protected void TraceInstruction(DecodedInstruction decode, bool nullifed, bool inInterrupt)
         {
             if (TraceMode != ProgramTrace.TraceMode.None && decode.Op.Family != OperationFamily.Null && IsTraceActive)
             {
-                TraceLog.AppendInstruction(decode, nullifed);
+                TraceLog.AppendInstruction(decode, nullifed, inInterrupt);
                 TraceStep?.Invoke(decode);
             }
+        }
+
+        protected void TraceInstruction(DecodedInstruction decode, bool nullifed)
+        {
+            TraceInstruction(decode, nullifed, false);
         }
 
         protected void TraceMemoryHit(ulong address, bool isWrite, String val)

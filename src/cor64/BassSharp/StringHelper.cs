@@ -1,4 +1,5 @@
-﻿using System;
+﻿using System.Diagnostics;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -64,28 +65,10 @@ namespace cor64.BassSharp
 
             return sb.ToString();
         }
-
-        public static bool Tokenize(this String str, String pattern)
-        {
-            return Regex.Match(str, "^" + pattern).Success;
-        }
-
+       
         public static void Prepend(this IList<String> list, String value)
         {
             list.Insert(0, value);
-        }
-
-        public static bool Tokenize(this IList<String> list, String s, String p)
-        {
-            var match = Regex.Match(s, p);
-
-            if (match.Success) {
-                foreach (var grp in match.Groups.OfType<Group>().Skip(1)) {
-                    list.Add(grp.Value.Trim());
-                }
-            }
-
-            return match.Success;
         }
 
         public static IList<String> Strip(this IList<String> l)

@@ -11,6 +11,7 @@ namespace cor64.Mips.Rsp
         public DataMemory DMem { get; private set; }
         protected readonly RspOpcodes.CallTable CallTable = RspOpcodes.CreateCallTable();
         protected SPInterface Interface { get; private set; }
+        protected DPCInterface RdpInterface {get; private set; }
         protected SPStatusRegister Status { get; private set; }
         public bool IsHalted { get; protected set; } = true;
         public DecodedInstruction LastReadInst { get; protected set; }
@@ -23,7 +24,7 @@ namespace cor64.Mips.Rsp
             .Map(Shift, SLLV, SRLV, SRAV, SLL, SRL, SRA)
             .Map(Subtract, SUB, SUBU)
             .Map(SetOnLessThan, SLT, SLTI, SLTIU, SLTU)
-            .Map(TransferReg, MTC0, MFC0, MTC2, MFC2, CTC2, CFC2)
+            .Map(TransferReg, SPMTC0, SPMFC0, MTC2, MFC2, CTC2, CFC2)
             .Map(Branch, BEQ, BGEZ, BGEZAL, BGTZ, BLEZ, BLTZ, BLTZAL, BNE)
             .Map(Jump, J, JAL, JR, JALR)
             .Map(Store, SB, SH, SW)
@@ -51,9 +52,10 @@ namespace cor64.Mips.Rsp
 
         public abstract void Init();
 
-        public virtual void AttachInterface(SPInterface iface) {
+        public virtual void AttachInterface(SPInterface iface, DPCInterface rdpInterface) {
             Interface = iface;
             Status = iface.Status;
+            RdpInterface = rdpInterface;
         }
 
         public virtual void Halt() {

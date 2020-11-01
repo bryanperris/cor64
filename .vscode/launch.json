@@ -5,7 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": ".NET Core Launch (console)",
+            "name": "RunN64",
             "type": "coreclr",
             "request": "launch",
             "windows": {
@@ -14,15 +14,16 @@
             "linux": {
                 "program": "${workspaceFolder}/bin/RunN64"
             },
-            "preLaunchTask": "build",
+            "preLaunchTask": "${defaultBuildTask}",
             "args": [],
             "cwd": "${workspaceFolder}/bin",
             // For more information about the 'console' field, see https://aka.ms/VSCode-CS-LaunchJson-Console
             "console": "externalTerminal",
-            "stopAtEntry": false
+            "stopAtEntry": false,
+            "suppressJITOptimizations": true,
         },
         {
-            "name": ".NET Core Attach",
+            "name": "RunN64 (Attach)",
             "type": "coreclr",
             "request": "attach",
             "processId": "${command:pickProcess}"

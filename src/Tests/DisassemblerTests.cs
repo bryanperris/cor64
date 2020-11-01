@@ -249,7 +249,7 @@ namespace Tests
            @"swc2\ (.*),(.*)\((.*)\)"
         };
 
-                [Test]
+       [Test]
         public void RspOpcodes() {
             var arch = "n64.rsp";
             var opcodes = GenerateOpcodeList(arch, s_RspExclude);

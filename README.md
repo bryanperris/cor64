@@ -9,19 +9,16 @@ This is a work-in-progress freetime project
 ### Development ###
 
 What you need
-* NodeJS
 * .NET Framework / Mono
 * .NET Core 3.x or higher
 * For Linux: GLFW devel libraries
 
-Restore NPM packages
-$ npm install
-
-Install gulp command
-$ npm -g install gulp-cli
+Required Global DotNet Tools
+* Paket
+* Nuke.Global
 
 Build and Run
-$ gulp run
+$ nuke Run
 
 Run Unit Tests
 $ dotnet test -v q
@@ -34,7 +31,9 @@ $ dotnet test -v q
  * cxd4 Rsp: https://github.com/cxd4/rsp
  * Mupen64: https://github.com/mupen64plus/mupen64plus-core
  * Cen64: https://github.com/n64dev/cen64
+ * AngryLion RDP: https://github.com/ata4/angrylion-rdp-plus/releases
 
+![Alt text](.github/cubes16bpp.png?raw=true "16BPP RDP Cubes")
 ![Alt text](.github/mandelbrot.png?raw=true "Mandelbrot Test")
 ![Alt text](.github/fputest1.png?raw=true "FPU Add Test")
 ![Alt text](.github/testscreen.png?raw=true "Test Screenshot")

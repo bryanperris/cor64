@@ -28,16 +28,16 @@ namespace Tests
 
             configuration.AddTarget("console", consoleTarget);
 
-            var rule = new LoggingRule("*", LogLevel.Trace, consoleTarget)
+            var rule = new LoggingRule("*", LogLevel.Debug, consoleTarget)
             {
                 DefaultFilterResult = FilterResult.Log
             };
 
-            rule.Filters.Add(new ConditionBasedFilter()
-            {
-                Condition = "starts-with('${logger}','cor64.BassSharp')",
-                Action = FilterResult.Ignore
-            });
+            // rule.Filters.Add(new ConditionBasedFilter()
+            // {
+            //     Condition = "starts-with('${logger}','cor64.BassSharp')",
+            //     Action = FilterResult.Ignore
+            // });
 
             configuration.LoggingRules.Add(rule);
 

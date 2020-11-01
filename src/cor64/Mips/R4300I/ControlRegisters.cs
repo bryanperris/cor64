@@ -56,19 +56,40 @@ namespace cor64.Mips.R4300I
 
         public ulong RegRead(int i)
         {
-#if DEBUG_FULL
-            Log.Debug("Cop0 Reg Read: {0}", ABI.GetLabel("", ABI.RegType.Cop0, i));
-#endif
+// #if DEBUG_COPROCESSOR
+//             Log.Debug("Cop0 Reg Read: {0}", ABI.GetLabel("", ABI.RegType.Cop0, i));
+// #endif
 
             return m_ReadMap[i](i);
         }
 
         public void RegWrite(int i, ulong value)
         {
+#if DEBUG_COPROCESSOR
+            Log.Debug("Cop0 Reg Write: {0} {1:X16}", ABI.GetLabel("", ABI.RegType.Cop0, i), value);
+#endif
+
             m_WriteMap[i](i, value);
 
-#if DEBUG_FULL
-            Log.Debug("Cop0 Reg Write: {0} {1:X16}", ABI.GetLabel("", ABI.RegType.Cop0, i), value);
+            // On timer compare write, clear the count and timer pending interrupt
+            if (i == CTS.CP0_REG_COMPARE) {
+                m_WriteMap[CTS.CP0_REG_COUNT](CTS.CP0_REG_COUNT, 0);
+                Cause.ClearPendingInterrupt(7);
+
+#if DEBUG_MIPS_TIMER
+                Log.Debug("Mips Timer Compare set to {0}", value);
+#endif
+            }
+
+
+#if DEBUG_INTERRUPTS
+            if (i == CTS.CP0_REG_EPC) {
+                Log.Debug("EPC was modified by CPU");
+            }
+
+            if (i == CTS.CP0_REG_EPC) {
+                Log.Debug("Error EPC was modified by CPU");
+            }
 #endif
         }
     }

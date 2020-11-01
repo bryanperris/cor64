@@ -47,6 +47,17 @@ namespace cor64.Mips
             "TagLo",    "TagHi",    "ErrorEPC", "Reserved"
         };
 
+        private static readonly String[] RegisterLabelRspCop0 = {
+            "RSP 0",       "RSP 1",         "RSP 2",    "RSP 3",
+            "RSP 4",       "RSP 5",         "RSP 6",    "RSP 7",
+            "DPC_START_REG",  "DPC_END_REG",      "DPC_CURRENT_REG",    "DPC_STATUS_REG",
+            "DPC_CLOCK_REG",  "DPC_BUFBUSY_REG",  "DPC_PIPEBUSY_REG",    "DPC_TMEM_REG",
+            "Reserved",    "Reserved",      "Reserved", "Reserved",
+            "Reserved",    "Reserved",      "Reserved", "Reserved",
+            "Reserved",    "Reserved",      "Reserved", "Reserved",
+            "Reserved",    "Reserved",      "Reserved", "Reserved"
+        };
+
         private static readonly String[] InterruptName = {
             "Software Interrupt 1",
             "Software Interrupt 2",
@@ -69,6 +80,7 @@ namespace cor64.Mips
             GPR,
             Cop0,
             Cop1,
+            SpCop0,
             VU,
             VUCtrl
         }
@@ -82,6 +94,7 @@ namespace cor64.Mips
             {
                 case RegType.GPR: return abi == "o32" ? RegisterLabelO32[index] : RegisterLabel[index];
                 case RegType.Cop0: return RegisterLabelCop0[index];
+                case RegType.SpCop0: return RegisterLabelRspCop0[index];
                 case RegType.Cop1: return RegisterLabelCop1[index];
                 case RegType.VU: return RegisterLabelVu[index];
                 case RegType.VUCtrl: {

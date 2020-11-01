@@ -8,13 +8,13 @@ using System.Threading.Tasks;
 
 namespace cor64
 {
-    public class AssemblyTextSource : ISource
+    public class AssemblyTextSource : NamedAssemblySource
     {
         StringBuilder m_StringBuilder = new StringBuilder();
         List<String> m_AssemblyLines = new List<string>();
         private String m_Name;
 
-        public String Name => m_Name;
+        public override String Name => m_Name;
 
         public AssemblyTextSource(String name)
         {
@@ -35,7 +35,7 @@ namespace cor64
             }
         }
 
-        public Stream GetStream()
+        public override Stream GetStream()
         {
             var s = new MemoryStream();
             StreamWriter writer = new StreamWriter(s);

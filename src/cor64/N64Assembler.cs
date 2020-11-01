@@ -21,13 +21,13 @@ namespace cor64
     public class N64Assembler : BassTable
     {
         private StreamTarget m_Target = new StreamTarget();
-        private Dictionary<String, AssemblyTextSource> m_Sources = new Dictionary<string, AssemblyTextSource>();
+        private Dictionary<String, NamedAssemblySource> m_Sources = new Dictionary<string, NamedAssemblySource>();
         private static Logger Log = LogManager.GetCurrentClassLogger();
 
-        public IDictionary<String, AssemblyTextSource> AssemblySources => m_Sources;
+        public IDictionary<String, NamedAssemblySource> AssemblySources => m_Sources;
         public Stream AssembledStream => m_Target.Output;
 
-        public void AddAssemblySource(AssemblyTextSource source)
+        public void AddAssemblySource(NamedAssemblySource source)
         {
             m_Sources.Add(source.Name, source);
             Log.Debug("Added source: " + source.Name);

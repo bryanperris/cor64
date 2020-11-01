@@ -12,13 +12,15 @@ namespace cor64
     public class SingleThreadHost
     {
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
-        private N64System m_System;
+        private readonly N64System m_System;
         private bool m_Running;
         private Exception m_Exception;
-        private AutoResetEvent m_StartWaitEvent;
+        private readonly AutoResetEvent m_StartWaitEvent;
         private bool m_BreakPoint = false;
         private bool m_StepOnce = false;
         public event Action Break;
+
+        private Thread m_RspThread;
 
         public SingleThreadHost(N64System system)
         {
@@ -89,10 +91,62 @@ namespace cor64
             }
         }
 
+        private void RspStart()
+        {
+            StringBuilder errorMessage = new StringBuilder();
+
+            m_RspThread = new Thread(() =>
+            {
+                Log.Debug("RSP Core Execution has started...");
+
+                while (true)
+                {
+                    try
+                    {
+                        while (true)
+                        {
+                            m_System.DeviceRcp.DeviceRsp.Step();
+
+                            // We must sleep some to allow other events be processed
+                            if (m_System.DeviceRcp.DeviceRsp.IsHalted) {
+                                Thread.Sleep(100);
+                            }
+                        }
+                    }
+                    catch (Exception e)
+                    {
+                        // var lastInst = m_Rsp.LastReadInst;
+
+                        // errorMessage.AppendLine(String.Format("Last inst read: 0x{0:X8} 0x{1:X8} {2}", 
+                        //     lastInst.Address, lastInst.Inst.inst, m_System.DeviceRcp.DeviceRsp.Disassembler.GetFullDisassembly(lastInst)));
+
+                        errorMessage.Append("Thrown exception: ").AppendLine(e.Message);
+
+                        Log.Error(errorMessage.ToString());
+
+                        Log.Info("RSP will be halted now");
+
+                        m_System.DeviceRcp.DeviceRsp.Halt();
+                    }
+                }
+            })
+            {
+                Name = "RSP Core Thread"
+            };
+
+            m_RspThread.Start();
+        }
+
         public void Start()
         {
-            var t = new Thread(new ThreadStart(RunLoop));
+            var t = new Thread(new ThreadStart(RunLoop))
+            {
+                Name = "MIPS R4300I CPU Thread"
+            };
+            
             t.Start();
+
+            RspStart();
 
             if (!m_Running)
                 m_StartWaitEvent.WaitOne();

@@ -268,8 +268,7 @@ namespace Tests
             {
                 if ((m_TestCase.ExpectationFlags & TestCase.Expectations.BranchTaken) == TestCase.Expectations.BranchTaken)
                 {
-                    Assert.AreEqual(8UL, BranchTarget);
-                    //Assert.AreEqual(4L, m_Pc);
+                    Assert.AreEqual(4UL, BranchTarget);
                 }
                 else
                 {

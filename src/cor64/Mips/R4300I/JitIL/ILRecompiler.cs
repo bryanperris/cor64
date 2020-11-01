@@ -220,7 +220,7 @@ namespace cor64.Mips.R4300I.JitIL
             /* Start of a new block */
             if (m_CurrentIntBlock == null)
             {
-                m_CurrentIntBlock = new RuntimeBasicBlock(m_Pc);
+                m_CurrentIntBlock = new RuntimeBasicBlock(this.Disassembler, m_Pc);
                 m_JitPc = m_Pc;
             }
 
@@ -418,7 +418,10 @@ namespace cor64.Mips.R4300I.JitIL
 
         public sealed override void SetOnLessThan(DecodedInstruction inst) => m_CurrentOpEmitter.SetOnLessThan(inst);
 
-        public sealed override void TransferReg(DecodedInstruction inst) => m_CurrentOpEmitter.TransferReg(inst);
+        // TODO: Some FPU issues with the compiled transfered reg opcode
+
+        //public sealed override void TransferReg(DecodedInstruction inst) => m_CurrentOpEmitter.TransferReg(inst);
+        public sealed override void TransferReg(DecodedInstruction inst) => EmitFallback(inst);
 
         public sealed override void Branch(DecodedInstruction inst) => m_CurrentOpEmitter.Branch(inst);
 
@@ -465,6 +468,10 @@ namespace cor64.Mips.R4300I.JitIL
         public sealed override void Condition(DecodedInstruction inst) => m_CurrentOpEmitter.Condition(inst);
 
         public sealed override void ExceptionReturn(DecodedInstruction inst) => m_CurrentOpEmitter.ExceptionReturn(inst);
+
+        public sealed override void Trap(DecodedInstruction inst) => EmitFallback(inst);
+
+        public sealed override void Break(DecodedInstruction inst) => EmitFallback(inst);
 
         uint IDynamicMips.ReadGPR32(int select)
         {

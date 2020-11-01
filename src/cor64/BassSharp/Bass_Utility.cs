@@ -47,7 +47,7 @@ namespace cor64.BassSharp
 
             SetToken<Macro>(name, local, m, e, (s) => s.Macros, v);
 
-            Log.Debug("Added macro: {0}: {1} ({2})", local ? "local" : "global", name, String.Join(",", parameters));
+            Log.Trace("Added macro: {0}: {1} ({2})", local ? "local" : "global", name, String.Join(",", parameters));
         }
 
         T FindToken<T>(String name, bool? local, Func<Frame, ICollection<T>> stackFunc)
@@ -100,7 +100,7 @@ namespace cor64.BassSharp
         {
             var d = new Define(name, value);
             SetToken<Define>(name, local, d, null, s => s.Defines, null);
-            Log.Debug("Added defintion: {0}: {1} = {2}", local ? "local" : "global", name, value);
+            Log.Trace("Added defintion: {0}: {1} = {2}", local ? "local" : "global", name, value);
         }
 
         Define FindDefine(String name, bool local)
@@ -150,7 +150,7 @@ namespace cor64.BassSharp
             }
             else {
                 m_Constants.Add(new Constant(scopedname, value));
-                Log.Debug("Constant Added: {0} = {1}", scopedname, value);
+                Log.Trace("Constant Added: {0} = {1}", scopedname, value);
             }
         }
 

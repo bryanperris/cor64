@@ -42,5 +42,30 @@ namespace Tests.Assembler
             Assert.AreEqual(checksum.Length, assembledHash.Length);
             Assert.AreEqual(checksum, assembledHash);
         }
+
+        [Test]
+        public void ShadeCoeffOutputTest() {
+            var assembly = new AssemblyTextSource("displaylist");
+            assembly += "endian msb";
+            assembly += "arch n64.rdp";
+            assembly += "include \"LIB/N64.INC\"";
+            assembly += "include \"LIB/N64_GFX.INC\"";
+            assembly += "Shade_Triangle 0,0,0, 400,200,200, 25,0,0,0, 75,0,-1,0, 75,0,0,0";
+            assembly += "Shade_Coefficients 0,256,0,0, -5,5,0,0, 0,256,0,0, -5,5,0,0, 0,-5,5,0, 0,0,0,0, 0,-5,5,0, 0,0,0,0xBEEF";
+
+            var assembler = new N64BareMetalRspAssembler();
+            //assembler.ExtraDebugMessages = true;
+
+            assembler.AddAssemblySource(assembly);
+            assembler.AssembleCode(true);
+
+            var bytes = assembler.ToBytes();
+
+            StringBuilder rawHex = new StringBuilder();
+            foreach (var b in bytes) rawHex.Append(b.ToString("X2"));
+
+            Assert.AreEqual("0C00019000C800C80019000000000000004B0000FFFF0000004B0000000000000000010000000000FFFB0005000000000000010000000000FFFB0005000000000000FFFB0005000000000000000000000000FFFB00050000000000000000BEEF",
+            rawHex.ToString());
+        }
     }
 }

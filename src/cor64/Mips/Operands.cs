@@ -78,6 +78,7 @@ namespace cor64.Mips
         private static readonly OperandFormatter m_Cop0Formatter = (t, s, abi, inst, addr, sym) =>
         {
             s = m_MainFormatter(t, s, abi, inst, addr, sym);
+            s = s.Replace("spcop0", ABI.GetLabel(abi, ABI.RegType.SpCop0, inst.rd));
             s = s.Replace("cop0", ABI.GetLabel(abi, ABI.RegType.Cop0, inst.rd));
             return s;
         };
@@ -128,7 +129,7 @@ namespace cor64.Mips
                 offset += off;
 
                 if (sym != null)
-                    symbol = sym.GetSymbol((uint)offset);
+                    symbol = sym.GetSymbol((uint)(offset + 4));
 
                 if (String.IsNullOrEmpty(symbol))
                     s = s.Replace("offset", "$" + offset.ToString("X4"));
@@ -157,6 +158,10 @@ namespace cor64.Mips
             new OperandFormat(3, "ft,imm(rs)", m_Cop1Formatter),
             new OperandFormat(2, "cop0,rt", m_Cop0Formatter),
             new OperandFormat(2, "rt,cop0", m_Cop0Formatter),
+
+            // Signal Processor
+            new OperandFormat(2, "spcop0,rt", m_Cop0Formatter),
+            new OperandFormat(2, "rt,spcop0", m_Cop0Formatter),
 
             // Vector Unit
             new OperandFormat(4, "vd,vs,vt[e]", m_VuFormatter),

@@ -25,6 +25,12 @@ namespace cor64.Mips
 
         public ulong Address { get; protected set; }
 
+        public ulong EndAddress {
+            get {
+                return Address + ((ulong)Size * 4);
+            }
+        }
+
         public IReadOnlyList<TRecord> InstructionList => m_RecordSet;
 
         protected IList<TRecord> RecordSet => m_RecordSet;

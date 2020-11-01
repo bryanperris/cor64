@@ -50,7 +50,7 @@ namespace cor64.IO
             }
         }
 
-        public sealed override int Read(byte[] buffer, int offset, int count)
+        public override int Read(byte[] buffer, int offset, int count)
         {
             if (buffer == null)
                 throw new ArgumentNullException(nameof(buffer));
@@ -85,7 +85,7 @@ namespace cor64.IO
             m_BaseStream.SetLength(value);
         }
 
-        public sealed override void Write(byte[] buffer, int offset, int count)
+        public override void Write(byte[] buffer, int offset, int count)
         {
             Byte[] innerBuffer = new Byte[count];
 
@@ -146,6 +146,56 @@ namespace cor64.IO
         protected override long ComputeNextSwapPosition(long position)
         {
             return (position & unchecked(0x7FFFFFFFFFFFFFF8L)) + 7 - (position % 8);
+        }
+    }
+
+    public sealed class SwapAutoStream : ByteSwapStream {
+        private readonly Swap16Stream m_S16;
+        private readonly Swap32Stream m_S32;
+        private readonly Swap64Stream m_S64;
+        private readonly Stream m_BaseStream;
+
+        public SwapAutoStream(Stream baseStream) : base(baseStream)
+        {
+            m_BaseStream = baseStream;
+            m_S16 = new Swap16Stream(baseStream);
+            m_S32 = new Swap32Stream(baseStream);
+            m_S64 = new Swap64Stream(baseStream);
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) {
+            Stream s;
+            
+            switch (count) {
+                case 1: s = m_BaseStream; break;
+                case 2: s = m_S16; break;
+                case 4: s = m_S32; break;
+                case 8: s = m_S64; break;
+                default: return base.Read(buffer, offset, count);
+            }
+
+            return s.Read(buffer, offset, count);
+        }
+
+        public override void Write(byte[] buffer, int offset, int count) {
+            Stream s = null;
+
+            switch (count) {
+                case 2: s = m_S16; break;
+                case 4: s = m_S32; break;
+                case 8: s = m_S64; break;
+                default: {
+                    base.Write(buffer, offset, count);
+                    return;
+                }
+            }
+
+            s.Write(buffer, offset, count);
+        }
+
+        protected override long ComputeNextSwapPosition(long position)
+        {
+            return position;
         }
     }
 }

@@ -74,7 +74,7 @@ namespace cor64.BassSharp
                 case Node.Type.Assign: return EvaluateAssign(node, mode);
             }
 
-            throw new Error("Unsupported operator");
+            throw new Error("Unsupported operator: " + node.NodeType.ToString() + " "  + node.Literal);
         }
 
         IList<long> EvaluateParameters(Node node, Evaluation mode)
@@ -121,10 +121,12 @@ namespace cor64.BassSharp
 
             if (node.Literal.Length < 1) return 0;
 
+            DebugPrint("Eval Literal: " + s);
+
             if (s.Length > 1 && s[0] == '0' && s[1] == 'b') return Convert.ToInt64(s.Substring(2), 2);
             if (s.Length > 1 && s[0] == '0' && s[1] == 'o') return Convert.ToInt64(s.Substring(2), 8);
             if (s.Length > 1 && s[0] == '0' && s[1] == 'x') return Convert.ToInt64(s.Substring(2), 16);
-            if (s[0] >= '0' && s[0] <= '9') return Convert.ToInt64(s);
+            if (s[0] >= '0' && s[0] <= '9') return Convert.ToInt64(Convert.ToDecimal(s));
             if (s[0] == '%') return Convert.ToInt64(s.Substring(1), 2);
             if (s[0] == '$') return Convert.ToInt64(s.Substring(1), 16);
             if (s.Match("'.*'")) return Character(s);

@@ -11,10 +11,11 @@ namespace cor64.Mips.R4300I
 {
     public class RuntimeBasicBlock : BasicBlock<DecodedInstruction>
     {
-        private RegUsageCollector m_RegUsageCollector = new RegUsageCollector();
+        private readonly RegUsageCollector m_RegUsageCollector;
 
-        public RuntimeBasicBlock(ulong address) : base(address)
+        public RuntimeBasicBlock(BaseDisassembler disassembler, ulong address) : base(address)
         {
+            m_RegUsageCollector = new RegUsageCollector(disassembler);
         }
 
         public override void Append(DecodedInstruction instRecord)

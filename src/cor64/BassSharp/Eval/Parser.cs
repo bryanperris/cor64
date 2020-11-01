@@ -120,6 +120,8 @@ namespace cor64.BassSharp.Eval
                     localNode.Link.Count == 0;
             }
 
+            var terminal = (string)s.Clone();
+
             while (s.Length > 0) {
                 while (Char.IsWhiteSpace(s[0])) s = s.Substring(1);
 
@@ -232,7 +234,7 @@ namespace cor64.BassSharp.Eval
                 if (s.Length == 0)
                     break;
 
-                throw new Error("Unrecognized terminal");
+                throw new Error("Unrecognized terminal: " + terminal);
             }
         }
     }

@@ -2,13 +2,21 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "build",
-            "type": "gulp",
-            "task": "default",
+            "label": "Nuke: Compile",
+            "type": "shell",
+            "command": "./build.sh",
+            "args": ["compile"],
+            "windows": {
+                "command": "./build.ps1"
+            },
             "group": {
                 "kind": "build",
                 "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
             }
-        }
+        },
     ]
 }

@@ -21,6 +21,10 @@ namespace cor64.IO
         private readonly PinnedBuffer m_BufferB;
         public event Action Write;
 
+        public MemMappedBuffer() : this(4) {
+            
+        }
+
         public MemMappedBuffer(int size, MemModel mode = MemModel.SINGLE_READ_WRITE)
         {
             Size = size;

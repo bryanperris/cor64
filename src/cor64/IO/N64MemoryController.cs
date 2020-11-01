@@ -28,10 +28,14 @@ namespace cor64.IO
         private Action<uint, byte[], int, int> m_Read;
         private Action<uint, byte[], int, int> m_Write;
 
+        [ThreadStatic] private readonly static byte[] s_ReadSingle = { 0 };
+        [ThreadStatic] private readonly static byte[] s_WriteSingle = { 0 };
+
         public N64MemoryController()
         {
             m_Read = m_FastMemMap.Read;
             m_Write = m_FastMemMap.Write;
+            m_MemModel.Cart = new DummyMemory(0xFC00000, "Dummy cartridge");
         }
 
         public void UseSafeAccess()
@@ -54,11 +58,11 @@ namespace cor64.IO
 
         public void Read(long address, byte[] buffer, int offset, int count)
         {
-            Interlocked.Increment(ref m_CountReaders);
+            //Interlocked.Increment(ref m_CountReaders);
 
             m_Read((uint)address, buffer, offset, count);
 
-            Interlocked.Decrement(ref m_CountReaders);
+            //Interlocked.Decrement(ref m_CountReaders);
         }
 
         public void Write(long address, byte[] buffer, int offset, int count)
@@ -70,9 +74,9 @@ namespace cor64.IO
             Interlocked.Decrement(ref m_CountWriters);
         }
 
-        public Stream CreateMemoryStream()
+        public N64MemoryStream CreateMemoryStream()
         {
-            var stream = new _InternalStream(this);
+            var stream = new N64MemoryStream(this);
             return stream;
         }
 
@@ -139,11 +143,11 @@ namespace cor64.IO
 
         public UnifiedMemModel<BlockDevice> Model => m_MemModel;
 
-        private sealed class _InternalStream : Stream
+        public sealed class N64MemoryStream : Stream, RdramHidden
         {
-            private N64MemoryController m_Controller;
+            private readonly N64MemoryController m_Controller;
 
-            public _InternalStream(N64MemoryController controller)
+            public N64MemoryStream(N64MemoryController controller)
             {
                 m_Controller = controller;
             }
@@ -158,17 +162,20 @@ namespace cor64.IO
 
             public override long Position { get; set; }
 
+            public int HiddenLength => m_Controller.RDRAM.HiddenLength;
+
             public override void Flush()
             {
-                throw new NotImplementedException();
+                
             }
 
             public override int Read(byte[] buffer, int offset, int count)
             {
-                while (Interlocked.Read(ref m_Controller.m_CountWriters) > 0)
-                {
-                    Thread.Sleep(200);
-                }
+                // XXX: Lets not lock on readers, only lock on the writer
+                // while (Interlocked.Read(ref m_Controller.m_CountWriters) > 0)
+                // {
+                //     Thread.Sleep(200);
+                // }
 
                 m_Controller.Read(Position, buffer, offset, count);
                 return count;
@@ -181,7 +188,7 @@ namespace cor64.IO
 
             public override void SetLength(long value)
             {
-                throw new NotImplementedException();
+                throw new NotSupportedException();
             }
 
             public override void Write(byte[] buffer, int offset, int count)
@@ -192,6 +199,28 @@ namespace cor64.IO
                 }
 
                 m_Controller.Write(Position, buffer, offset, count);
+            }
+
+            public override int ReadByte() {
+                Read(s_ReadSingle, 0 , 1);
+                Position++;
+                return s_ReadSingle[0];
+            }
+
+            public override void WriteByte(byte value) {
+               s_WriteSingle[0] = value;
+               Position++;
+               Write(s_WriteSingle, 0, 1);
+            }
+
+            public void HiddenWrite(int address, byte value)
+            {
+                m_Controller.RDRAM.HiddenBitWrite(address, value);
+            }
+
+            public byte HiddenRead(int address)
+            {
+                return m_Controller.RDRAM.HiddenBitRead(address);
             }
         }
 

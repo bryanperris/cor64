@@ -188,13 +188,19 @@ namespace cor64.BassSharp
             m_Strict = strict;
 
             m_Phase = Phase.Analyze;
+            Log.Trace("Analyze Start!");
             Analyze();
+            Log.Trace("Analyze Done!");
 
             m_Phase = Phase.Query;
+            Log.Trace("Execute Query Start!");
             Execute();
+            Log.Trace("Execute Query Done!");
 
             m_Phase = Phase.Write;
+            Log.Trace("Execute Write Start!");
             Execute();
+            Log.Trace("Execute Write Done!");
         }
 
         public long Pc => m_Origin + m_Base;
@@ -272,6 +278,15 @@ namespace cor64.BassSharp
             m_LastLabelCounter = 1;
             m_NextLabelCounter = 1;
         }
+
+        
+        protected void DebugPrint(String message, params Object[] args) {
+            if (ExtraDebugMessages) {
+                Log.Debug(message, args);
+            }
+        }
+
+        public bool ExtraDebugMessages { get; set; }
 
         public bool IsAnalyzePhase => m_Phase == Phase.Analyze;
 

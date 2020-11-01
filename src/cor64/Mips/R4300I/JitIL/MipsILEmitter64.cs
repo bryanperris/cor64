@@ -581,5 +581,13 @@ namespace cor64.Mips.R4300I.JitIL
         {
             throw new NotImplementedException();
         }
+
+        public override void Trap(DecodedInstruction inst) {
+            throw new NotImplementedException();
+        }
+
+        public override void Break(DecodedInstruction inst) {
+            throw new NotImplementedException();
+        }
     }
 }

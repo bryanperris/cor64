@@ -9,18 +9,26 @@ namespace cor64.Mips.Analysis
     public class InfoBasicBlockInstruction
     {
         private List<MemoryAccessMeta> m_MemAccessList;
-        private int m_MemRef;
+        private List<bool> m_NullifiedList = new List<bool>();
+        private int m_HitCounter;
         private StringBuilder m_StringBuilder = new StringBuilder();
         private BaseDisassembler m_Disassembler;
-        private bool m_IsNullifed;
 
-        public InfoBasicBlockInstruction(BaseDisassembler disassembler, DecodedInstruction inst, bool nullified)
+        public InfoBasicBlockInstruction(BaseDisassembler disassembler, DecodedInstruction inst, bool isNullified)
         {
             m_Disassembler = disassembler;
             Inst = inst;
             Address = inst.Address;
             m_MemAccessList = new List<MemoryAccessMeta>();
-            m_IsNullifed = nullified;
+            AppendNullifyUsage(isNullified);
+        }
+
+        public InfoBasicBlockInstruction(BaseDisassembler disassembler, DecodedInstruction inst)
+        {
+            m_Disassembler = disassembler;
+            Inst = inst;
+            Address = inst.Address;
+            m_MemAccessList = new List<MemoryAccessMeta>();
         }
 
         public void AppendMemoryAccess(MemoryAccessMeta memoryAccessMeta)
@@ -34,32 +42,47 @@ namespace cor64.Mips.Analysis
 
         public void IncrementUsageRef()
         {
-            m_MemRef++;
+            m_HitCounter++;
         }
 
         public void ResetUsageRef()
         {
-            m_MemRef = 0;
+            m_HitCounter = 0;
         }
 
-        public void AddToLog(List<String> log) {
+        public void AppendNullifyUsage(bool isNullified)
+        {
+            m_NullifiedList.Add(isNullified);
+        }
+
+        public void AddToLog(List<String> log)
+        {
             m_StringBuilder.Clear();
             bool startComment = false;
 
-            void CheckComment() {
-                if (!startComment) {
+            void CheckComment()
+            {
+                if (!startComment)
+                {
                     startComment = true;
                     m_StringBuilder.Append("     // ");
                 }
             }
 
-            m_StringBuilder.Append(this.ToString());
+            if (m_HitCounter < m_NullifiedList.Count && m_NullifiedList[m_HitCounter])
+            {
+                m_StringBuilder.AppendFormat("{0} [NULLIFIED]", ToString());
+            }
+            else
+            {
+                m_StringBuilder.Append(ToString());
+            }
 
-            if (m_MemAccessList.Count > 0 && m_MemRef < m_MemAccessList.Count)
+            if (m_MemAccessList.Count > 0 && m_HitCounter < m_MemAccessList.Count)
             {
                 CheckComment();
 
-                m_StringBuilder.Append(m_MemAccessList[m_MemRef].ReadMeta());
+                m_StringBuilder.Append(m_MemAccessList[m_HitCounter].ReadMeta());
                 m_StringBuilder.Append("; ");
             }
 

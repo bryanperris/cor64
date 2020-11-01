@@ -5,6 +5,8 @@ using cor64.IO;
 using cor64.Mips;
 using cor64.Mips.Rsp;
 using NLog;
+using cor64.Rdp.Renderers;
+using cor64.Rdp;
 
 namespace cor64.RCP
 {
@@ -14,17 +16,19 @@ namespace cor64.RCP
         private const int DUMMY_SECTION_SIZE = 0x100000;
 
         private InterpreterBaseRsp m_Rsp;
-        private IRdpDevice m_Rdp;
         private N64MemoryController m_Memory;
-
-        private StringBuilder m_ErrorMessageBuilder = new StringBuilder();
-
-        private Thread m_RcpThread;
+        private DrawProcessor m_Rdp;
 
         public RcpCore()
         {
             m_Rsp = new RspInterpreter();
             m_Rsp.SetInstructionDebugMode(InstructionDebugMode.Full);
+
+            m_Rdp = new DummyRdp();
+        }
+
+        public void SetRdpDevice(DrawProcessor processor) {
+            m_Rdp = processor;
         }
 
         public void AttachToMemory(N64MemoryController controller)
@@ -35,14 +39,17 @@ namespace cor64.RCP
             VideoInterface = new Video(controller, RcpInterface);
             RspInterface = new SPInterface(controller);
             ParellelInterface = new PIMemory(controller);
-            DisplayProcessorCommandInterface = new DummyMemory(DUMMY_SECTION_SIZE, "Display Processor Command Interface");
+            DisplayProcessorCommandInterface = new DPCInterface(controller);
             DisplayProcessorSpanInterface = new DummyMemory(DUMMY_SECTION_SIZE, "Display Processor Span Interface");
             AudioInterface = new DummyMemory(DUMMY_SECTION_SIZE, "Audio Interface");
 
-            m_Rsp.AttachInterface(RspInterface);
+            m_Rsp.AttachInterface(RspInterface, DisplayProcessorCommandInterface);
 
             m_Rsp.AttachIStream(RspInterface.CreateIMemorySream());
             m_Rsp.AttachDStream(RspInterface.CreateDMemorySream());
+
+            m_Rdp.AttachInterface(DisplayProcessorCommandInterface);
+            m_Rdp.AttachMemory(controller.CreateMemoryStream());
 
             controller.Model.SPRegs = RspInterface;
             controller.Model.DPCmdRegs = DisplayProcessorCommandInterface;
@@ -54,48 +61,9 @@ namespace cor64.RCP
             controller.Model.SIRegs = SerialInterface;
         }
 
-        public void Start()
-        {
-            m_RcpThread = new Thread(() =>
-            {
-                Log.Debug("RSP Core Execution has started...");
-
-                while (true)
-                {
-                    try
-                    {
-                        while (true)
-                        {
-                            m_Rsp.Step();
-                        }
-                    }
-                    catch (Exception e)
-                    {
-                        m_ErrorMessageBuilder.Clear();
-
-                        // var lastInst = m_Rsp.LastReadInst;
-
-                        // m_ErrorMessageBuilder.AppendLine(String.Format("Last inst read: 0x{0:X8} 0x{1:X8} {2}", 
-                        //     lastInst.Address, lastInst.Inst.inst, m_Rsp.Disassembler.GetFullDisassembly(lastInst)));
-
-                        m_ErrorMessageBuilder.AppendLine("Thrown exception: " + e.Message);
-
-                        Log.Error(m_ErrorMessageBuilder.ToString());
-
-                        Log.Info("RSP will be halted now");
-
-                        m_Rsp.Halt();
-                    }
-                }
-            })
-            {
-                IsBackground = true
-            };
-
-            m_RcpThread.Start();
-        }
-
         public InterpreterBaseRsp DeviceRsp => m_Rsp;
+
+        public DrawProcessor DeviceRdp => m_Rdp;
 
         public SerialMemory SerialInterface { get; private set; }
 
@@ -105,7 +73,7 @@ namespace cor64.RCP
 
         public SPInterface RspInterface { get; private set; }
 
-        public BlockDevice DisplayProcessorCommandInterface { get; private set; }
+        public DPCInterface DisplayProcessorCommandInterface { get; private set; }
 
         public BlockDevice DisplayProcessorSpanInterface { get; private set; }
 

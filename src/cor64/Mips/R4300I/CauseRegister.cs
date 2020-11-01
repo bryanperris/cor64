@@ -56,6 +56,10 @@ namespace cor64.Mips.R4300I
 
             byte code = 0;
 
+            #if DEBUG_INTERRUPTS
+                Log.Debug("Set CPU Exception Code: {0}", exceptionType.ToString());
+            #endif
+
             switch (exceptionType)
             {
                 default: throw new InvalidOperationException("invalid exception type");
@@ -107,19 +111,31 @@ namespace cor64.Mips.R4300I
             uint val = m_Fiddler.X(F_IP, ref m_Value);
             m_IntFiddler.J(interrupt, ref val, 1);
             m_Fiddler.J(F_IP, ref m_Value, val);
+
+            #if DEBUG_INTERRUPTS_PENDING
+                Log.Debug("CPU Interrupt Pending Updated: {0:X2}", InterruptPending);
+            #endif
         }
 
-        public void ClearInterrupt(int interrupt)
+        public void ClearPendingInterrupt(int interrupt)
         {
             uint val = m_Fiddler.X(F_IP, ref m_Value);
             m_IntFiddler.J(interrupt, ref val, 0);
             m_Fiddler.J(F_IP, ref m_Value, val);
+
+            #if DEBUG_INTERRUPTS_PENDING
+                Log.Debug("CPU Interrupt Pending Updated: {0:X2}", InterruptPending);
+            #endif
         }
 
         public bool ReadInterruptPending(int interrupt)
         {
             uint val = m_Fiddler.X(F_IP, ref m_Value);
             return m_IntFiddler.X(interrupt, ref val) != 0;
+        }
+
+        public void ClearAllPending() {
+            m_Value &= ~0xFF00U;
         }
 
         public uint InterruptPending => m_Fiddler.X(F_IP, ref m_Value);

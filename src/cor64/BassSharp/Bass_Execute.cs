@@ -148,11 +148,14 @@ namespace cor64.BassSharp
             }
 
             if (s.Match(".*\\(.*\\)")) {
-                IList<String> getParams(String[] value)
+
+                static IList<String> getParams(String[] value)
                 {
                     if (value != null) {
                         if (value.Length >= 2) {
-                            return value[1].Split(',').Strip();
+                            if (!string.IsNullOrEmpty(value[1])) { // Check to make sure the macro contains params
+                                return value[1].Split(',').Strip();
+                            }
                         }
                     }
 
@@ -161,7 +164,7 @@ namespace cor64.BassSharp
 
                 var p = s.RightMatchAndTrim(")").Split(new char[] { '(' }, 2);
                 var a = getParams(p);
-
+                
                 String name = String.Format("{0}:{1}", p[0], a.Count);
                 Macro macro = FindMacro(name);
 
@@ -221,8 +224,13 @@ namespace cor64.BassSharp
                 return true;
             }
 
-            if (Assemble(s)) {
-                return true;
+            try {
+                if (Assemble(s)) {
+                    return true;
+                }
+            }
+            catch (Exception e) {
+                throw new InvalidOperationException("Execute failed: " + instruction.statement, e);
             }
 
             Evaluate(s);

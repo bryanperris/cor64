@@ -241,5 +241,38 @@ namespace Tests
 
             return assembler.ToBytes();
         }
+
+        public static Byte[] AssembleDisplayList(String resourceFileName)
+        {
+            var assembly = new AssemblyTextSource("displaylist");
+            assembly += ReadInternalAsm(typeof(Asm), resourceFileName);
+
+            var assembler = new N64BareMetalRspAssembler();
+
+            assembler.AddAssemblySource(assembly);
+            assembler.AssembleCode(true);
+
+            return assembler.ToBytes();
+        }
+
+        public static Byte[] AssembleSingleCommandDisplayList(params string[] commandAsm) {
+            var assembly = new AssemblyTextSource("displaylist");
+
+            assembly += "endian msb";
+            assembly += "arch n64.rdp";
+            assembly += "include \"LIB/N64.INC\"";
+            assembly += "include \"LIB/N64_GFX.INC\"";
+            
+            foreach (var line in commandAsm) {
+                assembly += line;
+            }
+
+            var assembler = new N64BareMetalRspAssembler();
+
+            assembler.AddAssemblySource(assembly);
+            assembler.AssembleCode(true);
+
+            return assembler.ToBytes();
+        }
     }
 }

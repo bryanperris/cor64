@@ -10,11 +10,13 @@ namespace cor64.IO
 {
     public class Rdram : BlockDevice
     {
-        const int MAXSIZE = 8 * 1024 * 1024;
+        private const int NORMAL_SIZE = 4 * 1024 * 1024;
+        private const int MAXSIZE = 2 * NORMAL_SIZE;
 
-        private PinnedBuffer m_Ram = new PinnedBuffer(MAXSIZE);
-        private PinnedBuffer m_DummyRead = new PinnedBuffer(4);
-        private PinnedBuffer m_DummyWrite = new PinnedBuffer(4);
+        private readonly PinnedBuffer m_Ram = new PinnedBuffer(MAXSIZE);
+        private readonly PinnedBuffer m_HiddenRam = new PinnedBuffer(NORMAL_SIZE);
+        private readonly PinnedBuffer m_DummyRead = new PinnedBuffer(4);
+        private readonly PinnedBuffer m_DummyWrite = new PinnedBuffer(4);
 
         public override long Size => 0x03EFFFFF + 1;
 
@@ -92,5 +94,17 @@ namespace cor64.IO
 
             return map;
         }
+
+        // The hidden bits (9th bit on RDRAM bus) is used by the RDP Zbuffer
+
+        public void HiddenBitWrite(int offset, byte bit) {
+            m_HiddenRam.GetPointer().Offset(offset).AsType_8(bit);
+        }
+
+        public byte HiddenBitRead(int offset) {
+            return m_HiddenRam.GetPointer().Offset(offset).AsType_8();
+        }
+
+        public int HiddenLength => m_HiddenRam.Size;
     }
 }

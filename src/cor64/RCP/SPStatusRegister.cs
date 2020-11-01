@@ -79,9 +79,9 @@ namespace cor64.RCP
         Signal2Set       = 0b1000000000,
         Signal3Set       = 0b10000000000,
         Signal4Set       = 0b100000000000,
-        Signal5Set       = 0b100000000000,
-        Signal6Set       = 0b1000000000000,
-        Signal7Set       = 0b10000000000000
+        Signal5Set       = 0b1000000000000,
+        Signal6Set       = 0b10000000000000,
+        Signal7Set       = 0b100000000000000
     }
 
     public class SPStatusRegister

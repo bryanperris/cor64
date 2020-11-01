@@ -6,11 +6,14 @@ namespace cor64.Mips.Analysis
         private InfoBasicBlock m_LinkedBlock;
         private int m_BlockOffset;
         private int m_Repeat;
+        
+        public bool IsExceptionReturn { get; }
 
-        public InfoBasicBlockLink(InfoBasicBlock block, int offset)
+        public InfoBasicBlockLink(InfoBasicBlock block, int offset, bool isEret = false)
         {
             m_LinkedBlock = block;
             m_BlockOffset = offset;
+            IsExceptionReturn = isEret;
         }
 
         public InfoBasicBlock LinkedBlock => m_LinkedBlock;
