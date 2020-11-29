@@ -4,7 +4,7 @@ using NLog;
 /* The Mips Interface (MI)
  * ---------------------------
  * This is the CPU chip interface used by the N64 hardware
- * - Interrupts: The main board triggers these interrupts from external events, only one is used as a timer and its managed by the processor itself
+ * - Interrupts: The main board triggers these interrupts from external events
  * 
  *         MI_BASE_REG - 0x04300000
 
@@ -54,6 +54,7 @@ namespace cor64.Mips
         private readonly MemMappedBuffer m_Mask = new MemMappedBuffer(4, MemMappedBuffer.MemModel.DUAL_READ_WRITE);
         private readonly BitFiddler m_IntFiddler = new BitFiddler();
         private readonly BitFiddler m_MaskFiddler = new BitFiddler();
+        private readonly BitFiddler m_ModeFiddler = new BitFiddler();
 
         public const int INT_SP = 0;
         public const int INT_SI = 1;
@@ -61,6 +62,14 @@ namespace cor64.Mips
         public const int INT_VI = 3;
         public const int INT_PI = 4;
         public const int INT_DP = 5;
+
+        public const int MODE_CLEAR_DP = 0;
+
+        /* ----------------
+           Based on libdragon,
+           MI_MASK_CLR_SP = 1
+           MI_MASK_SET_SP = 2
+        */
 
         public const int MASK_CLEAR = 1;
         public const int MASK_SET = 2;
@@ -75,7 +84,23 @@ namespace cor64.Mips
                 m_MaskFiddler.DefineField(i * 2, 2);
             }
 
+            m_ModeFiddler.DefineField(11, 1); // Clear DP Interrupt
+
             m_Mask.Write += ProcessMaskClearSet;
+            m_Mode.Write += ModeChanged;
+        }
+
+        private void ModeChanged() {
+            uint val = m_Mode.RegisterValue;
+            uint read = m_ModeFiddler.X(MODE_CLEAR_DP, ref val);
+
+            // Clear DP interrupt
+            if (read != 0) {
+                Log.Debug("Cleared RDP Interrupt");
+                ClearInterrupt(INT_DP);
+            }
+
+            m_Mode.RegisterValue = 0;
         }
 
         public void SetVersion(uint value)
@@ -107,7 +132,7 @@ namespace cor64.Mips
         {
             uint value = m_Mask.RegisterValue;
 
-#if DEBUG_INTERRUPTS
+#if DEBUG_INTERRUPTS || DEBUG_MI
             Log.Debug("MI Interrupt Mask was modified: " + value.ToString("X8"));
 #endif
 
@@ -151,7 +176,7 @@ namespace cor64.Mips
 
         public uint Interrupt => m_Interrupt.ReadonlyRegisterValue;
 
-        public uint Mask => m_Interrupt.ReadonlyRegisterValue;
+        public uint Mask => m_Mask.ReadonlyRegisterValue;
 
         public bool IntSP => ReadIntBool(INT_SP);
 
@@ -187,7 +212,12 @@ namespace cor64.Mips
 
         private void SetMask(int index, bool value)
         {
-#if DEBUG_INTERRUPTS
+            uint val = value ? 1U : 0;
+            uint reg = m_Mask.ReadonlyRegisterValue;
+            m_IntFiddler.J(index, ref reg, val);
+            m_Mask.ReadonlyRegisterValue = reg;
+
+#if DEBUG_INTERRUPTS || DEBUG_MI
             string v = value ? "Enabled" : "Disabled";
 
             switch (index)
@@ -200,12 +230,17 @@ namespace cor64.Mips
                 case INT_PI: Log.Debug("PI Interrupt " + v); break;
                 case INT_DP: Log.Debug("DP Interrupt " + v); break;
             }
-#endif
 
-            uint val = value ? 1U : 0;
-            uint reg = m_Mask.ReadonlyRegisterValue;
-            m_IntFiddler.J(index, ref reg, val);
-            m_Mask.ReadonlyRegisterValue = reg;
+            Log.Debug("-------------- Parsed MI Mask {6:X8}: SP: {0}, SI: {1}, AI: {2}, VI: {3}, PI: {4}, DP: {5}",
+                IntMaskSP,
+                IntMaskSI,
+                IntMaskAI,
+                IntMaskVI,
+                IntMaskPI,
+                IntMaskDP,
+                Mask
+            );
+#endif
         }
     }
 }

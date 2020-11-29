@@ -136,7 +136,7 @@ namespace RunN64
             m_CpuEngine.SetDebuggingMode(true);
             m_CpuEngine.SetInstructionDebugMode(InstructionDebugMode.None);
             // m_CpuEngine.SetTraceMode(ProgramTrace.TraceMode.ProgramOnly);
-            m_CpuEngine.TraceLog.Details = ProgramTrace.TraceDetails.None;
+            // m_CpuEngine.TraceLog.Details = ProgramTrace.TraceDetails.None;
             // m_CpuEngine.TraceLog.EnableLogVerfication();
 
             //m_CpuEngine.CoreDbg.AppendInstBreakpointByAddr(0x800F71BC);
@@ -144,7 +144,6 @@ namespace RunN64
             m_System.CPU(m_CpuEngine);
 
             m_System.DeviceRcp.SetRdpDevice(new MadCatRdp());
-            
             m_System.DeviceRcp.DeviceRdp.SetDLDebug(true);
 
             Log.Info("Signal Processor Engine: {0}", m_System.DeviceRcp.DeviceRsp.Description);

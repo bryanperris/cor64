@@ -41,7 +41,7 @@ namespace cor64.Mips
         R_DTA,
         R_DTS,
         R_S,
-        R_SD,
+        R_DS,
         R_D,
         R_ST,
         R_DST,

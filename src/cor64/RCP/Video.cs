@@ -165,7 +165,7 @@ namespace cor64.RCP
 
         private void FramebufferAddressHandler()
         {
-            Log.Debug("Framebuffer pointer set to {0:X8}", FramebufferOffset);
+            // Log.Debug("Framebuffer pointer set to {0:X8}", FramebufferOffset);
         }
 
         public int FramebufferOffset => (int)(m_Origin.RegisterValue << 8 >> 8);

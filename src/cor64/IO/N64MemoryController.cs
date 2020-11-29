@@ -25,23 +25,12 @@ namespace cor64.IO
         private long m_CountReaders;
         private readonly FastMemMap m_FastMemMap = new FastMemMap();
 
-        private Action<uint, byte[], int, int> m_Read;
-        private Action<uint, byte[], int, int> m_Write;
-
         [ThreadStatic] private readonly static byte[] s_ReadSingle = { 0 };
         [ThreadStatic] private readonly static byte[] s_WriteSingle = { 0 };
 
         public N64MemoryController()
         {
-            m_Read = m_FastMemMap.Read;
-            m_Write = m_FastMemMap.Write;
             m_MemModel.Cart = new DummyMemory(0xFC00000, "Dummy cartridge");
-        }
-
-        public void UseSafeAccess()
-        {
-            m_Read = _ReadMemAligned;
-            m_Write = _WriteMemAligned;
         }
 
         public void Init()
@@ -60,7 +49,11 @@ namespace cor64.IO
         {
             //Interlocked.Increment(ref m_CountReaders);
 
-            m_Read((uint)address, buffer, offset, count);
+            #if SAFE_MEMORY_ACCESS
+            _ReadMemAligned((uint)address, buffer, offset, count);
+            #else
+            m_FastMemMap.Read((uint)address, buffer, offset, count);
+            #endif
 
             //Interlocked.Decrement(ref m_CountReaders);
         }
@@ -69,7 +62,11 @@ namespace cor64.IO
         {
             Interlocked.Increment(ref m_CountWriters);
 
-            m_Write((uint)address, buffer, offset, count);
+            #if SAFE_MEMORY_ACCESS
+            _WriteMemAligned((uint)address, buffer, offset, count);
+            #else
+            m_FastMemMap.Write((uint)address, buffer, offset, count);
+            #endif
 
             Interlocked.Decrement(ref m_CountWriters);
         }

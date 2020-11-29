@@ -66,7 +66,7 @@ namespace cor64.RCP
         private void WriteLengthWrite()
         {
             SourceAddress = FixAddress(m_MemAddress.RegisterValue);
-            DestAddress = m_DramAddress.RegisterValue;
+            DestAddress = FixAddress(m_DramAddress.RegisterValue);
             int size = (int)m_WriteLen.RegisterValue + 1;
 
             Debugger.Current.Track_DmaOperation("SP", SourceAddress, DestAddress, size);
@@ -79,7 +79,7 @@ namespace cor64.RCP
         /// </summary>
         private void ReadLengthWrite()
         {
-            SourceAddress = m_DramAddress.RegisterValue;
+            SourceAddress = FixAddress(m_DramAddress.RegisterValue);
             DestAddress = FixAddress(m_MemAddress.RegisterValue);
             int size = (int)m_ReadLen.RegisterValue + 1;
 

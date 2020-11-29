@@ -214,7 +214,7 @@ namespace cor64.Mips.R4300I.JitIL
         {
             if (m_FallbackInterpreter == null)
             {
-                SetFallbackInterpreter(new Interpreter(DebugMode));
+                SetFallbackInterpreter(new Interpreter());
             }
 
             /* Start of a new block */

@@ -31,7 +31,7 @@ namespace cor64.Mips
         public static readonly Opcode BLTZL = Define(Branch, "bltzl", BRANCH, ArithmeticOp.LESS_THAN, Likely);
         public static readonly Opcode BGEZL = Define(Branch, "bgezl", BRANCH, ArithmeticOp.GREATER_THAN_OR_EQUAL, Likely);
         public static readonly Opcode JR = Define(Branch, "jr", R_S, Register);
-        public static readonly Opcode JALR = Define(Branch, "jalr", R_SD, Link | Register);
+        public static readonly Opcode JALR = Define(Branch, "jalr", R_DS, Link | Register);
         public static readonly Opcode BLTZAL = Define(Branch, "bltzal", BRANCH, ArithmeticOp.LESS_THAN_OR_EQUAL, Link);
         public static readonly Opcode BGEZAL = Define(Branch, "bgezal", BRANCH, ArithmeticOp.GREATER_THAN_OR_EQUAL, Link);
         public static readonly Opcode BLTZALL = Define(Branch, "bltzall", BRANCH, ArithmeticOp.LESS_THAN_OR_EQUAL, Link | Likely);

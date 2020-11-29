@@ -15,40 +15,17 @@ namespace cor64.Mips.R4300I
     public class Interpreter : InterpreterBaseR4300I
     {
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
-        private bool m_WarnInfiniteJump = false;
+        private bool m_WarnInfiniteJump;
         private DecodedInstruction? m_InjectedInst;
-        private Func<bool> m_ExecuteCall;
         private DecodedInstruction m_FailedInstruction;
         private bool m_TakenException;
+        private bool m_BranchUnitBusy = false;
 
-        // TODO: Move these variables into a branch unit class
-        private bool bSave_TakeBranch;
-        private bool bSave_BranchDelay;
-        private bool bSave_UnconditionalJump;
-        private ulong bSDave_TargetAddress;
-        private bool bSave_NullifyNext;
-
-        /* Debug Stats */
-        private int m_CountMemAccess;
-
-        public Interpreter(String abi) : this(false, abi) {
-        }
-
-        public Interpreter() : this(false)
+        public Interpreter(string abi = "o32") : base(new Disassembler(abi))
         {
-        }
-
-        public Interpreter(bool useProfiler, string abi = "o32") : base(new Disassembler(abi))
-        {
-            if (useProfiler)
-            {
-                m_ExecuteCall = ExecuteInstWithProfiler;
-                StartedWithProfiler = true;
-            }
-            else
-            {
-                m_ExecuteCall = ExecuteInst;
-            }
+            #if CPU_PROFILER
+            StartedWithProfiler = true;
+            #endif
         }
 
         private static long L(ulong v)
@@ -58,9 +35,13 @@ namespace cor64.Mips.R4300I
 
         private bool IsReserved(DecodedInstruction inst)
         {
+            #if !CPU_FORCE_32
             return
                 (((inst.Op.Flags & ExecutionFlags.Reserved32) == ExecutionFlags.Reserved32) && !IsOperation64) ||
                 (((inst.Op.Flags & ExecutionFlags.Reserved64) == ExecutionFlags.Reserved64) && IsOperation64);
+            #else
+            return false;
+            #endif
         }
 
         public override string Description => "MIPS Interpreter";
@@ -68,79 +49,31 @@ namespace cor64.Mips.R4300I
         public void CheckForInterrupts()
         {
             // Do not do anything if the system controll has not signeled interrupts that need servicing
-            if (!Cop0.InterpreterPendingInterrupts) {
-                return;
-            }
+            if (Cop0.InterpreterPendingInterrupts && (State.Cp0.Status.ErrorLevel || State.Cp0.Status.ExceptionLevel)) {
+                Cop0.InterpreterPendingInterrupts = false;
 
-            // if (m_TakenException)
-            //     return;
-
-            // if (!State.Cp0.Status.ErrorLevel && !State.Cp0.Status.ExceptionLevel) {
-            //     return;
-            // }
-
-            Cop0.InterpreterPendingInterrupts = false;
-
-            if (State.Cp0.Status.ErrorLevel)
-            {
                 m_Pc = Cop0.ExceptionHandlerAddress;
 
-                #if DEBUG_INTERRUPTS
-                Log.Debug("Error Handler Taken: " + m_Pc.ToString("X8"));
-                #endif
+                if (State.Cp0.Status.ErrorLevel)
+                {
+                    #if DEBUG_INTERRUPTS
+                    Log.Debug("Error Handler Taken: " + m_Pc.ToString("X8"));
+                    #endif
+                }
+                else {
+                    #if DEBUG_INTERRUPTS
+                    Log.Debug("Exception Handler Taken: " + m_Pc.ToString("X8"));
+                    #endif
+                }
+
+                m_TakenException = true;
+
+                BranchControl.SwitchInterrupt();
             }
-
-            if (State.Cp0.Status.ExceptionLevel)
-            {
-                m_Pc = Cop0.ExceptionHandlerAddress;
-
-                #if DEBUG_INTERRUPTS
-                Log.Debug("Exception Handler Taken: " + m_Pc.ToString("X8"));
-                #endif
-            }
-
-            m_TakenException = true;
-
-            //m_Pc -= 4;
-
-            //SetInstructionDebugMode(DebugInstMode.Full);
-
-            /* Save the branch unit context */
-            bSave_TakeBranch = TakeBranch;
-            bSave_BranchDelay = BranchDelay;
-            bSave_UnconditionalJump = UnconditionalJump;
-            bSDave_TargetAddress = TargetAddress;
-            bSave_NullifyNext = NullifyNext;
-
-            TakeBranch = false;
-            BranchDelay = false;
-            UnconditionalJump = false;
-            TargetAddress = 0;
-            NullifyNext = false;
         }
 
         public sealed override void ExceptionReturn(DecodedInstruction inst)
         {
-            if (State.Cp0.Status.ErrorLevel)
-            {
-                // when servicing an error trap
-                m_Pc = (uint)State.Cp0.RegRead(CTS.CP0_REG_ERROR_EPC);
-                State.Cp0.Status.ErrorLevel = false;
-            }
-            else
-            {
-                m_Pc = (uint)State.Cp0.RegRead(CTS.CP0_REG_EPC);
-                State.Cp0.Status.ExceptionLevel = false;
-
-                // if (m_TakenException)
-                //     State.Cp0.Cause.ClearAllPending();
-            }
-
-            m_Pc &= 0xFFFFFFFF;
-
-            // We must subtract by 4 due to the PC increment made after the instuction call
-            m_Pc -= 4;
-
             #if DEBUG_INTERRUPTS
 
             if (State.Cp0.Status.ErrorLevel) {
@@ -160,21 +93,41 @@ namespace cor64.Mips.R4300I
             #endif
 
             if (m_TakenException) {
-                TakeBranch = bSave_TakeBranch;
-                BranchDelay = bSave_BranchDelay;
-                UnconditionalJump = bSave_UnconditionalJump;
-                TargetAddress = bSDave_TargetAddress;
-                NullifyNext = NullifyNext;
+                Cop0.ClearPendingExceptions();
+
+                if (State.Cp0.Status.ErrorLevel)
+                {
+                    // when servicing an error trap
+                    m_Pc = (uint)State.Cp0.RegRead(CTS.CP0_REG_ERROR_EPC);
+                    State.Cp0.Status.ErrorLevel = false;
+                }
+                else
+                {
+                    m_Pc = (uint)State.Cp0.RegRead(CTS.CP0_REG_EPC);
+                    State.Cp0.Status.ExceptionLevel = false;
+                }
+
+                BranchControl.SwitchNormal();
 
                 #if DEBUG_INTERRUPTS
                 Log.Debug("Interrupt service finished");
                 #endif
             }
+            else {
+                m_Pc = (uint)State.Cp0.RegRead(CTS.CP0_REG_EPC);
+                State.Cp0.Status.ExceptionLevel = false;
+            }
+
+            m_Pc &= 0xFFFFFFFF;
+
+            // We must subtract by 4 due to the PC increment made after the instuction call
+            m_Pc -= 4;
 
             m_TakenException = false;
+            State.LLBit = false;
         }
 
-        protected void ExecuteNextInst() {
+        private void ExecuteNextInst() {
             /* Delay Slot Logic */
             if (WillJump)
             {
@@ -182,7 +135,7 @@ namespace cor64.Mips.R4300I
                 {
                     BranchDelay = false;
 
-                    if (!m_ExecuteCall())
+                    if (!ExecuteInst())
                     {
                         throw new Exception("Failed to execute instruction in delay slot");
                     }
@@ -198,7 +151,7 @@ namespace cor64.Mips.R4300I
             else
             {
                 /* Nornal execution path */
-                if (m_ExecuteCall())
+                if (ExecuteInst())
                 {
                     m_Pc += 4;
                 }
@@ -217,69 +170,12 @@ namespace cor64.Mips.R4300I
             /* Step coprocessor 0 */
             Cop0.ProcessorTick(m_Pc, BranchDelay);
 
-            /* Check for exceptions */
-            CheckForInterrupts();
-
             /* Execute next instruction */
             ExecuteNextInst();
-        }
 
-        private bool ExecuteInstWithProfiler()
-        {
-            DecodedInstruction decoded;
-
-            if (m_InjectedInst.HasValue)
-            {
-                decoded = m_InjectedInst.Value;
-                m_InjectedInst = null;
-            }
-            else
-            {
-                decoded = Decode();
-            }
-
-            // Process NOP
-            if (decoded.Inst.op == 0) {
-                Cop0.MipsTimerTick(1);
-            }
-
-            if (ValidateInstruction(decoded))
-            {
-                var call = CallTable[decoded];
-
-                if (call == null)
-                {
-                    throw new NotSupportedException(String.Format("Opcode {0} not supported", decoded.Op.Op));
-                }
-                else
-                {
-                    CurrentInst = decoded;
-
-                    if (!NullifyNext)
-                    {
-                        CoreDbg.TestForInstBreakpoint(decoded);
-
-                        TraceInstruction(decoded, false, m_TakenException);
-
-                        BeginInstructionProfile(decoded);
-                        call(decoded);
-                        EndInstructionProfile();
-
-                        DebugInstruction(decoded);
-                    }
-                    else
-                    {
-                        NullifyNext = false;
-                        TraceInstruction(decoded, true, m_TakenException);
-                    }
-                        
-                    return true;
-                }
-            }
-            else
-            {
-                m_FailedInstruction = decoded;
-                return false;
+            /* Check for pending exception events only when the branch unit is not busy */
+            if (!WillJump) {
+                CheckForInterrupts();
             }
         }
 
@@ -320,7 +216,15 @@ namespace cor64.Mips.R4300I
                         DebugInstruction(decoded);
                         TraceInstruction(decoded, false, m_TakenException);
 
+                        #if CPU_PROFILER
+                        BeginInstructionProfile(decoded);
+                        #endif
+
                         call(decoded);
+
+                        #if CPU_PROFILER
+                        EndInstructionProfile();
+                        #endif
                     }
                     else
                     {
@@ -454,7 +358,7 @@ namespace cor64.Mips.R4300I
          * ------------------------------------------------------------------
          */
 
-        public sealed override void Add32(DecodedInstruction inst)
+        public override void Add32(DecodedInstruction inst)
         {
             if (IsReserved(inst))
             {
@@ -510,7 +414,7 @@ namespace cor64.Mips.R4300I
             Writeback32(dest, result);
         }
 
-        public sealed override void BitwiseLogic(DecodedInstruction inst)
+        public override void BitwiseLogic(DecodedInstruction inst)
         {
             if (IsReserved(inst))
             {
@@ -566,7 +470,7 @@ namespace cor64.Mips.R4300I
             }
         }
 
-        public sealed override void Add64(DecodedInstruction inst)
+        public override void Add64(DecodedInstruction inst)
         {
             if (IsReserved(inst))
             {
@@ -613,7 +517,7 @@ namespace cor64.Mips.R4300I
             Writeback64(dest, result);
         }
 
-        public sealed override void Divide32(DecodedInstruction inst)
+        public override void Divide32(DecodedInstruction inst)
         {
             if (IsReserved(inst))
             {
@@ -677,7 +581,7 @@ namespace cor64.Mips.R4300I
             }
         }
 
-        public sealed override void Divide64(DecodedInstruction inst)
+        public override void Divide64(DecodedInstruction inst)
         {
             if (IsReserved(inst))
             {
@@ -741,7 +645,7 @@ namespace cor64.Mips.R4300I
             }
         }
 
-        public sealed override void Multiply32(DecodedInstruction inst)
+        public override void Multiply32(DecodedInstruction inst)
         {
             if (IsReserved(inst))
             {
@@ -772,7 +676,7 @@ namespace cor64.Mips.R4300I
             WritebackHiLo32(resultHi, resultLo);
         }
 
-        public sealed override void Multiply64(DecodedInstruction inst)
+        public override void Multiply64(DecodedInstruction inst)
         {
             if (IsReserved(inst))
             {
@@ -802,7 +706,7 @@ namespace cor64.Mips.R4300I
             }
         }
 
-        public sealed override void Shift32(DecodedInstruction inst)
+        public override void Shift32(DecodedInstruction inst)
         {
             if (IsReserved(inst))
             {
@@ -843,7 +747,7 @@ namespace cor64.Mips.R4300I
             Writeback32(inst.Destination, value);
         }
 
-        public sealed override void Shift64(DecodedInstruction inst)
+        public override void Shift64(DecodedInstruction inst)
         {
             if (IsReserved(inst))
             {
@@ -889,7 +793,7 @@ namespace cor64.Mips.R4300I
             Writeback64(inst.Destination, value);
         }
 
-        public sealed override void Subtract32(DecodedInstruction inst)
+        public override void Subtract32(DecodedInstruction inst)
         {
             if (IsReserved(inst))
             {
@@ -934,7 +838,7 @@ namespace cor64.Mips.R4300I
             Writeback32(inst.Destination, result);
         }
 
-        public sealed override void Subtract64(DecodedInstruction inst)
+        public override void Subtract64(DecodedInstruction inst)
         {
             if (IsReserved(inst))
             {
@@ -979,7 +883,7 @@ namespace cor64.Mips.R4300I
             Writeback64(inst.Destination, result);
         }
 
-        public sealed override void SetOnLessThan(DecodedInstruction inst)
+        public override void SetOnLessThan(DecodedInstruction inst)
         {
             if (IsReserved(inst))
             {
@@ -1031,7 +935,7 @@ namespace cor64.Mips.R4300I
             Writeback64(dest, result);
         }
 
-        public sealed override void TransferReg(DecodedInstruction inst)
+        public override void TransferReg(DecodedInstruction inst)
         {
             ulong value = 0;
             int gpr_Source = inst.Target;
@@ -1175,7 +1079,7 @@ namespace cor64.Mips.R4300I
             }
         }
 
-        public sealed override void Branch(DecodedInstruction inst)
+        public override void Branch(DecodedInstruction inst)
         {
             bool isLikely = inst.IsLikely();
             bool isLink = inst.IsLink();
@@ -1208,7 +1112,7 @@ namespace cor64.Mips.R4300I
             }
         }
 
-        public sealed override void Jump(DecodedInstruction inst)
+        public override void Jump(DecodedInstruction inst)
         {
             bool isLink = inst.IsLink();
             bool isRegister = inst.IsRegister();
@@ -1218,7 +1122,13 @@ namespace cor64.Mips.R4300I
 
             if (isLink)
             {
-                Writeback64(31, m_Pc + 8);
+                // TODO: The recompiler will need this fix
+                if (isRegister && (inst.Target & 0b11) != 0) {
+                    Writeback64(inst.Target, m_Pc + 8);
+                }
+                else {
+                    Writeback64(31, m_Pc + 8);
+                }
             }
 
             CoreDbg.TestForBranchBreakpoint((uint)TargetAddress, true);
@@ -1230,10 +1140,8 @@ namespace cor64.Mips.R4300I
             }
         }
 
-        public sealed override void Store(DecodedInstruction inst)
+        public override void Store(DecodedInstruction inst)
         {
-            m_CountMemAccess++;
-
             ulong address = 0;
             int size = inst.DataSize();
             ExecutionFlags flags = inst.Op.Flags;
@@ -1362,10 +1270,8 @@ namespace cor64.Mips.R4300I
             }
         }
 
-        public sealed override void Load(DecodedInstruction inst)
+        public override void Load(DecodedInstruction inst)
         {
-            m_CountMemAccess++;
-
             /* Modes: Upper Immediate, Unsigned / Signed (8, 16, 32, 64), Left / Right (32, 64), Load Linked */
             ulong address = 0;
             int size = 0;
@@ -1511,23 +1417,18 @@ namespace cor64.Mips.R4300I
             }
         }
 
-        public sealed override void Cache(DecodedInstruction inst)
+        public override void Cache(DecodedInstruction inst)
         {
-
-
         }
 
-        public sealed override void Sync(DecodedInstruction inst)
+        public override void Sync(DecodedInstruction inst)
         {
-            
         }
 
-        public sealed override void FloatLoad(DecodedInstruction inst)
+        public override void FloatLoad(DecodedInstruction inst)
         {
             try
             {
-                m_CountMemAccess++;
-
                 var size = inst.DataSize();
 
                 long baseAddress = (long)ReadGPR64(inst.Source);
@@ -1553,10 +1454,8 @@ namespace cor64.Mips.R4300I
             /* TODO: Simulate odd result registers for 64-bit reads ? */
         }
 
-        public sealed override void FloatStore(DecodedInstruction inst)
+        public override void FloatStore(DecodedInstruction inst)
         {
-            m_CountMemAccess++;
-
             var size = inst.DataSize();
 
             long baseAddress = (long)ReadGPR64(inst.Source);
@@ -1580,7 +1479,7 @@ namespace cor64.Mips.R4300I
             }
         }
 
-        public sealed override void Add(DecodedInstruction inst)
+        public override void Add(DecodedInstruction inst)
         {
             if (inst.Format == FpuValueType.FSingle)
             {
@@ -1596,7 +1495,7 @@ namespace cor64.Mips.R4300I
             }
         }
 
-        public sealed override void Subtract(DecodedInstruction inst)
+        public override void Subtract(DecodedInstruction inst)
         {
             if (inst.Format == FpuValueType.FSingle)
             {
@@ -1612,7 +1511,7 @@ namespace cor64.Mips.R4300I
             }
         }
 
-        public sealed override void Multiply(DecodedInstruction inst)
+        public override void Multiply(DecodedInstruction inst)
         {
             if (inst.Format == FpuValueType.FSingle)
             {
@@ -1628,7 +1527,7 @@ namespace cor64.Mips.R4300I
             }
         }
 
-        public sealed override void Divide(DecodedInstruction inst)
+        public override void Divide(DecodedInstruction inst)
         {
             if (inst.Format == FpuValueType.FSingle)
             {
@@ -1644,7 +1543,7 @@ namespace cor64.Mips.R4300I
             }
         }
 
-        public sealed override void SqrRoot(DecodedInstruction inst)
+        public override void SqrRoot(DecodedInstruction inst)
         {
             if (inst.Format == FpuValueType.FSingle)
             {
@@ -1660,7 +1559,7 @@ namespace cor64.Mips.R4300I
             }
         }
 
-        public sealed override void Abs(DecodedInstruction inst)
+        public override void Abs(DecodedInstruction inst)
         {
             if (inst.Format == FpuValueType.FSingle)
             {
@@ -1676,7 +1575,7 @@ namespace cor64.Mips.R4300I
             }
         }
 
-        public sealed override void Mov(DecodedInstruction inst)
+        public override void Mov(DecodedInstruction inst)
         {
             if (inst.Format == FpuValueType.FSingle)
             {
@@ -1692,7 +1591,7 @@ namespace cor64.Mips.R4300I
             }
         }
 
-        public sealed override void Neg(DecodedInstruction inst)
+        public override void Neg(DecodedInstruction inst)
         {
             if (inst.Format == FpuValueType.FSingle)
             {
@@ -1708,7 +1607,7 @@ namespace cor64.Mips.R4300I
             }
         }
 
-        public sealed override void Round(DecodedInstruction inst)
+        public override void Round(DecodedInstruction inst)
         {
             double roundedValue;
 
@@ -1736,7 +1635,7 @@ namespace cor64.Mips.R4300I
             }
         }
 
-        public sealed override void Truncate(DecodedInstruction inst)
+        public override void Truncate(DecodedInstruction inst)
         {
             double roundedValue;
 
@@ -1764,7 +1663,7 @@ namespace cor64.Mips.R4300I
             }
         }
 
-        public sealed override void Ceil(DecodedInstruction inst)
+        public override void Ceil(DecodedInstruction inst)
         {
             double roundedValue;
 
@@ -1792,7 +1691,7 @@ namespace cor64.Mips.R4300I
             }
         }
 
-        public sealed  override void Floor(DecodedInstruction inst)
+        public  override void Floor(DecodedInstruction inst)
         {
             double roundedValue;
 
@@ -1820,7 +1719,7 @@ namespace cor64.Mips.R4300I
             }
         }
 
-        public sealed override void Convert(DecodedInstruction inst)
+        public override void Convert(DecodedInstruction inst)
         {
             switch (inst.Format)
             {
@@ -1833,7 +1732,7 @@ namespace cor64.Mips.R4300I
         }
 
         /* Exceptions: Invalid and Unimplemented */
-        public sealed override void Condition(DecodedInstruction inst)
+        public override void Condition(DecodedInstruction inst)
         {
             bool flag_signaling = inst.Op.ArithmeticType == ArithmeticOp.SIGNALING;
             bool flag_equal = inst.Op.Flags.TestFlag(ExecutionFlags.CondEq);
@@ -1912,7 +1811,7 @@ namespace cor64.Mips.R4300I
             }
         }
 
-        public sealed override void Trap(DecodedInstruction inst) {
+        public override void Trap(DecodedInstruction inst) {
             bool isImmediate = inst.IsImmediate();
             bool isUnsigned = inst.IsUnsigned();
             var result = false;
@@ -1987,7 +1886,7 @@ namespace cor64.Mips.R4300I
             }
         }
 
-        public override sealed void Break(DecodedInstruction inst) {
+        public override void Break(DecodedInstruction inst) {
             SetExceptionState(ExceptionType.Breakpoint);
         }
 

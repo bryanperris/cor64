@@ -27,6 +27,8 @@ namespace cor64.Mips.R4300I
         public bool StartedWithProfiler { get; protected set; }
         private CoreDebugger m_CoreDebugger = new CoreDebugger();
 
+        private readonly BranchUnit m_BranchUnit = new BranchUnit();
+
 
         /* TODO: When we do have a cache system, 
          * some conditions of the cache can break
@@ -59,7 +61,7 @@ namespace cor64.Mips.R4300I
             .Map(TransferReg, MFHI, MFLO, MTHI, MTLO, MTC0, MTC1, MFC0, MFC1, DMTC0, DMTC1, DMFC0, DMFC1, CTC1, CFC1)
             .Map(Branch, BC1F, BC1FL, BC1T, BC1TL, BEQ, BEQL, BGEZ, BGEZAL, BGEZALL, BGEZL, BGTZ, BGTZL, BLEZ, BLEZL, BLTZ, BLTZAL, BLTZALL, BLTZL, BNE, BNEL)
             .Map(Jump, J, JAL, JR, JALR)
-            .Map(Store, SB, SH, SD, SW, SWL, SWR, SC, SCD)
+            .Map(Store, SB, SH, SD, SW, SWL, SWR, SC, SCD, SDL, SDR)
             .Map(Load, LUI, LB, LBU, LH, LHU, LW, LWU, LWL, LWR, LD, LDL, LDR, LL, LLD)
             .Map(Cache, CACHE)
             .Map(Sync, SYNC)
@@ -111,18 +113,6 @@ namespace cor64.Mips.R4300I
          * Processor Core Logic
          ********************************************************/
 
-        private void ExceptionJump(ulong address)
-        {
-            Log.Debug("Exception jump taken: {0:X16}", address);
-
-            /* Leave the whole branch handler */
-            TakeBranch = false;
-            BranchDelay = false;
-            NullifyNext = false;
-            TargetAddress = 0;
-            UnconditionalJump = false;
-        }
-
         protected ulong ReadCp0Value(int select, bool isDwordInst)
         {
             var value = State.Cp0.RegRead(select);
@@ -154,15 +144,32 @@ namespace cor64.Mips.R4300I
          * Branch Unit Logic
          ********************************************************/
 
-        public bool TakeBranch { get; set; }
+        protected BranchUnit BranchControl => m_BranchUnit;
 
-        public bool BranchDelay { get; set; }
+        public bool TakeBranch {
+            get => m_BranchUnit.Take;
+            set => m_BranchUnit.Take = value;
+        }
 
-        public ulong TargetAddress { get; set; }
+        public bool BranchDelay{
+            get => m_BranchUnit.DelaySlot;
+            set => m_BranchUnit.DelaySlot = value;
+        }
 
-        protected bool UnconditionalJump { get; set; }
+        public ulong TargetAddress {
+            get => m_BranchUnit.Target;
+            set => m_BranchUnit.Target = value;
+        }
 
-        public bool NullifyNext { get; set; }
+        protected bool UnconditionalJump {
+            get => m_BranchUnit.Unconditonal;
+            set => m_BranchUnit.Unconditonal = value;
+        }
+
+        public bool NullifyNext {
+            get => m_BranchUnit.NullifyNext;
+            set => m_BranchUnit.NullifyNext = value;
+        }
 
         public bool WillJump => TakeBranch || UnconditionalJump;
 
@@ -172,11 +179,7 @@ namespace cor64.Mips.R4300I
 
         public void ClearBranchUnit()
         {
-            TargetAddress = 0;
-            BranchDelay = false;
-            UnconditionalJump = false;
-            TakeBranch = false;
-            NullifyNext = false;
+            m_BranchUnit.ResetAll();
         }
 
         /********************************************************
@@ -189,7 +192,16 @@ namespace cor64.Mips.R4300I
 
         public bool IsAddress64 => State.Cp0.Status.IsAddress64;
 
-        public bool IsOperation64 => State.Cp0.Status.IsOperation64;
+        public bool IsOperation64 {
+            get {
+
+                #if CPU_FORCE_32
+                return false;
+                #else
+                return State.Cp0.Status.IsOperation64;
+                #endif
+            }
+        }
 
         public Clock CoreClock => m_CoreClock;
 

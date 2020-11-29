@@ -68,6 +68,9 @@ namespace cor64
             /* Init the RDP */
             DeviceRcp.DeviceRdp.Init();
 
+            /* Init the serial controller */
+            DeviceRcp.SerialDevice.Init();
+
             /* Attach memory to CPU */
             DeviceCPU.AttachIStream(DeviceMemory.CreateMemoryStream());
             DeviceCPU.AttachDStream(DeviceMemory.CreateMemoryStream());

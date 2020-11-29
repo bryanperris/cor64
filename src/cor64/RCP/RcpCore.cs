@@ -34,8 +34,11 @@ namespace cor64.RCP
         public void AttachToMemory(N64MemoryController controller)
         {
             m_Memory = controller;
+
+            SerialDevice = new SerialController(controller);
+
             RcpInterface = new MipsInterface(controller);
-            SerialInterface = new SerialMemory(controller);
+            SerialDevice = new SerialController(controller);
             VideoInterface = new Video(controller, RcpInterface);
             RspInterface = new SPInterface(controller);
             ParellelInterface = new PIMemory(controller);
@@ -43,12 +46,15 @@ namespace cor64.RCP
             DisplayProcessorSpanInterface = new DummyMemory(DUMMY_SECTION_SIZE, "Display Processor Span Interface");
             AudioInterface = new DummyMemory(DUMMY_SECTION_SIZE, "Audio Interface");
 
-            m_Rsp.AttachInterface(RspInterface, DisplayProcessorCommandInterface);
+            SerialDevice.AttachInterfaces(RcpInterface);
+            ParellelInterface.AttachInterface(RcpInterface);
+
+            m_Rsp.AttachInterface(RcpInterface, RspInterface, DisplayProcessorCommandInterface);
 
             m_Rsp.AttachIStream(RspInterface.CreateIMemorySream());
             m_Rsp.AttachDStream(RspInterface.CreateDMemorySream());
 
-            m_Rdp.AttachInterface(DisplayProcessorCommandInterface);
+            m_Rdp.AttachInterface(RcpInterface, DisplayProcessorCommandInterface);
             m_Rdp.AttachMemory(controller.CreateMemoryStream());
 
             controller.Model.SPRegs = RspInterface;
@@ -58,14 +64,14 @@ namespace cor64.RCP
             controller.Model.VIRegs = VideoInterface;
             controller.Model.AIRegs = AudioInterface;
             controller.Model.PIRegs = ParellelInterface;
-            controller.Model.SIRegs = SerialInterface;
+            controller.Model.SIRegs = SerialDevice;
         }
 
         public InterpreterBaseRsp DeviceRsp => m_Rsp;
 
         public DrawProcessor DeviceRdp => m_Rdp;
 
-        public SerialMemory SerialInterface { get; private set; }
+        public SerialController SerialDevice { get; private set; }
 
         public Video VideoInterface { get; private set; }
 
@@ -79,6 +85,6 @@ namespace cor64.RCP
 
         public BlockDevice AudioInterface { get; private set; }
 
-        public BlockDevice ParellelInterface { get; private set; }
+        public PIMemory ParellelInterface { get; private set; }
     }
 }

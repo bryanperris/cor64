@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>netcoreapp3.0</TargetFramework>
+    <TargetFramework>net5.0</TargetFramework>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <OutputPath>../../bin</OutputPath>
@@ -15,14 +15,19 @@
     <!-- <DefineConstants>$(DefineConstants);DEBUG_COPROCESSOR</DefineConstants> -->
     <!-- <DefineConstants>$(DefineConstants);DEBUG_MIPS_TIMER</DefineConstants> -->
     <!-- <DefineConstants>$(DefineConstants);DEBUG_INTERRUPTS</DefineConstants> -->
+    <!-- <DefineConstants>$(DefineConstants);VERY_DELAYED_INTERRUPTS</DefineConstants> -->
     <!-- <DefineConstants>$(DefineConstants);DEBUG_STATUS_REGISTER</DefineConstants> -->
     <!-- <DefineConstants>$(DefineConstants);TIMESTAMPS_IN_LOG</DefineConstants> -->
     <!-- <DefineConstants>$(DefineConstants);FILTER_RCP_INTERRUPTS</DefineConstants> -->
+    <!-- <DefineConstants>$(DefineConstants);DEBUG_MI</DefineConstants> -->
     <!-- <DefineConstants>$(DefineConstants);DEBUG_INTERRUPTS_PENDING</DefineConstants> -->
     <!-- <DefineConstants>$(DefineConstants);HACK_FASTER_TIMER</DefineConstants> -->
     <!-- <DefineConstants>$(DefineConstants);DEBUG_TRACE_LOG</DefineConstants> -->
     <!-- <DefineConstants>$(DefineConstants);DEBUG_TRACE_LOG_GEN</DefineConstants> -->
     <!-- <DefineConstants>$(DefineConstants);TRACE_LOG_HALT</DefineConstants> -->
+    <!-- <DefineConstants>$(DefineConstants);SAFE_MEMORY_ACCESS</DefineConstants> -->
+    <!-- <DefineConstants>$(DefineConstants);CPU_PROFILER</DefineConstants> -->
+    <!-- <DefineConstants>$(DefineConstants);CPU_FORCE_32</DefineConstants> -->
   </PropertyGroup>
   <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>

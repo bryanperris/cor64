@@ -12,6 +12,7 @@ namespace cor64.Mips.Rsp
         protected readonly RspOpcodes.CallTable CallTable = RspOpcodes.CreateCallTable();
         protected SPInterface Interface { get; private set; }
         protected DPCInterface RdpInterface {get; private set; }
+        protected MipsInterface RcpInterface { get; private set; }
         protected SPStatusRegister Status { get; private set; }
         public bool IsHalted { get; protected set; } = true;
         public DecodedInstruction LastReadInst { get; protected set; }
@@ -52,10 +53,11 @@ namespace cor64.Mips.Rsp
 
         public abstract void Init();
 
-        public virtual void AttachInterface(SPInterface iface, DPCInterface rdpInterface) {
+        public virtual void AttachInterface(MipsInterface rcpInterface, SPInterface iface, DPCInterface rdpInterface) {
             Interface = iface;
             Status = iface.Status;
             RdpInterface = rdpInterface;
+            RcpInterface = rcpInterface;
         }
 
         public virtual void Halt() {

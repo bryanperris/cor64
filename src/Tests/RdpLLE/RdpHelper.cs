@@ -42,7 +42,6 @@ namespace Tests.RdpLLE {
             var rdp = new MadCatRdp();
             rdp.SetDLDebug(true);
             system.DeviceRcp.SetRdpDevice(rdp);
-            system.DeviceMemory.UseSafeAccess();
             system.BootForTesting();
             return system;
         }

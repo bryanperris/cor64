@@ -189,7 +189,7 @@ namespace cor64.Mips
             new OperandFormat(3, "rd,rt,sa", m_MainFormatter),
             new OperandFormat(3, "rd,rt,rs", m_MainFormatter),
             new OperandFormat(1, "rs", m_MainFormatter),
-            new OperandFormat(2, "rs,rd", m_MainFormatter),
+            new OperandFormat(2, "rd,rs", m_MainFormatter),
             new OperandFormat(1, "rd", m_MainFormatter),
             new OperandFormat(2, "rs,rt", m_MainFormatter),
             new OperandFormat(3, "rd,rs,rt", m_MainFormatter),

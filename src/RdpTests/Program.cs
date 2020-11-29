@@ -23,7 +23,6 @@ namespace RdpTests
             var rdp = new MadCatRdp();
             rdp.SetDLDebug(true);
             system.DeviceRcp.SetRdpDevice(rdp);
-            system.DeviceMemory.UseSafeAccess();
             system.BootForTesting();
 
             AssembleAndRunRdp(system, asmName);

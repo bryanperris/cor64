@@ -19,6 +19,7 @@ namespace cor64
         private bool m_BreakPoint = false;
         private bool m_StepOnce = false;
         public event Action Break;
+        private Timer m_SiReadyDelayTimer;
 
         private Thread m_RspThread;
 
@@ -33,6 +34,8 @@ namespace cor64
             m_Exception = null;
             m_Running = true;
             m_StartWaitEvent.Set();
+
+            m_SiReadyDelayTimer = new Timer((_) => m_System.DeviceRcp.SerialDevice.SignalSiReady(), null, 7000, 0);
 
             try
             {

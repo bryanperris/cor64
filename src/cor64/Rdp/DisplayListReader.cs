@@ -40,7 +40,8 @@ namespace cor64.Rdp {
 
             while (count < size) {
                 /* Read the command type */
-                int commandId = m_Stream.ReadByte();
+                /* Always mask out the upper 2 unused bits (in case its signed) */
+                int commandId = m_Stream.ReadByte() & 0b00111111;
                 m_Stream.Position--;
 
                 // Log.Debug("RDP Command ID: " + commandId.ToString("X"));
@@ -54,6 +55,12 @@ namespace cor64.Rdp {
                     fixed (byte* ptr = &data[0]) {
                         for (int i = 0; i < (data.Length / 8); i++) {
                             var read = swappedReader.ReadUInt64();
+
+                            /* The first 2 upper bits are never used, mask them out in case of sign extensions */
+                            if (i == 0) {
+                                read &= 0x3FFFFFFFFFFFFFFF;
+                            }
+
                             ulong *newPtr = (ulong *)ptr + i;
                             *newPtr = read;
                             m_Stream.Position += 8;

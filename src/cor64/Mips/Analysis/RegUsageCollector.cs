@@ -113,7 +113,7 @@ namespace cor64.Mips.Analysis
                         break;
                     }
 
-                case OperandType.R_SD:
+                case OperandType.R_DS:
                     {
                         AddGprUsage(inst.Source);
                         AddGprUsage(inst.Destination);

@@ -60,10 +60,10 @@ namespace cor64.Mips.R4300I
             ReverseEndian = 0b10000000000000000000000,
             AdditonalFPU = 0b100000000000000000000000,
             ReducePower = 0b1000000000000000000000000,
-            UsableCop3 = 0b10000000000000000000000000,
-            UsableCop2 = 0b100000000000000000000000000,
-            UsableCop1 = 0b1000000000000000000000000000,
-            UsableCop0 = 0b10000000000000000000000000000
+            UsableCop0 = 0b10000000000000000000000000,
+            UsableCop1 = 0b100000000000000000000000000,
+            UsableCop2 = 0b1000000000000000000000000000,
+            UsableCop3 = 0b10000000000000000000000000000
         }
 
         public StatusRegister()
@@ -81,14 +81,6 @@ namespace cor64.Mips.R4300I
             }
         }
 
-        public void Initialize()
-        {
-            /* Hardware initial value */
-            SetFlags(StatusFlags.UsableCop0 |
-                     StatusFlags.UsableCop1 |
-                     StatusFlags.InterruptsEnabled);
-        }
-
         public void Write(uint value)
         {
             uint old = m_Value;
@@ -96,6 +88,7 @@ namespace cor64.Mips.R4300I
 
             #if DEBUG_STATUS_REGISTER
             Log.Debug("Status Register Write: {0:X8}", m_Value);
+            Log.Debug("CPU Interrupt Enable: {0}", InterruptsEnabled);
             #endif
 
 
@@ -120,10 +113,6 @@ namespace cor64.Mips.R4300I
             {
                 Log.Debug("CPU code changed boot vector bit to: {0}", TestFlags(StatusFlags.UseBootstrapVectors));
             }
-
-            // if (TestChange(StatusFlags.InterruptsEnabled, oldValue, newValue)) {
-            //     Log.Debug("CPU Interrupt Enable: {0}", InterruptsEnabled);
-            // }
         }
 
         private bool TestChange(StatusFlags testFlags, uint oldVal, uint newVal) 

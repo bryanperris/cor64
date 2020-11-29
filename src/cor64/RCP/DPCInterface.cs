@@ -128,6 +128,10 @@ namespace cor64.RCP {
             m_RegSelects[select].WriteNotify();
         }
 
+        public uint ReadRegForRsp(int select) {
+            return m_RegSelects[select].ReadonlyRegisterValue;
+        }
+
         private void DisplayListStart() {
             //Console.WriteLine("Display List: {0:X8}", m_Start.ReadonlyRegisterValue);
         }

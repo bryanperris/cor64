@@ -18,7 +18,7 @@ namespace Tests
         private bool m_UseWords;
 		private MemoryStream m_TestDataMemory = new MemoryStream();
 
-        public TestableInterpreter() : base(true)
+        public TestableInterpreter() : base()
         {
         }
 

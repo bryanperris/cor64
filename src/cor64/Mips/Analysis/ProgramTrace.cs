@@ -291,11 +291,11 @@ namespace cor64.Mips.Analysis
             }
 
             /* Process metadata attachments */
-            if (m_Attachment_MemAccess != null)
-            {
-                m_CurrentInst.AppendMemoryAccess(m_Attachment_MemAccess);
-                m_Attachment_MemAccess = null;
-            }
+            // if (m_Attachment_MemAccess != null)
+            // {
+            //     m_CurrentInst.AppendMemoryAccess(m_Attachment_MemAccess);
+            //     m_Attachment_MemAccess = null;
+            // }
 
             m_CurrentInst.AppendNullifyUsage(nullified);
 
@@ -436,7 +436,8 @@ namespace cor64.Mips.Analysis
         {
             if ((Details & TraceDetails.MemoryAccess) == TraceDetails.MemoryAccess)
             {
-                m_Attachment_MemAccess = new MemoryAccessMeta(address, isWrite, val);
+                //m_Attachment_MemAccess = new MemoryAccessMeta(address, isWrite, val);
+                m_CurrentInst?.AppendMemoryAccess(new MemoryAccessMeta(address, isWrite, val));
             }
         }
 

@@ -14,7 +14,7 @@ namespace cor64.Mips.R4300I
     public class SystemController
     {
         private readonly static Logger Log = LogManager.GetCurrentClassLogger();
-        private ExecutionState m_State;
+        private readonly ExecutionState m_State;
         private bool m_TLBRefillException;
         private bool m_XTLBRefillExcepetion;
         private bool m_CacheErr;
@@ -22,7 +22,6 @@ namespace cor64.Mips.R4300I
         private MipsInterface m_Interface;
         private readonly Clock m_Clock;
         private bool m_SoftReset;
-        private bool m_RcpHandlerTaken = false;
         private bool m_Direct;
 
         const int INTERRUPT_SW0 = 0;  // An interrupt set by user
@@ -81,6 +80,10 @@ namespace cor64.Mips.R4300I
             m_NMI = true;
         }
 
+        public void ClearPendingExceptions() {
+            CR.ClearAllPending();
+        }
+
         /// <summary>
         /// Called to simulate a processor tick for coprocessor 0
         /// </summary>
@@ -109,51 +112,11 @@ namespace cor64.Mips.R4300I
 
         private void CheckInterrupts(ulong pc, bool isDelaySlot)
         {
-            // XXX: It seems we should always check for pending RCP updates
-            //      even when interrupts have been disabled
-
-            /* RCP Hardware Interrupt */
-            if (m_Interface != null) {
-                if ((m_Interface.Interrupt & m_Interface.Mask) != 0)
-                {
-                    #if !FILTER_RCP_INTERRUPTS
-                    CR.SetInterruptPending(INTERRUPT_RCP);
-                    #endif
-                }
-                else {
-                    #if !FILTER_RCP_INTERRUPTS
-                    CR.ClearPendingInterrupt(INTERRUPT_RCP);
-                    #endif
-                }
-            }
-
             bool timerPending = false;
-
-            /* Timer Interrupt */
-            if ( REGS.RegRead(CTS.CP0_REG_COMPARE) != 0) {
-                if (REGS.RegRead(CTS.CP0_REG_COUNT) >= REGS.RegRead(CTS.CP0_REG_COMPARE))
-                {
-                    REGS.RegWrite(CTS.CP0_REG_COUNT, 0);
-                    timerPending = true;
-                }
-            }
-
-
-            if (!SR.InterruptsEnabled) {
-                return;
-            }
-
-            if (SR.ErrorLevel) {
-                return;
-            }
-
-            if (SR.ExceptionLevel) {
-                return;
-            }
-
+            bool rcpPending = false;
             uint target;
             uint cacheTarget;
-            bool executeHandler;
+            bool executeHandler = false;
             bool error = false;
 
             if (SR.TestFlags(StatusRegister.StatusFlags.UseBootstrapVectors))
@@ -167,85 +130,114 @@ namespace cor64.Mips.R4300I
                 target = 0x80000000;
             }
 
-            /* Non-maskable MIPS interrupt, this cannot be ignored */
-            /* This forces the MIPS to do a reset */
-            if (m_NMI)
-            {
-                target = 0xBFC00000;
-                m_NMI = false;
-                error = true;
-            }
-
-            // If this has been set manually, don't use any base address
-            if (m_Direct) {
-                target = 0;
-                cacheTarget = 0;
-            }
-
-            /* 32-bit TLB Exception */
-            if (m_TLBRefillException)
-            {
-                m_TLBRefillException = false;
-                executeHandler = true;
-            }
-
-            /* 64-bit TLB Exception */
-            else if (m_XTLBRefillExcepetion)
-            {
-                target += 0x080;
-                m_XTLBRefillExcepetion = false;
-                executeHandler = true;
-            }
-
-            /* CPU Cache Exception */
-            else if (m_CacheErr)
-            {
-                target += 0x100;
-                m_CacheErr = false;
-                error = true;
-                executeHandler = true;
-            }
-
-            /* CPU Instruction Exception */
-            else if (CR.ExceptionThrown)
-            {
-                CR.ClearThrownException();
-                target += 0x180;
-                executeHandler = true;
-                //error = true;
-            }
-
-            /* Interrupts */
-            else
-            {
-                target += 0x180;
-                error = false;
-
-                /* MIPS timer has generated an event, set its interrupt */
-                if (timerPending) {
-                    CR.SetInterruptPending(INTERRUPT_TIMER);
-
-                    timerPending = false;
-
-                    #if DEBUG_MIPS_TIMER
-                        Log.Debug("Mips Timer interrupt trigger");
-                    #endif
-                }
-
-                /* Reset button has been pushed, set its interrupt */
-                if (SR.InterruptMask != 0)
+            /* Timer Interrupt */
+            if ( REGS.RegRead(CTS.CP0_REG_COMPARE) != 0) {
+                if (REGS.RegRead(CTS.CP0_REG_COUNT) >= REGS.RegRead(CTS.CP0_REG_COMPARE))
                 {
-                    /* SoftReset */
-                    if (m_SoftReset)
-                    {
-                        m_SoftReset = false;
-                        CR.SetInterruptPending(INTERRUPT_RESET);
-                        error = true;
-                    }
+                    REGS.RegWrite(CTS.CP0_REG_COUNT, 0);
+                    timerPending = true;
+                }
+            }
+
+            if (SR.InterruptsEnabled && !SR.ErrorLevel && !SR.ExceptionLevel) {
+                /* Non-maskable MIPS interrupt, this cannot be ignored */
+                /* This forces the MIPS to do a reset */
+                if (m_NMI)
+                {
+                    target = 0xBFC00000;
+                    m_NMI = false;
+                    error = true;
                 }
 
-                // This should handle interrupts SW0 and SW1 set by the user
-                executeHandler = (CR.InterruptPending & SR.InterruptMask) != 0;
+                // If this has been set manually, don't use any base address
+                if (m_Direct) {
+                    target = 0;
+                    cacheTarget = 0;
+                }
+
+                /* 32-bit TLB Exception */
+                if (m_TLBRefillException)
+                {
+                    m_TLBRefillException = false;
+                    executeHandler = true;
+                }
+
+                /* 64-bit TLB Exception */
+                else if (m_XTLBRefillExcepetion)
+                {
+                    target += 0x080;
+                    m_XTLBRefillExcepetion = false;
+                    executeHandler = true;
+                }
+
+                /* CPU Cache Exception */
+                else if (m_CacheErr)
+                {
+                    target += 0x100;
+                    m_CacheErr = false;
+                    error = true;
+                    executeHandler = true;
+                }
+
+                /* CPU Instruction Exception */
+                else if (CR.ExceptionThrown)
+                {
+                    CR.ClearThrownException();
+                    target += 0x180;
+                    executeHandler = true;
+                    //error = true;
+                }
+
+                /* Interrupts */
+                else
+                {
+                    target += 0x180;
+                    error = false;
+
+                    /* RCP Hardware Interrupt */
+                    if (m_Interface != null) {
+                        if ((m_Interface.Interrupt & m_Interface.Mask) != 0)
+                        {
+                            #if DEBUG_INTERRUPTS && DEBUG_MI
+                            Log.Debug("RCP INTERRUPT: {0:X8} AND {1:X8}", m_Interface.Interrupt, m_Interface.Mask);
+                            #endif
+
+                            #if !FILTER_RCP_INTERRUPTS
+                            CR.SetInterruptPending(INTERRUPT_RCP);
+                            #endif
+
+                            rcpPending = true;
+                        }
+                    }
+
+                    /* MIPS timer has generated an event, set its interrupt */
+                    if (timerPending) {
+                        CR.SetInterruptPending(INTERRUPT_TIMER);
+
+                        timerPending = false;
+
+                        #if DEBUG_MIPS_TIMER
+                            Log.Debug("Mips Timer interrupt trigger");
+                        #endif
+                    }
+
+                    /* Reset button has been pushed, set its interrupt */
+                    if (SR.InterruptMask != 0)
+                    {
+                        /* SoftReset */
+                        if (m_SoftReset)
+                        {
+                            m_SoftReset = false;
+                            CR.SetInterruptPending(INTERRUPT_RESET);
+                            error = true;
+                        }
+                    }
+
+                    executeHandler = (CR.InterruptPending & SR.InterruptMask) != 0;
+                }
+            }
+            else {
+                target += 0x180;
             }
 
             /* If true, then prepare to jump to the dedicated exception handler */
@@ -254,6 +246,14 @@ namespace cor64.Mips.R4300I
                 #if DEBUG_INTERRUPTS
                 Log.Debug("Execute Interrupt Handler");
                 #endif
+
+                // if (rcpPending) {
+                //    CR.ClearPendingInterrupt(INTERRUPT_RCP);
+                // }
+
+                // if (timerPending) {
+                //     CR.ClearPendingInterrupt(INTERRUPT_TIMER);
+                // }
 
                 InterpreterPendingInterrupts = true;
 

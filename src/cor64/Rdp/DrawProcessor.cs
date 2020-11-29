@@ -1,3 +1,4 @@
+using System.Threading;
 using System.IO;
 using System;
 using System.IO;
@@ -7,6 +8,7 @@ using NLog;
 using CMD = cor64.Rdp.RdpCommandTypes;
 using static cor64.RCP.DPCInterface;
 using cor64.IO;
+using cor64.Mips;
 
 // TODO: RDP Command interface with DMA engine
 
@@ -14,6 +16,7 @@ namespace cor64.Rdp {
     public abstract class DrawProcessor {
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
         private DPCInterface m_Interface;
+        private MipsInterface m_RcpInterface;
         private Stream m_Memory;
         private DisplayListReader m_DpReader;
         private bool m_DebugDL;
@@ -21,6 +24,8 @@ namespace cor64.Rdp {
         protected readonly RdpCommandTypeFactory.CallTable CallTable = RdpCommandTypeFactory.CreateCallTable();
         
         public abstract String Description { get; }
+
+        protected MipsInterface RcpInterface => m_RcpInterface;
 
         protected DrawProcessor() {
             CallTable
@@ -48,10 +53,10 @@ namespace cor64.Rdp {
         }
 
         public virtual void Init() {
-            
         }
 
-        public void AttachInterface(DPCInterface iface) {
+        public void AttachInterface(MipsInterface rcpInterface, DPCInterface iface) {
+            m_RcpInterface = rcpInterface;
             m_Interface = iface;
             m_Interface.DisplayListReady += DisplayListHandler;
         }
@@ -114,6 +119,9 @@ namespace cor64.Rdp {
             }
 
             m_Interface.RFlags &= ~ReadStatusFlags.CmdBusy;
+            RcpInterface.SetInterrupt(MipsInterface.INT_DP, true);
+
+            Log.Debug("RDP finished");
         }
 
         public void SetDLDebug(bool enable) {

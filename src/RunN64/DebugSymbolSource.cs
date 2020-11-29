@@ -43,18 +43,35 @@ namespace RunN64
 
         private void AddSymbol(SymbolEntry<uint> entry, IDictionary<ulong, string> dict)
         {
-            m_Labels.Add(entry.Value, entry.Name);
+            if (m_Labels.ContainsKey(entry.Value)) {
+                m_Labels[entry.Value] += "|" + entry.Name;
+            }
+            else {
+                m_Labels.Add(entry.Value, entry.Name);
+            }
 
             if (entry.Size > 0)
             {
                 for (uint i = 0; i < entry.Size; i++)
                 {
-                    dict.Add(entry.Value + i, entry.Name);
+                    var key = entry.Value + i;
+
+                    if (!dict.ContainsKey(key)) {
+                        dict.Add(entry.Value + i, entry.Name);
+                    }
+                    else {
+                        dict[entry.Value + i] += "|" + entry.Name;
+                    }
                 }
             }
             else
             {
-                dict.Add(entry.Value, entry.Name);
+                if (!dict.ContainsKey(entry.Value)) {
+                    dict.Add(entry.Value, entry.Name);
+                }
+                else {
+                    dict[entry.Value] += "|" + entry.Name;
+                }
             }
         }
 
