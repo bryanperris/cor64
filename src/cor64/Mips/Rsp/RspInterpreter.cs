@@ -77,7 +77,7 @@ namespace cor64.Mips.Rsp
 
                 if (Status.TestCmdFlags(StatusCmdFlags.ClearBroke))
                 {
-                    Status.StatusFlags ^= StatusFlags.Broke;
+                    Status.StatusFlags &= ~StatusFlags.Broke;
                 }
 
                 if (Status.TestCmdFlags(StatusCmdFlags.ClearIntterupt)) {
@@ -90,12 +90,78 @@ namespace cor64.Mips.Rsp
 
                 if (Status.TestCmdFlags(StatusCmdFlags.SetInterruptOnBreak)) {
                     m_InterruptOnBroke = true;
-                    Log.Debug("Set RSP interrupt on break instruction flag");
+                    Status.StatusFlags |= StatusFlags.InterruptOnBreak;
+                    // Log.Debug("Set RSP interrupt on break instruction flag");
                 }
 
                 if (Status.TestCmdFlags(StatusCmdFlags.ClearInterruptOnBreak)) {
-                     m_InterruptOnBroke = false;
-                     Log.Debug("Clear RSP interrupt on break instruction flag");
+                    m_InterruptOnBroke = false;
+                    Status.StatusFlags &= ~StatusFlags.InterruptOnBreak;
+                    // Log.Debug("Clear RSP interrupt on break instruction flag");
+                }
+                
+                if (Status.TestCmdFlags(StatusCmdFlags.SetSignal0)) {
+                    Status.StatusFlags |= StatusFlags.Signal0Set;
+                }
+
+                if (Status.TestCmdFlags(StatusCmdFlags.ClearSignal0)) {
+                    Status.StatusFlags &= ~StatusFlags.Signal0Set;
+                }
+
+                if (Status.TestCmdFlags(StatusCmdFlags.SetSignal1)) {
+                    Status.StatusFlags |= StatusFlags.Signal1Set;
+                }
+
+                if (Status.TestCmdFlags(StatusCmdFlags.ClearSignal1)) {
+                    Status.StatusFlags &= ~StatusFlags.Signal1Set;
+                }
+
+                if (Status.TestCmdFlags(StatusCmdFlags.SetSignal2)) {
+                    Status.StatusFlags |= StatusFlags.Signal2Set;
+                }
+
+                if (Status.TestCmdFlags(StatusCmdFlags.ClearSignal2)) {
+                    Status.StatusFlags &= ~StatusFlags.Signal2Set;
+                }
+
+                if (Status.TestCmdFlags(StatusCmdFlags.SetSignal3)) {
+                    Status.StatusFlags |= StatusFlags.Signal3Set;
+                }
+
+                if (Status.TestCmdFlags(StatusCmdFlags.ClearSignal3)) {
+                    Status.StatusFlags &= ~StatusFlags.Signal3Set;
+                }
+
+                if (Status.TestCmdFlags(StatusCmdFlags.SetSignal4)) {
+                    Status.StatusFlags |= StatusFlags.Signal4Set;
+                }
+
+                if (Status.TestCmdFlags(StatusCmdFlags.ClearSignal4)) {
+                    Status.StatusFlags &= ~StatusFlags.Signal4Set;
+                }
+
+                if (Status.TestCmdFlags(StatusCmdFlags.SetSignal5)) {
+                    Status.StatusFlags |= StatusFlags.Signal5Set;
+                }
+
+                if (Status.TestCmdFlags(StatusCmdFlags.ClearSignal5)) {
+                    Status.StatusFlags &= ~StatusFlags.Signal5Set;
+                }
+
+                if (Status.TestCmdFlags(StatusCmdFlags.SetSignal6)) {
+                    Status.StatusFlags |= StatusFlags.Signal6Set;
+                }
+
+                if (Status.TestCmdFlags(StatusCmdFlags.ClearSignal6)) {
+                    Status.StatusFlags &= ~StatusFlags.Signal6Set;
+                }
+
+                if (Status.TestCmdFlags(StatusCmdFlags.SetSignal7)) {
+                    Status.StatusFlags |= StatusFlags.Signal7Set;
+                }
+
+                if (Status.TestCmdFlags(StatusCmdFlags.ClearSignal7)) {
+                    Status.StatusFlags &= ~StatusFlags.Signal7Set;
                 }
 
                 /* Process this last so all flags are counted for before starting the RSP */
@@ -126,7 +192,7 @@ namespace cor64.Mips.Rsp
 
         public override void ManualStart(ulong pc)
         {
-            m_Pc = pc;
+            PC = pc;
             IsHalted = false;
         }
 
@@ -150,14 +216,14 @@ namespace cor64.Mips.Rsp
 
                 /* Should always be a word-aligned relative PC jump */
                 /* Always force 32-bit addresses */
-                m_Pc = (uint)(TargetAddress & ADDRESS_MASK);
+                PC = (uint)(TargetAddress & ADDRESS_MASK);
             }
             else
             {
                 /* Nornal execution path */
                 if (ExecuteInst())
                 {
-                    m_Pc += 4;
+                    PC += 4;
                 }
                 else
                 {
@@ -217,12 +283,13 @@ namespace cor64.Mips.Rsp
 
                     if (!NullifyNext)
                     {
-                        DebugInstruction(decoded);
-
                         //CoreDbg.TestForInstBreakpoint(decoded);
 
-                        call(decoded);
                         TraceInstruction(decoded, false);
+
+                        call(decoded);
+
+                        DebugInstruction(decoded);
 
                     }
                     else
@@ -244,9 +311,20 @@ namespace cor64.Mips.Rsp
         [Conditional("DEBUG")]
         private void DebugInstruction(DecodedInstruction instruction)
         {
-            if (core_InstDebugMode != InstructionDebugMode.None)
-            {
-                Console.WriteLine("{0:X8} {1}", m_Pc, Disassembler.GetFullDisassembly(instruction));
+            if (core_InstDebugMode != InstructionDebugMode.None) {
+                string memNote = null;
+
+                if (core_MemAccessNote != null) {
+                    memNote = "     # " + core_MemAccessNote.ReadMeta();
+                    core_MemAccessNote = null;
+                }
+
+                // if (memNote != null)
+                Console.WriteLine("RSP {0:X8} {1} {2}",
+                    PC,
+                    Disassembler.GetFullDisassembly(instruction),
+                    memNote ?? ""
+                    );
             }
         }
 
@@ -269,11 +347,14 @@ namespace cor64.Mips.Rsp
                    ------------------------- 
                 */
 
-                m_Pc = Interface.PC;
+                PC = Interface.PC;
+
+                Log.Debug("Start RSP TasK: {0:X8}", PC);
 
                 // Detection of IMEM address range
-                if (m_Pc >= ADDR_IMEM_START && m_Pc <= ADDR_IMEM_END) {
-                    m_Pc = Interface.PC - ADDR_IMEM_START;
+                // TODO: This all should be done in a translate stream layer
+                if (PC >= ADDR_IMEM_START && PC <= ADDR_IMEM_END) {
+                    PC = Interface.PC - ADDR_IMEM_START;
                 }
 
                 Status.StatusFlags &= ~StatusFlags.Halt;
@@ -402,24 +483,20 @@ namespace cor64.Mips.Rsp
             uint source = ReadGPR(inst.Source);
             uint target = ReadGPR(inst.Target);
 
-            TargetAddress = CoreUtils.ComputeBranchPC(false, m_Pc, CoreUtils.ComputeBranchTargetOffset(inst.Immediate));
+            TargetAddress = CoreUtils.ComputeBranchPC(false, PC, CoreUtils.ComputeBranchTargetOffset(inst.Immediate));
             TakeBranch = ComputeBranchCondition(false, source, target, inst.Op.XferTarget, inst.Op.ArithmeticType);
 
             TargetAddress &= ADDRESS_MASK;
 
             if (isLink)
             {
-                Writeback(31, (uint)m_Pc + 8);
+                Writeback(31, (uint)PC + 8);
             }
-
-            //CoreDbg.TestForBranchBreakpoint((uint)TargetAddress, TakeBranch);
 
             // Always true for RSP
             BranchDelay = true;
 
-            /* Clear target if not taken */
-            if (!TakeBranch)
-            {
+            if (!TakeBranch) {
                 TargetAddress = 0;
             }
         }
@@ -431,15 +508,17 @@ namespace cor64.Mips.Rsp
             BranchDelay = true;
             UnconditionalJump = true;
 
-            TargetAddress = CoreUtils.ComputeTargetPC(isRegister, m_Pc, ReadGPR(inst.Source), inst.Inst.target);
+            TargetAddress = CoreUtils.ComputeTargetPC(isRegister, PC, ReadGPR(inst.Source), inst.Inst.target);
             TargetAddress &= ADDRESS_MASK;
 
-            if (isLink)
-            {
-                Writeback(31, (uint)m_Pc + 8);
+            if (isLink) {
+                if (isRegister && (inst.Target & 0b11) != 0) {
+                    Writeback(inst.Target, (uint)PC + 8);
+                }
+                else {
+                    Writeback(31, (uint)PC + 8);
+                }
             }
-
-            //CoreDbg.TestForBranchBreakpoint((uint)TargetAddress, true);
         }
 
         public override void Load(DecodedInstruction inst)
@@ -618,35 +697,44 @@ namespace cor64.Mips.Rsp
         public override void TransferReg(DecodedInstruction inst)
         {
             uint value = 0;
-            int gpr_Source = inst.Target;
-            int gpr_Target = inst.Destination;
 
-            RegTransferGprHelper(inst, out gpr_Source, out gpr_Target);
+            RegTransferGprHelper(inst, out int regSource, out int regDest);
 
             /* Source value to copy */
             switch (inst.Op.XferSource)
             {
                 case RegBoundType.Gpr:
                     {
-                        value = ReadGPR(gpr_Source); break;
+                        value = ReadGPR(regSource); break;
                     }
 
                 case RegBoundType.Cp0:
                     {
-                        if (gpr_Target >= 0 && gpr_Target < 8)
+                        if (regSource >= 0 && regSource < 8)
                     	{
-                    		//sp_write_reg(rsp, reg, data);
-                            Console.WriteLine("RSP COP0 Read: TODO RSP Reg");
+                            /* Read from SP Interface Regs */
+
+                            // Log.Debug("SP Interface -> RSP: {0} {1:X8}", regSource, value);
+                            value = Interface.ReadRegForRsp(regSource);
+
+                            if (regSource == 7) {
+                                // This matters more when RSP/CPU bth run in parallel and trying to share the DMA
+                                //Log.Debug("RSP read semaphore");
+
+                                // value = 1;
+                                // m_CpuRspWait.Set();
+                            }
                     	}
-                    	else if (gpr_Target >= 8 && gpr_Target < 16)
+                    	else if (regSource >= 8 && regSource < 16)
                     	{
-                            var cmd = gpr_Target - 8;
-                            //Log.Debug("RDP -> RSP Command: {0} {1:X8}", cmd, value);
-                            value = RdpInterface.ReadRegForRsp(cmd);
+                            var select = regSource - 8;
+
+                            //Log.Debug("RDP -> RSP Command: {0} {1:X8}", select, value);
+                            value = RdpInterface.ReadRegForRsp(select);
                     	}
                     	else
                     	{
-                    		Log.Error("Unknown RSP COP0 Read: " + gpr_Target.ToString());
+                    		Log.Error("Unknown RSP COP0 Read: " + regSource.ToString());
                     	}
 
                         break;
@@ -689,26 +777,31 @@ namespace cor64.Mips.Rsp
             {
                 case RegBoundType.Gpr:
                     {
-                        Writeback(gpr_Target, value);
+                        Writeback(regDest, value);
                         break;
                     }
 
                 case RegBoundType.Cp0:
                     {
-                        if (gpr_Target >= 0 && gpr_Target < 8)
+                        if (regDest >= 0 && regDest < 8)
                     	{
-                    		//sp_write_reg(rsp, reg, data);
-                            Console.WriteLine("RSP COP0 Write: TODO RSP Reg");
+                    		/* Write to SP Interface Regs */
+
+                            // Log.Debug("RSP -> SP Interface: {0} {1:X8}", regDest, value);
+                            Interface.RegWriteFromRsp(regDest, value);
                     	}
-                    	else if (gpr_Target >= 8 && gpr_Target < 16)
+                    	else if (regDest >= 8 && regDest < 16)
                     	{
-                            var cmd = gpr_Target - 8;
-                            //Log.Debug("RSP -> RDP Command: {0} {1:X8}", cmd, value);
-                            RdpInterface.RegWriteFromRsp(cmd, value);
+                            /* Write to RDP Command Regs */
+
+                            var select = regDest - 8;
+
+                            //Log.Debug("RSP -> RDP Command: {0} {1:X8}", select, value);
+                            RdpInterface.RegWriteFromRsp(select, value);
                     	}
                     	else
                     	{
-                    		Log.Error("Unknown RSP COP0 Write: " + gpr_Target.ToString());
+                    		Log.Error("Unknown RSP COP0 Write: " + regDest.ToString());
                     	}
 
                         break;
@@ -747,7 +840,7 @@ namespace cor64.Mips.Rsp
                 default: throw new NotSupportedException();
             }
         }
-        
+
         public override void Break(DecodedInstruction inst)
         {
             /* Break is used to halt the RSP processor */

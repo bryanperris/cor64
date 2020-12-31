@@ -48,10 +48,10 @@ namespace cor64.Mips
         };
 
         private static readonly String[] RegisterLabelRspCop0 = {
-            "RSP 0",       "RSP 1",         "RSP 2",    "RSP 3",
-            "RSP 4",       "RSP 5",         "RSP 6",    "RSP 7",
-            "DPC_START_REG",  "DPC_END_REG",      "DPC_CURRENT_REG",    "DPC_STATUS_REG",
-            "DPC_CLOCK_REG",  "DPC_BUFBUSY_REG",  "DPC_PIPEBUSY_REG",    "DPC_TMEM_REG",
+            "SP_MEM_ADDR_REG",  "SP_DRAM_ADDR_REG", "SP_RD_LEN_REG",     "SP_WR_LEN_REG",
+            "SP_STATUS_REG",    "SP_DMA_FULL_REG",  "SP_DMA_BUSY_REG",   "SP_SEMAPHORE_REG",
+            "DPC_START_REG",    "DPC_END_REG",      "DPC_CURRENT_REG",   "DPC_STATUS_REG",
+            "DPC_CLOCK_REG",    "DPC_BUFBUSY_REG",  "DPC_PIPEBUSY_REG",  "DPC_TMEM_REG",
             "Reserved",    "Reserved",      "Reserved", "Reserved",
             "Reserved",    "Reserved",      "Reserved", "Reserved",
             "Reserved",    "Reserved",      "Reserved", "Reserved",

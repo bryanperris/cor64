@@ -327,10 +327,14 @@ namespace cor64.Rdp.LLE {
                 case RdpCommandFlags.Color: {
                     var cmd = command.As<SetColorImage>();
 
+                    var framebufferAddress = (uint)(cmd.DramAddress & 0x0FFFFFF);
+
                     GraphicsState.FramebufferFormat = (int)cmd.Format;
                     GraphicsState.FramebufferSize = (int)cmd.Size;
                     GraphicsState.FramebufferWidth = cmd.Width + 1;
-                    GraphicsState.FramebufferAddress = (uint)(cmd.DramAddress & 0x0FFFFFF);
+                    GraphicsState.FramebufferAddress = framebufferAddress;
+
+                    VideoInterface.SetFBFromRDP(framebufferAddress);
 
                     //Log.Debug("RDP framebuffer config has been set");
 
@@ -675,7 +679,7 @@ namespace cor64.Rdp.LLE {
 
             var triangle = new Triangle(command.Type, buffer, isTex);
 
-            Log.Debug("Rect -> Triangle: {0}", triangle.ToString());
+            // Log.Debug("Rect -> Triangle: {0}", triangle.ToString());
 
             //triangle.PrintCommandCArray("rect_tri_data");
 

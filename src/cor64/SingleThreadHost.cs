@@ -125,6 +125,8 @@ namespace cor64
 
                         errorMessage.Append("Thrown exception: ").AppendLine(e.Message);
 
+                        Log.Error(e.StackTrace.ToString());
+
                         Log.Error(errorMessage.ToString());
 
                         Log.Info("RSP will be halted now");

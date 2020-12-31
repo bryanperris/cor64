@@ -11,13 +11,11 @@ using static cor64.Mips.Operands;
 namespace cor64.Mips
 {
     /// <summary>
-    /// Decode BinaryInstructions into DecodedInstructions
+    /// /// Decode BinaryInstructions into DecodedInstructions
     /// </summary>
     public abstract class BaseDisassembler
     {
         private Stream m_BinaryStream;
-        private ulong m_BaseAddress;
-        private readonly String m_Abi;
         private ISymbolProvider m_SymbolProvider;
         private readonly byte[] m_InstBuffer = new Byte[4];
         private Swap32Stream m_SwapStream;
@@ -30,7 +28,7 @@ namespace cor64.Mips
 
         protected BaseDisassembler(String abi)
         {
-            m_Abi = abi;
+            ABI = abi;
 
             if (CoreConfig.Current.ByteSwap)
             {
@@ -56,9 +54,7 @@ namespace cor64.Mips
             m_SwapStream = new Swap32Stream(stream);
         }
 
-        public ulong CurrentAddress => m_BaseAddress;
-
-        public String ABI => m_Abi;
+        public String ABI { get; }
 
         protected abstract Opcode DecodeOpcode(BinaryInstruction inst);
 
@@ -173,53 +169,47 @@ namespace cor64.Mips
             m_SymbolProvider = provider;
         }
 
-        private DecodedInstruction _Disassemble()
+        private DecodedInstruction DecodeBinaryInst(long address)
         {
-            DecodedInstruction decoded;
+            m_BinaryStream.Position = address;
+            BinaryInstruction inst = new(m_ReadInstFunc());
 
-            /* Important note: When changing PC it becomes out of sync with the stream's position
-             * So we need a better a way to handle so that PC jumps only update the Stream's position
-             * else in sequencial IO, let the stream handle it basically */
-            m_BinaryStream.Position = (long)m_BaseAddress;
-
-            BinaryInstruction inst = new BinaryInstruction(m_ReadInstFunc());
-
-            decoded = new DecodedInstruction(m_BaseAddress, DecodeOpcode(inst), inst, false, m_BinaryStream.Position + 4 >= m_BinaryStream.Length);
-
-            return decoded;
+            return new DecodedInstruction(
+                (ulong)address,
+                DecodeOpcode(inst),
+                inst,
+                false,
+                m_BinaryStream.Position + 4 >= m_BinaryStream.Length);
         }
 
         public DecodedInstruction Disassemble(ulong address)
         {
-            // if (address < 0x80000000) 
-            //     Console.WriteLine("PC Alert: " + address.ToString("X8"));
-
-            if (address < 0 || address >= (ulong)m_BinaryStream.Length)
+            // If the stream position goes out of range, return internal null opcode
+            if (address >= (ulong)m_BinaryStream.Length)
                 return new DecodedInstruction(0, new Opcode(), new BinaryInstruction(), true, false);
 
-            m_BaseAddress = address;
-            return _Disassemble();
+            // Do the normal opcode decoding
+            return DecodeBinaryInst((long)address);
         }
 
         public DecodedInstruction[] Disassemble(ulong address, int count)
         {
             DecodedInstruction[] disassembly = new DecodedInstruction[count];
-            m_BaseAddress = address;
 
             for (int i = 0; i < count; i++)
             {
-                disassembly[i] = _Disassemble();
+                disassembly[i] = Disassemble(address + (uint)(i * 4));
             }
 
             return disassembly;
         }
 
-        protected ulong ComputeJumpTarget(DecodedInstruction inst)
+        protected static ulong ComputeJumpTarget(DecodedInstruction inst)
         {
             return CoreUtils.ComputeTargetPC(false, inst.Address, 0, inst.Inst.target);
         }
 
-        protected ulong ComputeBranchTarget(DecodedInstruction inst)
+        protected static ulong ComputeBranchTarget(DecodedInstruction inst)
         {
             return CoreUtils.ComputeBranchPC(false, inst.Address, CoreUtils.ComputeBranchTargetOffset(inst.Inst.imm));
         }
@@ -238,7 +228,7 @@ namespace cor64.Mips
 
         protected static String DecodeCop1Conditional(BinaryInstruction inst)
         {
-            if (inst.fc >= 0 && inst.fc <= 15 && inst.fmtType != FpuValueType.Reserved)
+            if (inst.fc <= 15 && inst.fmtType != FpuValueType.Reserved)
                 return Cop1ConditionalTable[inst.fc];
 
             else

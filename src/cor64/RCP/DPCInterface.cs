@@ -2,6 +2,7 @@ using cor64.IO;
 using cor64.Debugging;
 using System;
 using cor64.Rdp;
+using NLog;
 
 namespace cor64.RCP {
 /*
@@ -75,6 +76,7 @@ namespace cor64.RCP {
             Startvalid=0b10000000000
         }
 
+        private readonly static Logger Log = LogManager.GetCurrentClassLogger();
         private readonly MemMappedBuffer m_Start = new MemMappedBuffer();
         private readonly MemMappedBuffer m_End = new MemMappedBuffer();
         private readonly MemMappedBuffer m_Current = new MemMappedBuffer(4, MemMappedBuffer.MemModel.SINGLE_READONLY);
@@ -104,22 +106,19 @@ namespace cor64.RCP {
             Map(m_Status);
             Map(m_Clock, m_BufferBusyCounter, m_PipeBusyCounter, m_TmemLoadCounter);
 
-            // Init some status flags
-            RFlags |= ReadStatusFlags.ColorBufferReady;
-
             m_Start.Write += DisplayListStart;
             m_End.Write += DisplayListEnd;
             m_Start.Write += StatusWrite;
 
             m_RegSelects = new MemMappedBuffer[] {
-                m_Start,
-                m_End,
-                m_Current,
-                m_Status,
-                m_Clock,
-                m_BufferBusyCounter,
-                m_PipeBusyCounter,
-                m_TmemLoadCounter
+                m_Start,              // $c8
+                m_End,                // $c9
+                m_Current,            // $c10
+                m_Status,             // $c11
+                m_Clock,              // $c12
+                m_BufferBusyCounter,  // $c13
+                m_PipeBusyCounter,    // $c14
+                m_TmemLoadCounter     // $c15
             };
         }
 
@@ -133,18 +132,37 @@ namespace cor64.RCP {
         }
 
         private void DisplayListStart() {
-            //Console.WriteLine("Display List: {0:X8}", m_Start.ReadonlyRegisterValue);
+            m_Current.ReadonlyRegisterValue = m_Start.RegisterValue;
+            m_Status.ReadonlyRegisterValue = 0x400; // Mark valid start
         }
 
         private void DisplayListEnd() {
-            //Console.WriteLine("Display List: {0:X8}", m_End.ReadonlyRegisterValue);
+            m_Status.ReadonlyRegisterValue = 0x200; // Mark valid end
 
-            var start = m_Start.RegisterValue & 0x0FFFFFFFU;
-            var end = m_End.RegisterValue & 0x0FFFFFFFU;
+            // Nothing happens when START and END are set to the same value
+            if (m_Start.RegisterValue == m_End.RegisterValue) {
+                return;
+            }
+
+            var start = m_Current.RegisterValue & 0x0FFFFFFFF;
+            var end =   m_End.RegisterValue     & 0x0FFFFFFFF;
+
+            // XBUS Mode: Convert address to DMEM
+            if (UseXBus) {
+               start = 0x04000000 + (start & 0x3FF);
+               end =   0x04000000 + (end   & 0x3FF);
+            }
+
+            // Alignment
+            start &= ~7U;
+            end &= ~7U;
+
+            // Log.Debug("Executing DL: {0:X8}:{1:X8}", start, end);
 
             DisplayListReady?.Invoke(this, new DisplayList(start, end));
 
-            CmdReadFinish();
+            // Update the address regs
+            m_Current.ReadonlyRegisterValue = m_End.RegisterValue;
         }
 
         public void DirectDLSetup(uint address, int size) {
@@ -160,6 +178,8 @@ namespace cor64.RCP {
             var status = m_Status.RegisterValue;
             var flags = (WriteStatusFlags)status;
 
+            // Log.Debug("RDP Status Write: {0:X8}", m_Status.RegisterValue);
+
             if ((flags & WriteStatusFlags.SetXbusDmemDma) == WriteStatusFlags.SetXbusDmemDma) {
                 RFlags |= ReadStatusFlags.XbusDmemDma;
             }
@@ -168,14 +188,15 @@ namespace cor64.RCP {
                 RFlags &= ~ReadStatusFlags.XbusDmemDma;
             }
 
+            if ((flags & WriteStatusFlags.SetFreeze) == WriteStatusFlags.SetFreeze) {
+                RFlags |= ReadStatusFlags.Freeze;
+            }
+
+            if ((flags & WriteStatusFlags.ClearFreeze) == WriteStatusFlags.ClearFreeze) {
+                RFlags &= ~ReadStatusFlags.Freeze;
+            }
 
             m_Status.RegisterValue = 0;
-        }
-
-        private void CmdReadFinish() {
-            m_End.RegisterValue &= 0x0FFFFFFFU;
-            m_Start.RegisterValue &= 0x0FFFFFFFU;
-            m_Current.RegisterValue = m_End.RegisterValue;
         }
 
         public WriteStatusFlags WFlags => (WriteStatusFlags)m_Status.RegisterValue;

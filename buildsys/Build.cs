@@ -83,6 +83,10 @@ class Build : NukeBuild
                 .EnableNoRestore());
         });
 
+    Target FullBuild => _ => _
+        .DependsOn(Compile)
+        .DependsOn(DeployTestRoms);
+
     Target Run => _ => _
         .DependsOn(Compile)
         .DependsOn(DeployTestRoms)

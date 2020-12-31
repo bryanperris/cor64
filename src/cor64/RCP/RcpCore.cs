@@ -22,7 +22,7 @@ namespace cor64.RCP
         public RcpCore()
         {
             m_Rsp = new RspInterpreter();
-            m_Rsp.SetInstructionDebugMode(InstructionDebugMode.Full);
+            //m_Rsp.SetInstructionDebugMode(InstructionDebugMode.Full);
 
             m_Rdp = new DummyRdp();
         }
@@ -41,10 +41,10 @@ namespace cor64.RCP
             SerialDevice = new SerialController(controller);
             VideoInterface = new Video(controller, RcpInterface);
             RspInterface = new SPInterface(controller);
-            ParellelInterface = new PIMemory(controller);
+            ParellelInterface = new ParallelInterface(controller);
             DisplayProcessorCommandInterface = new DPCInterface(controller);
             DisplayProcessorSpanInterface = new DummyMemory(DUMMY_SECTION_SIZE, "Display Processor Span Interface");
-            AudioInterface = new DummyMemory(DUMMY_SECTION_SIZE, "Audio Interface");
+            AudioInterface = new Audio(controller, RcpInterface);
 
             SerialDevice.AttachInterfaces(RcpInterface);
             ParellelInterface.AttachInterface(RcpInterface);
@@ -54,7 +54,7 @@ namespace cor64.RCP
             m_Rsp.AttachIStream(RspInterface.CreateIMemorySream());
             m_Rsp.AttachDStream(RspInterface.CreateDMemorySream());
 
-            m_Rdp.AttachInterface(RcpInterface, DisplayProcessorCommandInterface);
+            m_Rdp.AttachInterface(RcpInterface, DisplayProcessorCommandInterface, VideoInterface);
             m_Rdp.AttachMemory(controller.CreateMemoryStream());
 
             controller.Model.SPRegs = RspInterface;
@@ -85,6 +85,6 @@ namespace cor64.RCP
 
         public BlockDevice AudioInterface { get; private set; }
 
-        public PIMemory ParellelInterface { get; private set; }
+        public ParallelInterface ParellelInterface { get; private set; }
     }
 }

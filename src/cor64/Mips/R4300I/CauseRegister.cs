@@ -134,8 +134,8 @@ namespace cor64.Mips.R4300I
             return m_IntFiddler.X(interrupt, ref val) != 0;
         }
 
-        public void ClearAllPending() {
-            m_Value &= ~0xFF00U;
+        public void ClearExceptionState() {
+            m_Value &= 0xFFFF0000U;
         }
 
         public uint InterruptPending => m_Fiddler.X(F_IP, ref m_Value);

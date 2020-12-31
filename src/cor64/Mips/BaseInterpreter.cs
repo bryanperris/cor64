@@ -20,10 +20,12 @@ namespace cor64.Mips
     public abstract class BaseInterpreter
     {
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
-        protected ulong m_Pc;
+        private ulong m_Pc;
         private Stream m_IMemory;
         private ulong m_ProgramStart;
         protected Profiler m_Profiler = new Profiler();
+
+        private ExecutionState m_ProtectedState;
 
         public event Action<DecodedInstruction> TraceStep;
 
@@ -38,9 +40,26 @@ namespace cor64.Mips
             };
         }
 
+        protected void EnterProtectedState() {
+            m_ProtectedState = State;
+            State = new ExecutionState();
+        }
+
+        protected void LeaveProtectedState() {
+            State = m_ProtectedState;
+        }
+
         public virtual void SafeSetPC(ulong address)
         {
             m_Pc = address;
+        }
+
+        protected ulong PC {
+            get => m_Pc;
+
+            set {
+                m_Pc = value;
+            }
         }
 
         public ulong ReadPC()
@@ -146,6 +165,10 @@ namespace cor64.Mips
         {
             if (IsMemTraceActive)
                 TraceLog.AddInstructionMemAccess(address, isWrite, val);
+
+            if (core_InstDebugMode != InstructionDebugMode.None) {
+                core_MemAccessNote = new MemoryAccessMeta(address, isWrite, val);
+            }
         }
 
         public virtual String GetGPRName(int i) {
@@ -154,7 +177,7 @@ namespace cor64.Mips
 
         protected bool ValidateInstruction(DecodedInstruction decoded)
         {
-            return !decoded.IsValid && !decoded.IsNull;
+            return !decoded.IsInvalid && !decoded.IsNull;
         }
 
         protected bool ComputeBranchCondition(bool isDword, ulong source, ulong target, RegBoundType copSelect,  ArithmeticOp compareOp)
@@ -250,6 +273,20 @@ namespace cor64.Mips
 
             if (inst.Op.XferTarget == RegBoundType.Gpr)
             {
+                // RSP: CP0 -> GPR
+                if (inst.Op.OperandFmt == OperandType.RspCp0_CT) {
+                    gprSource = inst.Destination;
+                    gprTarget = inst.Target;
+                    return;
+                }
+
+                // RSP: GPR -> CP0
+                if (inst.Op.OperandFmt == OperandType.RspCp0_TC) {
+                    gprSource = inst.Target;
+                    gprTarget = inst.Destination;
+                    return;
+                }
+
                 switch (inst.Op.OperandFmt)
                 {
                     default: break;
@@ -289,6 +326,8 @@ namespace cor64.Mips
         public bool DebugMode { get; private set; }
 
         protected InstructionDebugMode core_InstDebugMode;
+
+        protected MemoryAccessMeta core_MemAccessNote;
         
         public void SetInstructionDebugMode(InstructionDebugMode mode)
         {
@@ -298,6 +337,8 @@ namespace cor64.Mips
         public bool InBootMode { get; protected set; } = true;
 
         public ProgramTrace.TraceMode TraceMode { get; private set; }
+
+        public InstructionDebugMode InstDebugMode => core_InstDebugMode;
 
         public bool IsTraceActive => TraceMode == ProgramTrace.TraceMode.Full || (TraceMode == ProgramTrace.TraceMode.ProgramOnly && !InBootMode);
 

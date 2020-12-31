@@ -20,20 +20,11 @@ namespace cor64.Rdp {
             m_Stream = source;
         }
 
-        public IReadOnlyList<RdpCommand> ReadDisplayList(long address, int size, bool xbus = false) {
-
-            if (!xbus) {
-                // RDRAM
-                m_Stream.Position = address;
-            }
-            else {
-                // DMEM
-                m_Stream.Position = 0x04000000 + (address & 0x3FF);
-            }
-
-
+        public IReadOnlyList<RdpCommand> ReadDisplayList(long address, int size) {
             List<RdpCommand> commands = new List<RdpCommand>();
             int count = 0;
+            
+            m_Stream.Position = address;
 
             var swappedStream = new Swap64Stream(m_Stream);
             var swappedReader = new BinaryReader(swappedStream);

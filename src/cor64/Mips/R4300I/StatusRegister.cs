@@ -113,6 +113,15 @@ namespace cor64.Mips.R4300I
             {
                 Log.Debug("CPU code changed boot vector bit to: {0}", TestFlags(StatusFlags.UseBootstrapVectors));
             }
+
+            // if (TestChange(StatusFlags.InterruptsEnabled, oldValue, newValue)) {
+            //     if (TestFlags(StatusFlags.InterruptsEnabled)) {
+            //         Log.Debug("Interrupts Enabled");
+            //     }
+            //     else {
+            //         Log.Debug("Interrupts Disabled");
+            //     }
+            // }
         }
 
         private bool TestChange(StatusFlags testFlags, uint oldVal, uint newVal) 

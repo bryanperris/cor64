@@ -58,7 +58,7 @@ namespace RunN64.Graphics
 
             m_Window = new NativeWindow(RES_X + 1, RES_Y + BAR_HEIGHT, "N64 Framebuffer");
 
-            Glfw.IconifyWindow(m_Window);
+            // Glfw.IconifyWindow(m_Window);
         
             m_FBData = new PinnedBuffer(RES_X * RES_Y * 4);
             m_SourceBitmap = null;
@@ -90,6 +90,7 @@ namespace RunN64.Graphics
 
         public void Start() {
             double lastTime = Glfw.Time;
+            //double lastTime = (double)m_System.DeviceCPU.State.Cp0.Count;
             double delta = 0;
 
             m_Created = true;
@@ -97,13 +98,12 @@ namespace RunN64.Graphics
             while (!m_Window.IsClosing)
             {
                 var now = Glfw.Time;
+                // var now =  (double)m_System.DeviceCPU.State.Cp0.Count;
                 delta += (now - lastTime) / (1.0 / 60.0);
                 lastTime = now;
 
                 while (delta >= 1.0)
                 {
-                    //m_System.DeviceCPU.Cycles = 0;
-
                     Scan();
                     delta--;
                 }
@@ -200,7 +200,8 @@ namespace RunN64.Graphics
                     m_VideoInterface.Line = i;
                 }
 
-                TriggerVI();
+                if (m_VideoInterface.Interrupt != 0)
+                    m_VideoInterface.SetVideoInterrupt();
             }
 
             switch (m_VideoInterface.ControlReg.GetPixelMode())
@@ -296,7 +297,8 @@ namespace RunN64.Graphics
 
                 DrawString(colorMode, canvas, strPos, 0);
 
-                var addr = m_VideoInterface.FramebufferOffset.ToString("X8");
+                // var addr = m_VideoInterface.FramebufferOffset.ToString("X8");
+                var addr = m_VideoInterface.ReadFramebufferAddressSafe().ToString("X8");
 
                 strPos += StrLen(colorMode);
 

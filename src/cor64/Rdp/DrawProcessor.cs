@@ -20,12 +20,15 @@ namespace cor64.Rdp {
         private Stream m_Memory;
         private DisplayListReader m_DpReader;
         private bool m_DebugDL;
+        private Video m_VideoInterface;
 
         protected readonly RdpCommandTypeFactory.CallTable CallTable = RdpCommandTypeFactory.CreateCallTable();
         
         public abstract String Description { get; }
 
         protected MipsInterface RcpInterface => m_RcpInterface;
+
+        protected Video VideoInterface => m_VideoInterface;
 
         protected DrawProcessor() {
             CallTable
@@ -45,6 +48,7 @@ namespace cor64.Rdp {
             .Map(SetSync, CMD.SyncFull, CMD.SyncLoad, CMD.SyncPipe, CMD.SyncTile)
             .Map(SetScissor, CMD.SetScissor)
             .Map(SetConvert, CMD.SetConvert)
+            .Map(DoNothing, CMD.Noop)
             .Finish();
         }
 
@@ -53,12 +57,16 @@ namespace cor64.Rdp {
         }
 
         public virtual void Init() {
+            m_Interface.RFlags |= ReadStatusFlags.ColorBufferReady;
+            m_Interface.RFlags |= ReadStatusFlags.StartGClk;
+            m_Interface.RFlags |= ReadStatusFlags.PipeBusy;
         }
 
-        public void AttachInterface(MipsInterface rcpInterface, DPCInterface iface) {
+        public void AttachInterface(MipsInterface rcpInterface, DPCInterface iface, Video videoInterface) {
             m_RcpInterface = rcpInterface;
             m_Interface = iface;
             m_Interface.DisplayListReady += DisplayListHandler;
+            m_VideoInterface = videoInterface;
         }
 
         public virtual void AttachMemory(N64MemoryController.N64MemoryStream stream) {
@@ -68,14 +76,11 @@ namespace cor64.Rdp {
 
         protected virtual void DisplayListHandler(object sender, DPCInterface.DisplayList displayList) {
             m_Interface.RFlags |= ReadStatusFlags.CmdBusy;
+            m_Interface.RFlags &= ~ReadStatusFlags.Freeze;
 
             int size = (int)(displayList.End - displayList.Start);
 
-            if (size < 0) {
-                throw new InvalidOperationException("Invalid display address range");
-            }
-
-            //Log.Debug("Display List: {0:X8}, Size {1}", displayList.Start, size);
+            // Log.Debug("Display List: {0:X8}, Size {1}", displayList.Start, size);
 
             // Print out the display list bytes
             // m_IMemory.Position = displayList.Start;
@@ -85,8 +90,12 @@ namespace cor64.Rdp {
             // }
             // Console.WriteLine();
 
+            long address = displayList.Start;
+
+            // Log.Debug("Reading display list from {0}", m_Interface.UseXBus ? "xbus" : "rdram");
+
             /* Now read memory of the display list */
-            var commands = m_DpReader.ReadDisplayList(displayList.Start, size, m_Interface.UseXBus);
+            var commands = m_DpReader.ReadDisplayList(address, size);
 
             for (int i = 0; i < commands.Count; i++) {
                 var command = commands[i];
@@ -106,9 +115,13 @@ namespace cor64.Rdp {
                 // cmdLabel += i.ToString();
                 // command.PrintCommandCArray(cmdLabel);
 
+                var resolvedCommand = command.ResolveType();
+
                 if (m_DebugDL) {
-                    Log.Debug("DP Command: {0}", command.ResolveType().ToString());
+                    Log.Debug("RDP_CMD: {0:X8} {1}", address, resolvedCommand.ToString());
                 }
+
+                address += resolvedCommand.Type.Size;
 
                 var handler = CallTable[command];
 
@@ -121,11 +134,15 @@ namespace cor64.Rdp {
             m_Interface.RFlags &= ~ReadStatusFlags.CmdBusy;
             RcpInterface.SetInterrupt(MipsInterface.INT_DP, true);
 
-            Log.Debug("RDP finished");
+            // Log.Debug("RDP finished");
         }
 
         public void SetDLDebug(bool enable) {
             m_DebugDL = enable;
+        }
+
+        protected void DoNothing(RdpCommand command) {
+            return;
         }
 
         protected abstract void LoadBlock(RdpCommand command);

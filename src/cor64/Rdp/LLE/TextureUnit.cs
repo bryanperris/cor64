@@ -376,17 +376,17 @@ namespace cor64.Rdp.LLE
             if (tileFormat == ImageDataFormat.YUV)
             {
                 tmemFormatting = TMEM_FORMAT.YUV;
-                Log.Debug("TMEM Load Format: YUV");
+                // Log.Debug("TMEM Load Format: YUV");
             }
             else if (tileFormat == ImageDataFormat.RGBA && tileSize == ImageSizeType.SizeInBytes_32)
             {
                 tmemFormatting = TMEM_FORMAT.RGBA32;
-                Log.Debug("TMEM Load Format: RGBA32");
+                // Log.Debug("TMEM Load Format: RGBA32");
             }
             else
             {
                 tmemFormatting = TMEM_FORMAT.Direct;
-                Log.Debug("TMEM Load Format: Direct");
+                // Log.Debug("TMEM Load Format: Direct");
             }
 
             int tiadvance = 0;

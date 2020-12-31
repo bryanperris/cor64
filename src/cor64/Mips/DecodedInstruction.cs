@@ -48,9 +48,11 @@ namespace cor64.Mips
         /// <summary>
         /// Indicates the instruction was fetched from valid readable memory
         /// </summary>
-        public bool IsValid => m_NoOp;
+        public bool IsInvalid => m_NoOp;
 
         public bool LastOne => m_LastInst;
+
+        public bool CanFullyDisassemble => !IsInvalid && !IsNull;
 
         public bool IsFloatingType => Format == FpuValueType.FSingle || Format == FpuValueType.FDouble;
 

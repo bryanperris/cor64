@@ -69,24 +69,26 @@ namespace cor64.RCP {
 
         public void SignalSiReady() {
             m_RcpInterface.SetInterrupt(MipsInterface.INT_SI, true);
+            m_StatusReg.ReadonlyRegisterValue |= 0x1000;
         }
 
         private void StatusChanged() {
             m_RcpInterface.ClearInterrupt(MipsInterface.INT_SI);
+            m_StatusReg.ReadonlyRegisterValue &= ~0x1000U;
         }
 
         private void PifDmaWrite() {
-            Log.Debug("TODO: PIF DMA Write");
-            ReportFinish();
+            Log.Debug("TODO: SI: PIF DMA Write");
+
+            m_RcpInterface.SetInterrupt(MipsInterface.INT_SI, true);
+            m_StatusReg.ReadonlyRegisterValue |= 0x1000;
         }
 
         private void PifDmaRead() {
-            Log.Debug("TODO: PIF DMA Read");
-            ReportFinish();
-        }
+            Log.Debug("TODO: SI: PIF DMA Read");
 
-        private void ReportFinish() {
             m_RcpInterface.SetInterrupt(MipsInterface.INT_SI, true);
+            m_StatusReg.ReadonlyRegisterValue |= 0x1000;
         }
     }
 }

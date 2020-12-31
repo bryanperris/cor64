@@ -88,11 +88,13 @@ namespace cor64
 
         public void BootCartridge(Cartridge cartridge, bool bypassIPL)
         {
-            /* Coprocess 0 setup */
+            // TODO: Some values are hardcoded HW values such as processor versions
+
+            /* CoProcessor 0 Initial States HW/SW */
             WR0(CTS.CP0_REG_RANDOM, 0x0000001F);
             WR0(CTS.CP0_REG_COUNT, 0x00005000);
-            WR0(CTS.CP0_REG_SR, 0x34000000); // Cu0, Cu1, 32 FPR, Interrupts Disabled
-            WR0(CTS.CP0_REG_CAUSE, 0x0000005C);
+            WR0(CTS.CP0_REG_SR, 0x241000E0);
+            WR0(CTS.CP0_REG_CAUSE, 0xB000007C);
             WR0(CTS.CP0_REG_CONFIG, 0x0006E463);
             WR0(CTS.CP0_REG_ERROR_EPC, 0xFFFFFFFF);
             WR0(CTS.CP0_REG_BADVADDR, 0xFFFFFFFF);

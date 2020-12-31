@@ -8,6 +8,7 @@
             "name": "RunN64",
             "type": "coreclr",
             "request": "launch",
+            "requireExactSource": true,
             "windows": {
                 "program": "${workspaceFolder}/bin/RunN64.exe",
             },

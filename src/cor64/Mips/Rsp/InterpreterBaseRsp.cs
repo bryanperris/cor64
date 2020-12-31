@@ -1,4 +1,7 @@
+using System;
 using System.IO;
+using System.Text;
+using cor64.Debugging;
 using cor64.RCP;
 using static cor64.Mips.OpcodesCommon;
 using static cor64.Mips.R4300I.Opcodes;
@@ -48,7 +51,93 @@ namespace cor64.Mips.Rsp
         public abstract void WriteVCC(ushort vcc);
 
         public override void AttachDStream(Stream memoryStream) {
-            DMem = new DataMemory(memoryStream);
+            DMem = new DataMemory(new DataStreamWrapper(this, memoryStream));
+        }
+
+        private sealed class DataStreamWrapper : Stream
+        {
+            private readonly InterpreterBaseRsp m_Core;
+            private readonly Stream m_BaseStream;
+
+            public DataStreamWrapper(InterpreterBaseRsp core, Stream stream)
+            {
+                m_BaseStream = stream;
+                m_Core = core;
+            }
+
+            public override long Length => m_BaseStream.Length;
+
+            public override long Position {
+                get => m_BaseStream.Position;
+                set => m_BaseStream.Position = value;
+            }
+
+            public override bool CanRead => m_BaseStream.CanRead;
+
+            public override bool CanSeek => m_BaseStream.CanSeek;
+
+            public override bool CanWrite => m_BaseStream.CanSeek;
+
+            public override int Read(byte[] buffer, int offset, int count)
+            {
+                var read = m_BaseStream.Read(buffer, offset, count);
+
+                if (m_Core.IsMemTraceActive || m_Core.InstDebugMode != InstructionDebugMode.None)
+                {
+                    var addr = 0x04000000 | (uint)m_BaseStream.Position;
+                    m_Core.TraceMemoryHit(addr, false, DebugValue(buffer, offset, count));
+                }
+
+                return read;
+            }
+
+            public override void Write(byte[] buffer, int offset, int count)
+            {
+                m_BaseStream.Write(buffer, offset, count);
+
+                if (m_Core.IsMemTraceActive || m_Core.InstDebugMode != InstructionDebugMode.None)
+                {
+                    var addr = 0x04000000 | (uint)m_BaseStream.Position;
+                    m_Core.TraceMemoryHit(addr, true, DebugValue(buffer, offset, count));
+                }
+            }
+
+            private static String DebugValue(byte[] buffer, int offset, int size)
+            {
+                StringBuilder sb = new StringBuilder();
+
+                for (int i = 0; i < size; i++)
+                {
+                    sb.Append(buffer[offset + i].ToString("X2"));
+                }
+
+                return sb.ToString();
+            }
+
+            public override void Flush()
+            {
+                m_BaseStream.Flush();
+            }
+
+            public override long Seek(long offset, SeekOrigin origin)
+            {
+                return m_BaseStream.Seek(offset, origin);
+            }
+
+            public override void SetLength(long value)
+            {
+                m_BaseStream.SetLength(value);
+            }
+
+            public override int ReadByte()
+            {
+                return m_BaseStream.ReadByte();
+            }
+
+            public override void WriteByte(byte value)
+            {
+                m_BaseStream.WriteByte(value);
+            }
         }
 
         public abstract void Init();

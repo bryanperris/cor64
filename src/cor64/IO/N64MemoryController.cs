@@ -40,6 +40,7 @@ namespace cor64.IO
             m_MemModel.RDRAMRegs = new RdramRegisters(this);
             m_MemModel.PIF = new PIFMemory(this);
             m_MemModel.DiskDriveRegisters = new DummyMemory(0x1000000, "Cartridge Domain 2, Address 1");
+            m_MemModel.Unused = new DummyMemory(0x700000, "Unused section after SP regs");
             m_MemModel.Init();
 
             m_FastMemMap.Init(m_MemModel);
@@ -111,29 +112,54 @@ namespace cor64.IO
             blkDevice.Write(blkOffset, buffer, offset, count);
         }
 
-        /* Used by DMA operations */
-        public Task<int> MemoryCopy(uint srcAdress, uint destAddress, int len)
-        {
-            var copyTask = new Task<int>(() =>
+        public int MemoryCopy(uint srcAddress, uint destAddress, int len) {
+            int count = 0;
+
+            byte[] buffer = new byte[4];
+
+            for (int i = 0; i < (len / 4); i++)
             {
-                int count = 0;
+                var src = srcAddress + (i * 4);
+                var dst = destAddress + (i * 4);
 
-                byte[] buffer = new byte[4];
+                Read(src, buffer, 0, 4);
 
-                for (int i = 0; i < len / 4; i++)
-                {
-                    Read(srcAdress + (i * 4), buffer, 0, 4);
-                    Write(destAddress + +(i * 4), buffer, 0, 4);
-                    count += 4;
-                }
+                #if DEBUG_DMA_HEX
+                Log.Debug("Memory Copy {0:X8}->{1:X8} [{2:X2}, {3:X2}, {4:X2}, {5:X2}]",
+                           src, dst, buffer[0], buffer[1], buffer[2], buffer[3]);
+                #endif
 
-                return count;
-            });
+                Write(dst, buffer, 0, 4);
+                count += 4;
+            }
 
-            /* For now, run on same thread */
-            copyTask.RunSynchronously();
+            return count;
+        }
 
-            return copyTask;
+        public int MemoryCopyUnaligned(uint srcAddress, uint destAddress, int len) {
+            int count = 0;
+
+            byte[] buffer = new byte[1];
+
+            for (int i = 0; i < len; i++)
+            {
+                var src = srcAddress + i;
+                var dst = destAddress + i;
+
+                Read(src, buffer, 0, 1);
+
+                Write(dst, buffer, 0, 1);
+
+                count++;
+            }
+
+            return count;
+        }
+
+        /* Used by DMA operations */
+        public Task<int> MemoryCopyAsync(uint srcAddress, uint destAddress, int len)
+        {
+            return new Task<int>(() => MemoryCopy(srcAddress, destAddress, len));
         }
 
         public Rdram RDRAM => (Rdram)m_MemModel.RDRAM;

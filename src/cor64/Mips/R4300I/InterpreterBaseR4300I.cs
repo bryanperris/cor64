@@ -115,7 +115,7 @@ namespace cor64.Mips.R4300I
 
         protected ulong ReadCp0Value(int select, bool isDwordInst)
         {
-            var value = State.Cp0.RegRead(select);
+            var value = Cop0.CpuRegisterRead(select);
 
             /* If running 64-bit mode, with the 32-bit version, then sign extend */
             if (IsOperation64 && !isDwordInst)
@@ -352,7 +352,7 @@ namespace cor64.Mips.R4300I
         {
             bootManager.PCWrite += (pc) =>
             {
-                m_Pc = pc;
+                PC = pc;
             };
 
             bootManager.MemWrite += (addr, val) =>
@@ -420,14 +420,11 @@ namespace cor64.Mips.R4300I
 
         private sealed class SimpleVMemStream : VMemStream
         {
-            private InterpreterBaseR4300I m_Core;
+            private readonly InterpreterBaseR4300I m_Core;
             private bool m_UseCache;
-            private bool m_IsTranslated;
             private bool m_IsDataPath;
-            private MemoryDebugger m_MemDebugger = new MemoryDebugger();
-            private int m_LastNamedRegionHash = 0;
-            private uint m_Size = 0xFFFFFFFF;
-            private Stream m_BaseStream;
+            private readonly uint m_Size = 0xFFFFFFFF;
+            private readonly Stream m_BaseStream;
 
             public SimpleVMemStream(InterpreterBaseR4300I core, Stream stream, bool isDataPath) : base(stream)
             {
@@ -449,7 +446,7 @@ namespace cor64.Mips.R4300I
             {
                 var read = base.Read(buffer, offset, count);
 
-                if (m_Core.IsMemTraceActive && m_IsDataPath)
+                if ((m_Core.IsMemTraceActive || m_Core.InstDebugMode != InstructionDebugMode.None) && m_IsDataPath)
                 {
                     m_Core.TraceMemoryHit((uint)(ulong)m_BaseStream.Position, false, DebugValue(buffer, offset, count));
                 }
@@ -461,7 +458,7 @@ namespace cor64.Mips.R4300I
             {
                 base.Write(buffer, offset, count);
 
-                if (m_Core.IsMemTraceActive && m_IsDataPath)
+                if ((m_Core.IsMemTraceActive || m_Core.InstDebugMode != InstructionDebugMode.None) && m_IsDataPath)
                 {
                     m_Core.TraceMemoryHit((uint)(ulong)m_BaseStream.Position, true, DebugValue(buffer, offset, count));
                 }
@@ -546,7 +543,7 @@ namespace cor64.Mips.R4300I
         public CoreDebugger CoreDbg => m_CoreDebugger;
 
         protected void InstructionIgnore(DecodedInstruction inst) {
-            Log.Debug("Ignoring instruction: {0:X8} {1}", m_Pc, Disassembler.GetFullDisassembly(inst));
+            //Log.Debug("Ignoring instruction: {0:X8} {1}", m_Pc, Disassembler.GetFullDisassembly(inst));
         }
 
 

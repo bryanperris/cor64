@@ -8,7 +8,7 @@ namespace cor64.IO
 {
     public abstract class DmaBlockDevice : BlockDevice
     {
-        private N64MemoryController m_Controller;
+        private readonly N64MemoryController m_Controller;
 
         protected DmaBlockDevice(N64MemoryController controller)
         {
@@ -21,7 +21,15 @@ namespace cor64.IO
 
         protected Task<int> TransferBytesAsync(int length)
         {
+            return m_Controller.MemoryCopyAsync(SourceAddress, DestAddress, length);
+        }
+
+        protected int TransferBytes(int length) {
             return m_Controller.MemoryCopy(SourceAddress, DestAddress, length);
+        }
+
+        protected int TransferBytesUnaligned(int length) {
+            return m_Controller.MemoryCopyUnaligned(SourceAddress, DestAddress, length);
         }
     }
 }

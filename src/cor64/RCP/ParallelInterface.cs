@@ -60,7 +60,7 @@ namespace cor64.RCP
            (RW): [1:0] domain 2 device R/W release duration
         0x0460 0034 to 0x046F FFFF  Unused
     */
-    public class PIMemory : PerpherialDevice
+    public class ParallelInterface : PerpherialDevice
     {
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
         private MipsInterface m_RcpInterface;
@@ -78,15 +78,22 @@ namespace cor64.RCP
         private MemMappedBuffer m_Dom2Pgs = new MemMappedBuffer(4);
         private MemMappedBuffer m_Dom2Rls = new MemMappedBuffer(4);
 
-        public PIMemory(N64MemoryController controller) : base(controller, 0x100000)
+        public ParallelInterface(N64MemoryController controller) : base(controller, 0x100000)
         {
             m_ReadLen.Write += ReadLengthWrite;
             m_WriteLen.Write += WriteLengthWrite;
             m_Status.Write += StatusWrite;
 
+            m_DramAddress.Write += () => {
+                m_DramAddress.RegisterValue &= 0x0FFFFFFF;
+                m_DramAddress.RegisterValue &= ~1U;
+            };
+
+            m_CartAddress.Write += () => m_CartAddress.RegisterValue &= ~1U;
+
             Map(
-                m_DramAddress, m_CartAddress, m_ReadLen, m_WriteLen, 
-                m_Status, 
+                m_DramAddress, m_CartAddress, m_ReadLen, m_WriteLen,
+                m_Status,
                 m_Dom1Lat, m_Dom1Pwd, m_Dom1Pgs, m_Dom1Rls,
                 m_Dom2Lat, m_Dom2Pwd, m_Dom2Pgs, m_Dom2Rls);
         }
@@ -96,10 +103,22 @@ namespace cor64.RCP
         }
 
         private void StatusWrite() {
+
+            // Reset controller
+            if ((m_Status.RegisterValue & 1) != 0) {
+                m_Status.ReadonlyRegisterValue = 0;
+            }
+
             if ((m_Status.RegisterValue & 0b10) != 0) {
                 // Clear PI interrupt bit write
                 m_RcpInterface.ClearInterrupt(MipsInterface.INT_PI);
-                Log.Debug("Clear PI interrupt");
+                m_Status.ReadonlyRegisterValue &= ~8U;
+                // Log.Debug("Clear PI interrupt");
+            }
+
+            // Undocumented behavior
+            if ((m_Status.RegisterValue & 8) != 0) {
+                m_Status.ReadonlyRegisterValue |=8;
             }
 
             m_Status.RegisterValue = 0;
@@ -109,26 +128,73 @@ namespace cor64.RCP
         {
             SourceAddress = m_CartAddress.RegisterValue;
             DestAddress = m_DramAddress.RegisterValue;
-            int size = (int)m_WriteLen.RegisterValue + 1;
+            int size = (int)m_WriteLen.RegisterValue;
 
-            Debugger.Current.Track_DmaOperation("PI", SourceAddress, DestAddress, size);
+            // Force length alignment
+            // size = (size + 7U) & ~7U;
+            // XXX: It seems to always add 1 to the size
+            size++;
 
-            TransferBytesAsync(size);
+            if ((size % 8) == 0) {
+                var off = (int)(DestAddress % 8);
+
+                if (off != 0) {
+                    TransferBytesUnaligned(size - off);
+                }
+                else {
+                    TransferBytes(size);
+                }
+            }
+            else {
+                TransferBytesUnaligned(size);
+            }
+
+            Debugger.Current.ReportDmaFinish("PI", false, SourceAddress, DestAddress, size);
+
+            m_DramAddress.RegisterValue += (uint)size+1;
+            m_CartAddress.RegisterValue += (uint)size+1;
+
+            // Some strange address alignment/shift happens here
 
             m_RcpInterface.SetInterrupt(MipsInterface.INT_PI, true);
+            m_Status.ReadonlyRegisterValue |= 8;
         }
 
         private void ReadLengthWrite()
         {
             SourceAddress = m_DramAddress.RegisterValue;
             DestAddress = m_CartAddress.RegisterValue;
-            int size = (int)m_ReadLen.RegisterValue + 1;
+            int size = (int)m_WriteLen.RegisterValue;
 
-            Debugger.Current.Track_DmaOperation("PI", SourceAddress, DestAddress, size);
+            // Force length alignment
+            // size = (size + 7U) & ~7U;
+            // XXX: It seems to always add 1 to the size
+            size++;
 
-            TransferBytesAsync(size);
+            if ((size % 8) == 0) {
+                var off = (int)(DestAddress % 8);
+
+                if (off != 0) {
+                    TransferBytesUnaligned(size - off);
+                }
+                else {
+                    TransferBytes(size);
+                }
+            }
+            else {
+                TransferBytesUnaligned(size);
+            }
+
+
+            Debugger.Current.ReportDmaFinish("PI", true, SourceAddress, DestAddress, size);
+
+            m_DramAddress.RegisterValue += (uint)size+1;
+            m_CartAddress.RegisterValue += (uint)size+1;
+
+            // Some strange address alignment/shift happens here
 
             m_RcpInterface.SetInterrupt(MipsInterface.INT_PI, true);
+            m_Status.ReadonlyRegisterValue |= 8;
         }
     }
 }

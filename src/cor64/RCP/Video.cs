@@ -111,6 +111,10 @@ namespace cor64.RCP
         private readonly VideoControlReg m_ControlRegStruct;
         private readonly MipsInterface m_Interface;
 
+        private readonly ManualResetEvent m_RdpWait = new ManualResetEvent(true);
+        private bool m_UseRdp = false;
+        private uint m_RdpAddress;
+
         public Video(N64MemoryController controller, MipsInterface mipsInterface) : base(controller, 0x100000)
         {
             Map(
@@ -134,17 +138,17 @@ namespace cor64.RCP
             m_Origin.Write += FramebufferAddressHandler;
             m_CurrentLine.Write += CurrentScanlineHandler;
 
-            m_Width.Write += () => Log.Debug("Framebuffer width set to " + m_Width.RegisterValue.ToString("X8"));
+            // m_Width.Write += () => Log.Debug("Framebuffer width set to " + m_Width.RegisterValue.ToString("X8"));
 
-            m_XScale.Write += () => Log.Debug("Framebuffer xscale set to " + m_XScale.RegisterValue.ToString("X8"));
+            // m_XScale.Write += () => Log.Debug("Framebuffer xscale set to " + m_XScale.RegisterValue.ToString("X8"));
 
-            m_HStart.Write += () => Log.Debug("Framebuffer hstart set to " + m_HStart.RegisterValue.ToString("X8"));
+            // m_HStart.Write += () => Log.Debug("Framebuffer hstart set to " + m_HStart.RegisterValue.ToString("X8"));
 
-            m_VStart.Write += () => Log.Debug("Framebuffer vstart set to " + m_VStart.RegisterValue.ToString("X8"));
+            // m_VStart.Write += () => Log.Debug("Framebuffer vstart set to " + m_VStart.RegisterValue.ToString("X8"));
 
-            m_YScale.Write += () => Log.Debug("Framebuffer yscale set to " + m_YScale.RegisterValue.ToString("X8"));
+            // m_YScale.Write += () => Log.Debug("Framebuffer yscale set to " + m_YScale.RegisterValue.ToString("X8"));
 
-            m_Interrupt.Write += () => Log.Debug("Framebuffer interrupt set to " + m_Interrupt.RegisterValue.ToString("X8"));
+            // m_Interrupt.Write += () => Log.Debug("Framebuffer interrupt set to " + m_Interrupt.RegisterValue.ToString("X8"));
 
             m_Memory = controller;
 
@@ -158,9 +162,8 @@ namespace cor64.RCP
 
         private void CurrentScanlineHandler()
         {
-            if (m_Interface.IntVI) {
-                m_Interface.ClearInterrupt(MipsInterface.INT_VI);
-            }
+            m_Interface.ClearInterrupt(MipsInterface.INT_VI);
+           // m_Interrupt.RegisterValue = 0;
         }
 
         private void FramebufferAddressHandler()
@@ -168,7 +171,14 @@ namespace cor64.RCP
             // Log.Debug("Framebuffer pointer set to {0:X8}", FramebufferOffset);
         }
 
-        public int FramebufferOffset => (int)(m_Origin.RegisterValue << 8 >> 8);
+        public int ReadFramebufferAddressSafe() {
+            m_RdpWait.WaitOne();
+
+            if (!m_UseRdp)
+                return (int)(m_Origin.RegisterValue & 0x00FFFFFF);
+            else
+                return (int)(m_RdpAddress & 0x00FFFFFF);
+        }
 
         public uint Origin => m_Origin.RegisterValue;
 
@@ -224,13 +234,13 @@ namespace cor64.RCP
 
         public VideoControlReg ControlReg => m_ControlRegStruct;
 
-        public IntPtr FramebufferPtr => m_Memory.RDRAM.GetRamPointer(FramebufferOffset);
+        // public IntPtr FramebufferPtr => m_Memory.RDRAM.GetRamPointer(FramebufferOffset);
 
         public unsafe void CopyFramebufferRGB5551_16(PinnedBuffer buffer)
         {
             // Converts RGB5551 to RGB565
 
-            ushort* srcPixel = (ushort*)m_Memory.RDRAM.GetRamPointer(FramebufferOffset);
+            ushort* srcPixel = (ushort*)m_Memory.RDRAM.GetRamPointer(ReadFramebufferAddressSafe());
             ushort* dstPixel = (ushort*)buffer.GetPointer();
 
             for (int i = 0; i < buffer.Size / 2; i++)
@@ -256,7 +266,7 @@ namespace cor64.RCP
 
         public unsafe void CopyFramebufferRGB5551_32(PinnedBuffer buffer)
         {
-            ushort* srcPixel = (ushort*)m_Memory.RDRAM.GetRamPointer(FramebufferOffset);
+            ushort* srcPixel = (ushort*)m_Memory.RDRAM.GetRamPointer(ReadFramebufferAddressSafe());
             uint* dstPixel = (uint*)buffer.GetPointer();
 
             for (int i = 0; i < buffer.Size / 2; i++)
@@ -290,7 +300,7 @@ namespace cor64.RCP
 
         public unsafe void CopyFramebufferRGBA8888(PinnedBuffer buffer)
         {
-            uint* srcPixel = (uint*)m_Memory.RDRAM.GetRamPointer(FramebufferOffset);
+            uint* srcPixel = (uint*)m_Memory.RDRAM.GetRamPointer(ReadFramebufferAddressSafe());
             uint* dstPixel = (uint*)buffer.GetPointer();
 
             for (int i = 0; i < buffer.Size / 4; i++)
@@ -322,7 +332,21 @@ namespace cor64.RCP
 
         public void SetVideoInterrupt()
         {
-            m_Interface.SetInterrupt(MipsInterface.INT_VI, true);
+            if (m_Interface.IntMaskVI)
+                m_Interface.SetInterrupt(MipsInterface.INT_VI, true);
+        }
+
+        public void SetFBFromRDP(uint framebufferAddress)
+        {
+            // Enable this to directly display where RDP is rasterizing to
+            // m_RdpWait.Reset();
+            // m_RdpAddress = framebufferAddress;
+            // m_UseRdp = true;
+            // m_RdpWait.Set();
+        }
+
+        public void FakeCurrentLine() {
+            m_CurrentLine.RegisterValue = m_Interrupt.ReadonlyRegisterValue;
         }
     }
 }

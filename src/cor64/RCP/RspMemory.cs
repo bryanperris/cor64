@@ -7,7 +7,7 @@ namespace cor64.RCP
 {
     public class RspMemory : Stream
     {
-        private PinnedBuffer m_Buffer;
+        private readonly PinnedBuffer m_Buffer;
 
         public RspMemory(PinnedBuffer rspMemoryBuffer) {
             m_Buffer = rspMemoryBuffer;

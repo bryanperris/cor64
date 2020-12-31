@@ -20,6 +20,7 @@ namespace cor64.Mips.R4300I
         private DecodedInstruction m_FailedInstruction;
         private bool m_TakenException;
         private bool m_BranchUnitBusy = false;
+        private ulong? m_InfiniteJumpAddress;
 
         public Interpreter(string abi = "o32") : base(new Disassembler(abi))
         {
@@ -46,23 +47,23 @@ namespace cor64.Mips.R4300I
 
         public override string Description => "MIPS Interpreter";
 
-        public void CheckForInterrupts()
+        public void CheckIfNeedServicing()
         {
             // Do not do anything if the system controll has not signeled interrupts that need servicing
             if (Cop0.InterpreterPendingInterrupts && (State.Cp0.Status.ErrorLevel || State.Cp0.Status.ExceptionLevel)) {
                 Cop0.InterpreterPendingInterrupts = false;
 
-                m_Pc = Cop0.ExceptionHandlerAddress;
+                PC = Cop0.ExceptionHandlerAddress;
 
                 if (State.Cp0.Status.ErrorLevel)
                 {
                     #if DEBUG_INTERRUPTS
-                    Log.Debug("Error Handler Taken: " + m_Pc.ToString("X8"));
+                    Log.Debug("Error Handler Taken: " + PC.ToString("X8"));
                     #endif
                 }
                 else {
                     #if DEBUG_INTERRUPTS
-                    Log.Debug("Exception Handler Taken: " + m_Pc.ToString("X8"));
+                    Log.Debug("Exception Handler Taken: " + PC.ToString("X8"));
                     #endif
                 }
 
@@ -74,17 +75,10 @@ namespace cor64.Mips.R4300I
 
         public sealed override void ExceptionReturn(DecodedInstruction inst)
         {
-            #if DEBUG_INTERRUPTS
-
-            if (State.Cp0.Status.ErrorLevel) {
-                Log.Debug("Jump to Error EPC: " + m_Pc.ToString("X16"));
-            }
-            else {
-                Log.Debug("Jump to EPC: " + m_Pc.ToString("X16"));
-            }
+            #if DEBUG_INTERRUPTS || DEBUG_ERET
 
             if (!m_TakenException) {
-                Log.Debug("ERET called outside a handler: {0:X8}", m_Pc);
+                Log.Debug("ERET called outside a handler: {0:X8}", PC);
             }
             else {
                 Log.Debug("ERET called inside a handler");
@@ -92,18 +86,19 @@ namespace cor64.Mips.R4300I
 
             #endif
 
-            if (m_TakenException) {
-                Cop0.ClearPendingExceptions();
+            // XXX: Always clear the exception state
+            Cop0.ClearExceptionState();
 
+            if (m_TakenException) {
                 if (State.Cp0.Status.ErrorLevel)
                 {
                     // when servicing an error trap
-                    m_Pc = (uint)State.Cp0.RegRead(CTS.CP0_REG_ERROR_EPC);
+                    PC = (uint)Cop0.CpuRegisterRead(CTS.CP0_REG_ERROR_EPC);
                     State.Cp0.Status.ErrorLevel = false;
                 }
                 else
                 {
-                    m_Pc = (uint)State.Cp0.RegRead(CTS.CP0_REG_EPC);
+                    PC = (uint)Cop0.CpuRegisterRead(CTS.CP0_REG_EPC);
                     State.Cp0.Status.ExceptionLevel = false;
                 }
 
@@ -114,20 +109,37 @@ namespace cor64.Mips.R4300I
                 #endif
             }
             else {
-                m_Pc = (uint)State.Cp0.RegRead(CTS.CP0_REG_EPC);
+                PC = (uint)Cop0.CpuRegisterRead(CTS.CP0_REG_EPC);
                 State.Cp0.Status.ExceptionLevel = false;
             }
 
-            m_Pc &= 0xFFFFFFFF;
+            #if DEBUG_INTERRUPTS || DEBUG_ERET
+
+            if (State.Cp0.Status.ErrorLevel && m_TakenException) {
+                Log.Debug("Jump to Error EPC: " + PC.ToString("X16"));
+            }
+            else {
+                Log.Debug("Jump to EPC: " + PC.ToString("X16"));
+            }
+
+            #endif
+
+            PC &= 0xFFFFFFFF;
 
             // We must subtract by 4 due to the PC increment made after the instuction call
-            m_Pc -= 4;
+            PC -= 4;
 
             m_TakenException = false;
             State.LLBit = false;
         }
 
-        private void ExecuteNextInst() {
+        public override void Step()
+        {
+            /* Step clock */
+            CoreClock.NextTick();
+            Cop0.MipsTimerTick(1);
+
+            /* Execute next instruction */
             /* Delay Slot Logic */
             if (WillJump)
             {
@@ -146,36 +158,25 @@ namespace cor64.Mips.R4300I
 
                 /* Should always be a word-aligned relative PC jump */
                 /* Always force 32-bit addresses */
-                m_Pc = (uint)TargetAddress;
+                PC = (uint)TargetAddress;
             }
             else
             {
+                // Check if the system controller detects pending events
+                Cop0.CheckInterrupts(PC, false);
+
+                // Check if the CPU should start service handling
+                CheckIfNeedServicing();
+
                 /* Nornal execution path */
                 if (ExecuteInst())
                 {
-                    m_Pc += 4;
+                    PC += 4;
                 }
                 else
                 {
                     throw new Exception(String.Format("Failed to execute instruction: 0x{0:X8} 0x{1:X8}", m_FailedInstruction.Address, m_FailedInstruction.Inst.inst));
                 }
-            }
-        }
-
-        public override void Step()
-        {
-            /* Step clock */
-            CoreClock.NextTick();
-
-            /* Step coprocessor 0 */
-            Cop0.ProcessorTick(m_Pc, BranchDelay);
-
-            /* Execute next instruction */
-            ExecuteNextInst();
-
-            /* Check for pending exception events only when the branch unit is not busy */
-            if (!WillJump) {
-                CheckForInterrupts();
             }
         }
 
@@ -213,25 +214,32 @@ namespace cor64.Mips.R4300I
                     if (!NullifyNext)
                     {
                         CoreDbg.TestForInstBreakpoint(decoded);
-                        DebugInstruction(decoded);
+
+                        #if DEBUG
                         TraceInstruction(decoded, false, m_TakenException);
+                        #endif
 
                         #if CPU_PROFILER
                         BeginInstructionProfile(decoded);
                         #endif
+
+                        var pc = PC;
+                        var inInt = m_TakenException;
 
                         call(decoded);
 
                         #if CPU_PROFILER
                         EndInstructionProfile();
                         #endif
+
+                        DebugInstruction(decoded, pc, inInt);
                     }
                     else
                     {
                         NullifyNext = false;
                         TraceInstruction(decoded, true, m_TakenException);
                     }
-                    
+
                     return true;
                 }
             }
@@ -242,16 +250,35 @@ namespace cor64.Mips.R4300I
             }
         }
 
-        [Conditional("DEBUG")]
-        private void DebugInstruction(DecodedInstruction instruction)
+        private void DebugInstruction(DecodedInstruction instruction, ulong pc, bool inInt)
         {
             if (core_InstDebugMode != InstructionDebugMode.None)
             {
                 if (core_InstDebugMode == InstructionDebugMode.Full || (core_InstDebugMode == InstructionDebugMode.ProgramOnly && !InBootMode)) {
-                    Console.WriteLine("{0:X8} |{1}| {2}",
-                        m_Pc,
-                        m_TakenException ? "INTR" : (InBootMode ? "BOOT" : "PROG"),
-                        Disassembler.GetFullDisassembly(instruction)
+                    if (m_InfiniteJumpAddress != null) {
+                        if (PC == m_InfiniteJumpAddress || PC == (m_InfiniteJumpAddress + 4)) {
+                            return;
+                        }
+                    }
+                    else {
+                        if (m_WarnInfiniteJump) {
+                            m_InfiniteJumpAddress = PC;
+                        }
+                    }
+
+                    string memNote = null;
+
+                    if (core_MemAccessNote != null) {
+                        memNote = "     # " + core_MemAccessNote.ReadMeta();
+                        core_MemAccessNote = null;
+                    }
+
+                    // if (memNote != null)
+                    Console.WriteLine("CPU {0:X8} |{1}| {2} {3}",
+                        pc,
+                        inInt ? "INTR" : (InBootMode ? "BOOT" : "PROG"),
+                        Disassembler.GetFullDisassembly(instruction),
+                        memNote ?? ""
                         );
                 }
             }
@@ -960,7 +987,7 @@ namespace cor64.Mips.R4300I
                             return;
                         }
 
-                        value = State.Cp0.RegRead(inst.Destination);
+                        value = Cop0.CpuRegisterRead(inst.Destination);
 
                         /* If running 64-bit mode, with the 32-bit version, then sign extend */
                         if (IsOperation64 && inst.IsData32())
@@ -1031,7 +1058,7 @@ namespace cor64.Mips.R4300I
                     }
                 case RegBoundType.Cp0:
                     {
-                        State.Cp0.RegWrite(inst.Destination, value);
+                        Cop0.CpuRegisterWrite(inst.Destination, value);
                         break;
                     }
                 case RegBoundType.Cp1:
@@ -1083,7 +1110,7 @@ namespace cor64.Mips.R4300I
         {
             bool isLikely = inst.IsLikely();
             bool isLink = inst.IsLink();
-            TargetAddress = CoreUtils.ComputeBranchPC(IsOperation64, m_Pc, CoreUtils.ComputeBranchTargetOffset(inst.Immediate));
+            TargetAddress = CoreUtils.ComputeBranchPC(IsOperation64, PC, CoreUtils.ComputeBranchTargetOffset(inst.Immediate));
             ulong source = ReadGPR64(inst.Source);
             ulong target = ReadGPR64(inst.Target);
 
@@ -1091,7 +1118,7 @@ namespace cor64.Mips.R4300I
 
             if (isLink)
             {
-                Writeback64(31, m_Pc + 8);
+                Writeback64(31, PC + 8);
             }
 
             CoreDbg.TestForBranchBreakpoint((uint)TargetAddress, TakeBranch);
@@ -1117,23 +1144,23 @@ namespace cor64.Mips.R4300I
             bool isLink = inst.IsLink();
             bool isRegister = inst.IsRegister();
             BranchDelay = true;
-            TargetAddress = CoreUtils.ComputeTargetPC(isRegister, m_Pc, ReadGPR64(inst.Source), inst.Inst.target);
+            TargetAddress = CoreUtils.ComputeTargetPC(isRegister, PC, ReadGPR64(inst.Source), inst.Inst.target);
             UnconditionalJump = true;
 
             if (isLink)
             {
                 // TODO: The recompiler will need this fix
                 if (isRegister && (inst.Target & 0b11) != 0) {
-                    Writeback64(inst.Target, m_Pc + 8);
+                    Writeback64(inst.Target, PC + 8);
                 }
                 else {
-                    Writeback64(31, m_Pc + 8);
+                    Writeback64(31, PC + 8);
                 }
             }
 
             CoreDbg.TestForBranchBreakpoint((uint)TargetAddress, true);
 
-            if (!isRegister && (uint)TargetAddress == (uint)m_Pc && !m_WarnInfiniteJump)
+            if (!isRegister && (uint)TargetAddress == (uint)PC && !m_WarnInfiniteJump)
             {
                 Log.Warn("An unconditional infinite jump was hit: " + inst.Address.ToString("X8"));
                 m_WarnInfiniteJump = true;

@@ -16,8 +16,8 @@ namespace cor64.Mips.Rsp
 
 
         /* Reg moving */
-        public static readonly Opcode SPMFC0 = Define(Cop0, "mfc0", SpCop0_CT, Cp0, Gpr, Data32);
-        public static readonly Opcode SPMTC0 = Define(Cop0, "mtc0", SpCop_TC, Gpr, Cp0, Data32);
+        public static readonly Opcode SPMFC0 = Define(Cop0, "mfc0", RspCp0_CT, Cp0, Gpr, Data32);
+        public static readonly Opcode SPMTC0 = Define(Cop0, "mtc0", RspCp0_TC, Gpr, Cp0, Data32);
         public static readonly Opcode MFC2 = Define(VU, "mfc2", VU_CT, Cp2, Gpr, Data32);
         public static readonly Opcode MTC2 = Define(VU, "mtc2", VU_TC, Gpr, Cp2, Data32);
         public static readonly Opcode CFC2 = Define(VU, "cfc2", VU_FromCtrl, Cp2Ctl, Gpr, Data32);

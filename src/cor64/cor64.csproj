@@ -13,6 +13,7 @@
   <!-- Emulator debugging compiler flags -->
   <PropertyGroup>
     <!-- <DefineConstants>$(DefineConstants);DEBUG_COPROCESSOR</DefineConstants> -->
+    <!-- <DefineConstants>$(DefineConstants);DEBUG_CAUSE_REG</DefineConstants> -->
     <!-- <DefineConstants>$(DefineConstants);DEBUG_MIPS_TIMER</DefineConstants> -->
     <!-- <DefineConstants>$(DefineConstants);DEBUG_INTERRUPTS</DefineConstants> -->
     <!-- <DefineConstants>$(DefineConstants);VERY_DELAYED_INTERRUPTS</DefineConstants> -->
@@ -28,6 +29,10 @@
     <!-- <DefineConstants>$(DefineConstants);SAFE_MEMORY_ACCESS</DefineConstants> -->
     <!-- <DefineConstants>$(DefineConstants);CPU_PROFILER</DefineConstants> -->
     <!-- <DefineConstants>$(DefineConstants);CPU_FORCE_32</DefineConstants> -->
+    <!-- <DefineConstants>$(DefineConstants);DEBUG_ADDRESS_CHECKING</DefineConstants> -->
+    <!-- <DefineConstants>$(DefineConstants);DEBUG_DMA_HEX</DefineConstants> -->
+    <DefineConstants>$(DefineConstants);DEBUG_DMA_CMDS</DefineConstants>
+    <!-- <DefineConstants>$(DefineConstants);DEBUG_ERET</DefineConstants>  -->
   </PropertyGroup>
   <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>

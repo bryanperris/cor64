@@ -39,6 +39,7 @@ namespace cor64.IO
             m_ReadMap.Cart = memModel.Cart.GetReadPointerMap();
             m_ReadMap.DiskDriveRegisters = memModel.DiskDriveRegisters.GetReadPointerMap();
             m_ReadMap.PIF = memModel.PIF.GetReadPointerMap();
+            m_ReadMap.Unused = memModel.Unused.GetReadPointerMap();
             m_ReadMap.Init();
 
             m_WriteMap.RDRAM = memModel.RDRAM.GetWritePointerMap();
@@ -55,27 +56,40 @@ namespace cor64.IO
             m_WriteMap.Cart = memModel.Cart.GetWritePointerMap();
             m_WriteMap.DiskDriveRegisters = memModel.DiskDriveRegisters.GetWritePointerMap();
             m_WriteMap.PIF = memModel.PIF.GetWritePointerMap();
+            m_WriteMap.Unused = memModel.Unused.GetWritePointerMap();
             m_WriteMap.Init();
         }
 
         public void Read(uint address, byte[] buffer, int offset, int count)
         {
-            //try {
-                var blkPtr = m_ReadMap.GetDevice(address);
-                var blkOffset = m_ReadMap.GetDeviceOffset(address);
-                var ptr = blkPtr[blkOffset / 4];
-                var off = (int)(address % 4);
-                Marshal.Copy(ptr.Offset(off), buffer, offset, count);
-            //}
-            // catch (NullReferenceException e) {
-            //     Log.Debug("Null pointer hit in block ptr table: " + s_MemDbg.GetMemName(address));
-            //     throw e;
-            // }
+            var blkPtr = m_ReadMap.GetDevice(address);
+
+            #if DEBUG_ADDRESS_CHECKING
+            if (blkPtr == null) {
+                Log.Error("FASTREAD: Failed to find pointer for {0:X8}", address);
+            }
+            #endif
+
+            var blkOffset = m_ReadMap.GetDeviceOffset(address);
+            var ptr = blkPtr[blkOffset / 4];
+            var off = (int)(address % 4);
+            Marshal.Copy(ptr.Offset(off), buffer, offset, count);
         }
 
         public void Write(uint address, byte[] buffer, int offset, int count)
         {
             var blkPtr = m_WriteMap.GetDevice(address);
+            
+            if (address == 0x80024400) {
+                Console.ResetColor();
+            }
+
+            #if DEBUG_ADDRESS_CHECKING
+            if (blkPtr == null) {
+                Log.Error("FASTWRITE: Failed to find pointer for {0:X8}", address);
+            }
+            #endif
+
             var blkOffset = m_WriteMap.GetDeviceOffset(address);
             var ptr = blkPtr[blkOffset / 4];
             var off = (int)(address % 4);

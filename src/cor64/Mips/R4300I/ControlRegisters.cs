@@ -18,6 +18,11 @@ namespace cor64.Mips.R4300I
         public CauseRegister Cause { get; } = new CauseRegister();
         public StatusRegister Status { get; } = new StatusRegister();
 
+        private const uint CAUSE_MASK = 0x00000300;
+        private const uint STATUS_MASK = 0xFE20FFFF;
+
+        private uint m_LocalCount;
+
         public ControlRegisters()
         {
             m_Registers = new ulong[SIZE];
@@ -28,13 +33,41 @@ namespace cor64.Mips.R4300I
             {
                 if (i == CTS.CP0_REG_CAUSE)
                 {
-                    m_ReadMap[i] = (o) => Cause.Value;
-                    m_WriteMap[i] = (o, x) => Cause.Value = (uint)x;
+                    m_ReadMap[i] = (_) => Cause.Value;
+                    m_WriteMap[i] = (_, x) => Cause.Value = (uint)x;
                 }
                 else if (i == CTS.CP0_REG_SR)
                 {
-                    m_ReadMap[i] = (o) => Status.Read();
-                    m_WriteMap[i] = (o, x) => Status.Write((uint)x);
+                    m_ReadMap[i] = (_) => Status.Read();
+                    m_WriteMap[i] = (_, x) => Status.Write((uint)x);
+                }
+                else if (i == CTS.CP0_REG_COUNT) {
+                    m_ReadMap[i] = (o) => m_Registers[o];
+                    m_WriteMap[i] = (o, x) => {
+                        m_LocalCount = (uint)x;
+                        m_Registers[o] = x;
+                    };
+                }
+                else if (i == CTS.CP0_REG_PRID) {
+                    m_WriteMap[i] = VoidWrite;
+                    m_ReadMap[i] = (_) => 0x00000B22;
+                }
+                else if (i == 7 || (i >= 21 && i <= 25)) {
+                    m_ReadMap[i] = VoidRead;
+                    m_WriteMap[i] = VoidWrite;
+                }
+                else if (i == 31) {
+                    // Unknown behavior here based on this test: https://github.com/PeterLemon/N64/tree/master/CPUTest/CP0/COP0Register
+                    m_WriteMap[i] = (_, x) => {
+                        m_Registers[31] = x;
+                        m_Registers[21] = x;
+                    };
+
+                    m_ReadMap[i] = (_) => m_Registers[31];
+                }
+                else if (i == CTS.CP0_REG_CONFIG) {
+                    m_ReadMap[i] = (_) => 0x7006E463;
+                    m_WriteMap[i] = VoidWrite;
                 }
                 else
                 {
@@ -50,11 +83,21 @@ namespace cor64.Mips.R4300I
         }
 
         public void Write(int i, ulong value)
-        {
+        {   
             m_WriteMap[i](i, value);
         }
 
-        public ulong RegRead(int i)
+        public uint Count => m_LocalCount;
+
+        private void VoidWrite(int i, ulong value) {
+            // Do nothing
+        }
+
+        private ulong VoidRead(int i) {
+            return 0;
+        }
+
+        public ulong CpuRegRead(int i)
         {
 // #if DEBUG_COPROCESSOR
 //             Log.Debug("Cop0 Reg Read: {0}", ABI.GetLabel("", ABI.RegType.Cop0, i));
@@ -63,34 +106,27 @@ namespace cor64.Mips.R4300I
             return m_ReadMap[i](i);
         }
 
-        public void RegWrite(int i, ulong value)
+        public void CpuRegWrite(int i, ulong value)
         {
-#if DEBUG_COPROCESSOR
-            Log.Debug("Cop0 Reg Write: {0} {1:X16}", ABI.GetLabel("", ABI.RegType.Cop0, i), value);
-#endif
+            #if DEBUG_COPROCESSOR
+                        Log.Debug("Cop0 Reg Write: {0} {1:X16}", ABI.GetLabel("", ABI.RegType.Cop0, i), value);
+            #endif
+
+            // Properly handle writes to CAUSE
+            if (i == CTS.CP0_REG_CAUSE) {
+                #if DEBUG_CAUSE_REG
+                Log.Debug("Cop0 Cause Write: {0:X8}", value);
+                #endif
+
+                value = (uint)((m_ReadMap[i](i) & ~CAUSE_MASK) | (value & CAUSE_MASK));
+            }
+
+            // Properly handle writes to STATUS
+            if (i == CTS.CP0_REG_SR) {
+                value = (uint)((m_ReadMap[i](i) & ~STATUS_MASK) | (value & STATUS_MASK));
+            }
 
             m_WriteMap[i](i, value);
-
-            // On timer compare write, clear the count and timer pending interrupt
-            if (i == CTS.CP0_REG_COMPARE) {
-                m_WriteMap[CTS.CP0_REG_COUNT](CTS.CP0_REG_COUNT, 0);
-                Cause.ClearPendingInterrupt(7);
-
-#if DEBUG_MIPS_TIMER
-                Log.Debug("Mips Timer Compare set to {0}", value);
-#endif
-            }
-
-
-#if DEBUG_INTERRUPTS
-            if (i == CTS.CP0_REG_EPC) {
-                Log.Debug("EPC was modified by CPU");
-            }
-
-            if (i == CTS.CP0_REG_EPC) {
-                Log.Debug("Error EPC was modified by CPU");
-            }
-#endif
         }
     }
 }

@@ -108,9 +108,13 @@ namespace RunN64
                         s_Emulator.ForceVideoInterrupt();
                     }
 
-                    if (key.Key == ConsoleKey.I) {
-                        Log.Info("Forcing interrupts enable");
-                        s_Emulator.ForceInterruptsEnable();
+                    // if (key.Key == ConsoleKey.I) {
+                    //     Log.Info("Forcing interrupts enable");
+                    //     s_Emulator.ForceInterruptsEnable();
+                    // }
+
+                    if (key.Key == ConsoleKey.D) {
+                        s_Emulator.CPU.SetInstructionDebugMode(InstructionDebugMode.Full);
                     }
                 }
 

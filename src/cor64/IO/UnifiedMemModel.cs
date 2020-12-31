@@ -60,16 +60,26 @@ namespace cor64.IO
             Map(PIRegs,     0x0460, 0x046F);
             Map(RIRegs,     0x0470, 0x047F);
             Map(SIRegs,     0x0480, 0x048F);
+            Map(Unused,     0x0490, 0x04FF);
             Map(DiskDriveRegisters,     0x0500, 0x05FF);
             Map(Cart,       0x1000, 0x1FBF);
             Map(PIF,        0x1FC0, 0x1FCF);
+            Map(Unused,     0x1FD0, 0x7FFF);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public T GetDevice(uint address)
         {
-            uint x = address >> 16;
-            return m_MemMap[x];
+            try
+            {
+                uint x = address >> 16;
+                return m_MemMap[x];
+            }
+            catch (Exception)
+            {
+                throw new IndexOutOfRangeException(
+                    String.Format("Address {0:X8} is out of range of the device memory map", address));
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -113,5 +123,7 @@ namespace cor64.IO
         public T PIF { get; set; }
 
         public T DiskDriveRegisters { get; set; }
+
+        public T Unused { get; set; }
     }
 }

@@ -9,6 +9,7 @@ namespace cor64.Mips.Analysis
     public class InfoBasicBlock : BasicBlock<InfoBasicBlockInstruction>
     {
         private readonly List<InfoBasicBlockLink> m_Links = new List<InfoBasicBlockLink>();
+        private bool m_Finished = false;
 
         public InfoBasicBlock(ulong address) : base(address)
         {
@@ -53,6 +54,10 @@ namespace cor64.Mips.Analysis
             m_Links.AddRange(newLinks);
         }
 
+        internal void SetFinish() {
+            m_Finished = true;
+        }
+
         public bool StartsInterruptServicing { get; set; }
 
         public bool EndsWithExceptionReturn {
@@ -60,5 +65,13 @@ namespace cor64.Mips.Analysis
                 return InstructionList.Last().Inst.Opcode.StartsWith("eret");
             }
         }
+
+        public void DebugPrintLinks() {
+            for (int i = 0; i < m_Links.Count; i++) {
+                Console.WriteLine("Link {0:X8}", m_Links[i].TargetAddress);
+            }
+        }
+
+        public bool IsFinished => m_Finished;
     }
 }

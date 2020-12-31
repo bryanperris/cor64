@@ -111,15 +111,13 @@ namespace cor64.Mips
         private bool ReadIntBool(int index)
         {
             uint val = m_Interrupt.ReadonlyRegisterValue;
-            m_IntFiddler.X(index, ref val);
-            return val != 0;
+            return m_IntFiddler.X(index, ref val) != 0;
         }
 
         private bool ReadMaskBool(int index)
         {
             uint val = m_Mask.ReadonlyRegisterValue;
-            m_IntFiddler.X(index, ref val);
-            return val != 0;
+            return m_IntFiddler.X(index, ref val) != 0;
         }
 
         public void ClearInterrupt(int index) {
@@ -131,6 +129,7 @@ namespace cor64.Mips
         public void ProcessMaskClearSet()
         {
             uint value = m_Mask.RegisterValue;
+            m_Mask.RegisterValue = 0;
 
 #if DEBUG_INTERRUPTS || DEBUG_MI
             Log.Debug("MI Interrupt Mask was modified: " + value.ToString("X8"));
@@ -174,6 +173,60 @@ namespace cor64.Mips
             }
         }
 
+        public void SetInterrupt(int index, bool value)
+        {
+            // if (value && !ReadMaskBool(index))
+            //     return;
+
+            uint val = value ? 1U : 0;
+            uint reg = m_Interrupt.ReadonlyRegisterValue;
+            m_IntFiddler.J(index, ref reg, val);
+            m_Interrupt.ReadonlyRegisterValue = reg;
+        }
+
+        public void ForceClearInterrupts() {
+            m_Interrupt.ReadonlyRegisterValue = 0;
+        }
+
+        private void SetMask(int index, bool value)
+        {
+            // We use the interrupt fiddler on the Mask register readonly side
+
+            uint val = value ? 1U : 0;
+            uint reg = m_Mask.ReadonlyRegisterValue;
+            m_IntFiddler.J(index, ref reg, val);
+            m_Mask.ReadonlyRegisterValue = reg;
+
+            // if (!value) {
+            //     ClearInterrupt(index);
+            // }
+
+#if DEBUG_INTERRUPTS || DEBUG_MI
+            string v = value ? "Enabled" : "Disabled";
+
+            switch (index)
+            {
+                default: break;
+                case INT_SP: Log.Debug("SP Interrupt " + v); break;
+                case INT_SI: Log.Debug("SI Interrupt " + v); break;
+                case INT_AI: Log.Debug("AI Interrupt " + v); break;
+                case INT_VI: Log.Debug("VI Interrupt " + v); break;
+                case INT_PI: Log.Debug("PI Interrupt " + v); break;
+                case INT_DP: Log.Debug("DP Interrupt " + v); break;
+            }
+
+            Log.Debug("-------------- Parsed MI Mask {6:X8}: SP: {0}, SI: {1}, AI: {2}, VI: {3}, PI: {4}, DP: {5}",
+                IntMaskSP,
+                IntMaskSI,
+                IntMaskAI,
+                IntMaskVI,
+                IntMaskPI,
+                IntMaskDP,
+                Mask
+            );
+#endif
+        }
+
         public uint Interrupt => m_Interrupt.ReadonlyRegisterValue;
 
         public uint Mask => m_Mask.ReadonlyRegisterValue;
@@ -201,46 +254,5 @@ namespace cor64.Mips
         public bool IntMaskPI => ReadMaskBool(INT_PI);
 
         public bool IntMaskDP => ReadMaskBool(INT_DP);
-
-        public void SetInterrupt(int index, bool value)
-        {
-            uint val = value ? 1U : 0;
-            uint reg = m_Interrupt.ReadonlyRegisterValue;
-            m_IntFiddler.J(index, ref reg, val);
-            m_Interrupt.ReadonlyRegisterValue = reg;
-        }
-
-        private void SetMask(int index, bool value)
-        {
-            uint val = value ? 1U : 0;
-            uint reg = m_Mask.ReadonlyRegisterValue;
-            m_IntFiddler.J(index, ref reg, val);
-            m_Mask.ReadonlyRegisterValue = reg;
-
-#if DEBUG_INTERRUPTS || DEBUG_MI
-            string v = value ? "Enabled" : "Disabled";
-
-            switch (index)
-            {
-                default: break;
-                case INT_SP: Log.Debug("SP Interrupt " + v); break;
-                case INT_SI: Log.Debug("SI Interrupt " + v); break;
-                case INT_AI: Log.Debug("AI Interrupt " + v); break;
-                case INT_VI: Log.Debug("VI Interrupt " + v); break;
-                case INT_PI: Log.Debug("PI Interrupt " + v); break;
-                case INT_DP: Log.Debug("DP Interrupt " + v); break;
-            }
-
-            Log.Debug("-------------- Parsed MI Mask {6:X8}: SP: {0}, SI: {1}, AI: {2}, VI: {3}, PI: {4}, DP: {5}",
-                IntMaskSP,
-                IntMaskSI,
-                IntMaskAI,
-                IntMaskVI,
-                IntMaskPI,
-                IntMaskDP,
-                Mask
-            );
-#endif
-        }
     }
 }

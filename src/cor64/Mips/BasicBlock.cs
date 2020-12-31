@@ -21,6 +21,12 @@ namespace cor64.Mips
             m_RecordSet.Add(instRecord);
         }
 
+        public TRecord GetLastInst() => m_RecordSet[^1];
+
+        public virtual void UndoLastAppend() {
+            m_RecordSet.RemoveAt(m_RecordSet.Count - 1);
+        }
+
         public int Size => m_RecordSet.Count;
 
         public ulong Address { get; protected set; }

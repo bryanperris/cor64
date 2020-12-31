@@ -108,13 +108,17 @@ namespace Tests {
             if (expectedTrace == null)
                 tracer.EnableLogVerfication();
 
+            var stepsTaken = 1;
+
             while (!core.InfiniteLoopWarn) {
                 core.Step();
+                stepsTaken++;
             }
 
             /* Trace the delay slot */
             core.Step();
 
+            tracer.StoppedAt = core.ReadPC() + 4;
             var traceLog = tracer.GenerateTraceLog();
 
             if (expectedTrace == null) {
@@ -122,6 +126,7 @@ namespace Tests {
 
                 // Filter out real log comments
                 traceLog = (from l in traceLog.ToList() where !l.StartsWith("/*") select l).ToList();
+                traceLog = (from l in traceLog.ToList() where !l.EndsWith("~") select l).ToList();
             }
 
             String expectedStr = LinesToString(expectedTrace);
@@ -129,6 +134,7 @@ namespace Tests {
 
             Console.WriteLine("Expected: \n" + expectedStr);
             Console.WriteLine("Actual: \n" + actualStr);
+            Console.WriteLine("Core Steps Taken: {0}", stepsTaken);
 
             Assert.AreEqual(expectedTrace.Length, traceLog.Count);
 
@@ -332,7 +338,7 @@ namespace Tests {
                     "00000000 addi 2,0,$0005",
                     "00000004 <loop> bne 1,2,loop",
                     "00000008 addi 1,1,$0001",
-                    "( Repeats for 4 time(s) )",
+                    "( Repeats for 5 time(s) )",
                     "0000000C <end> j end",
                     "00000010 nop"
                 )

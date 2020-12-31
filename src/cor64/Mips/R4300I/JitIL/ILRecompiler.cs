@@ -220,8 +220,8 @@ namespace cor64.Mips.R4300I.JitIL
             /* Start of a new block */
             if (m_CurrentIntBlock == null)
             {
-                m_CurrentIntBlock = new RuntimeBasicBlock(this.Disassembler, m_Pc);
-                m_JitPc = m_Pc;
+                m_CurrentIntBlock = new RuntimeBasicBlock(this.Disassembler, PC);
+                m_JitPc = PC;
             }
 
             /* If already hit the branch, we must be in delay slot */
@@ -231,10 +231,10 @@ namespace cor64.Mips.R4300I.JitIL
             var inst = Decode();
 
             /* Increment PC */
-            m_Pc += 4;
+            PC += 4;
 
             /* Check for an invalid instruction */
-            if (inst.IsValid || inst.IsNull)
+            if (inst.IsInvalid || inst.IsNull)
                 throw new EmuException("ILRecompiler encountered an invalid instruction");
 
             /* Check first if we hit the end of code space */
@@ -333,18 +333,18 @@ namespace cor64.Mips.R4300I.JitIL
         {
             if (m_JitExecute && !m_CompiledProgramCache.ContainsKey(m_JitPc))
             {
-                //Console.WriteLine("Jit Block Not Found: JitPC={0:X8} Pc={1:X8}", m_JitPc, m_Pc);
-                m_Pc = m_JitPc;
+                //Console.WriteLine("Jit Block Not Found: JitPC={0:X8} Pc={1:X8}", m_JitPc, PC);
+                PC = m_JitPc;
                 m_JitExecute = false;
             }
 
             while (!m_JitExecute)
             {
-                //Console.WriteLine("Jit Step: JitPC={0:X8} Pc={1:X8}", m_JitPc, m_Pc);
+                //Console.WriteLine("Jit Step: JitPC={0:X8} Pc={1:X8}", m_JitPc, PC);
                 JitStep();
             }
 
-            //Console.WriteLine("Jit Execute: JitPC={0:X8} Pc={1:X8}", m_JitPc, m_Pc);
+            //Console.WriteLine("Jit Execute: JitPC={0:X8} Pc={1:X8}", m_JitPc, PC);
             JitBlockExecute();
         }
 
@@ -386,7 +386,7 @@ namespace cor64.Mips.R4300I.JitIL
 
         private void CheckPc()
         {
-            m_JitExecute = m_CompiledProgramCache.ContainsKey(m_Pc);
+            m_JitExecute = m_CompiledProgramCache.ContainsKey(PC);
 
             if (m_JitExecute)
             {
@@ -548,12 +548,12 @@ namespace cor64.Mips.R4300I.JitIL
 
         ulong IDynamicMips.Cop0_Read(int reg)
         {
-            return State.Cp0.RegRead(reg);
+            return Cop0.CpuRegisterRead(reg);
         }
 
         void IDynamicMips.Cop0_Write(int reg, ulong val)
         {
-            State.Cp0.RegWrite(reg, val);
+            Cop0.CpuRegisterWrite(reg, val);
         }
 
         void IDynamicMips.Fallback(MipsExecutableBlock block, int instOffset)
@@ -706,8 +706,8 @@ namespace cor64.Mips.R4300I.JitIL
 
         void IDynamicMips.ExceptionBegin(MipsExecutableBlock block)
         {
-            m_Pc = Cop0.ExceptionHandlerAddress;
-            m_JitPc = m_Pc;
+            PC = Cop0.ExceptionHandlerAddress;
+            m_JitPc = PC;
 
             m_Emitter32.IsExceptionPath = true;
             m_Emitter64.IsExceptionPath = true;

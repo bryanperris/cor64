@@ -32,6 +32,11 @@ using cor64.IO;
                  [24] set signal 7
 */
 
+/* Notes:
+* The SDK manages task swtiching for the RSP.  In order for the 
+RSP to halt its current task, SPSTATUS_SET_SIGNAL0 is set to yield the RSP.
+*/
+
 namespace cor64.RCP
 {
     [Flags]
@@ -49,7 +54,7 @@ namespace cor64.RCP
         ClearSignal0          = 0b1000000000,
         SetSignal0            = 0b10000000000,
         ClearSignal1          = 0b100000000000,
-        SetSigna1             = 0b1000000000000,
+        SetSignal1             = 0b1000000000000,
         ClearSignal2          = 0b10000000000000,
         SetSignal2            = 0b100000000000000,
         ClearSignal3          = 0b1000000000000000,

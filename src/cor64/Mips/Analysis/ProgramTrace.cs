@@ -25,8 +25,7 @@ namespace cor64.Mips.Analysis
         private bool m_End;
         private bool m_DelaySlot;
         private ulong m_LastBranch;
-        private bool m_Frozen;
-        private bool m_FrozenBeforeInterrupt;
+        private InfoBasicBlock m_InterruptedBlock;
         private InfoBasicBlockLink m_LastLink;
         private readonly List<InfoBasicBlockLink> m_Links = new List<InfoBasicBlockLink>();
         private InfoBasicBlock m_LastBlock;
@@ -38,8 +37,6 @@ namespace cor64.Mips.Analysis
         private int m_VerifyLogPosition = 0;
         private bool m_HaltVerify = false;
 
-        /* Meta attachments */
-        private MemoryAccessMeta m_Attachment_MemAccess = null;
 
         public ulong StoppedAt { get; set; }
 
@@ -68,7 +65,6 @@ namespace cor64.Mips.Analysis
 
         private void BeginNewBlock(ulong address) {
             m_End = false;
-            m_Frozen = false;
             m_CurrentBlock = new InfoBasicBlock(address);
 
             #if DEBUG_TRACE_LOG
@@ -97,12 +93,15 @@ namespace cor64.Mips.Analysis
                 if ((m_DelaySlot && m_LastBranch + 4 != inst.Address) || m_CurrentBlock.EndsWithExceptionReturn) {
                     m_LastBlock = m_CurrentBlock;
 
+                    /* Mark the block finished */
+                    m_CurrentBlock.SetFinish();
+
+                    #if DEBUG_TRACE_LOG
+                    Console.WriteLine("Marked active block {0:X8} as finished", m_CurrentBlock.Address);
+                    #endif
+
                     /* We are leaving a block via ERET (interrupted / normal) */
                     if (m_HandleExceptionReturn) {
-                        if (m_InServiceHandler) {
-                            m_Frozen = m_FrozenBeforeInterrupt;
-                        }
-
                         m_HandleExceptionReturn = false;
                         m_InServiceHandler = false;
                     }
@@ -111,7 +110,6 @@ namespace cor64.Mips.Analysis
                     if (m_InstToBlockMapping.ContainsKey(inst.Address))
                     {
                         m_CurrentBlock = m_InstToBlockMapping[inst.Address];
-                        m_Frozen = true;
 
                         #if DEBUG_TRACE_LOG
                         Console.WriteLine("Jumping to mapped inst {0:X8}", inst.Address);
@@ -120,7 +118,6 @@ namespace cor64.Mips.Analysis
                     else
                     {
                         /* We jumped somewhere new */
-                        m_Frozen = false;
                         m_CurrentBlock = null;
 
                         #if DEBUG_TRACE_LOG
@@ -154,12 +151,17 @@ namespace cor64.Mips.Analysis
                     m_HandleExceptionReturn = false;
                     m_InServiceHandler = true;
 
-                    var interruptedBlock = m_CurrentBlock;
+                    m_InterruptedBlock = m_CurrentBlock;
 
-                    m_FrozenBeforeInterrupt = m_Frozen;
-                    m_Frozen = m_InstToBlockMapping.ContainsKey(inst.Address);
+                    /* Remove the last inst in the block since it hasn't been executed */
+                    if (m_CurrentBlock.Size > 0) {
+                        m_InstToBlockMapping.Remove(m_CurrentBlock.GetLastInst().Address);
+                        m_CurrentBlock.UndoLastAppend();
+                    }
 
-                    if (!m_Frozen) {
+                    var exists = m_InstToBlockMapping.ContainsKey(inst.Address);
+
+                    if (!exists) {
                         BeginNewBlock(inst.Address);
                         m_CurrentBlock.StartsInterruptServicing = true;
                     }
@@ -170,13 +172,13 @@ namespace cor64.Mips.Analysis
                     // Check if interrupt repeated and needs frozen mode
 
                     /* [Normal Block @ X] -> [Interrupt Handler Block] */
-                    var handlerLink = new InfoBlockInterruptedLink(m_CurrentBlock, 0, interruptedBlock.Size - 1);
+                    var handlerLink = new InfoBlockInterruptedLink(m_CurrentBlock, 0, m_InterruptedBlock.Size - 1);
 
                     m_Links.Add(handlerLink);
-                    interruptedBlock.AppendBlockLink(handlerLink);
+                    m_InterruptedBlock.AppendBlockLink(handlerLink);
 
                     #if DEBUG_TRACE_LOG
-                    Console.WriteLine("Link block {0:X8} to interrupt block {1:X8} +{2}", interruptedBlock.Address, m_CurrentBlock.Address, handlerLink.BlockOffset);
+                    Console.WriteLine("Link block {0:X8} to interrupt block {1:X8} +{2}", m_InterruptedBlock.Address, m_CurrentBlock.Address, handlerLink.BlockOffset);
                     #endif
                 }
             }
@@ -184,6 +186,10 @@ namespace cor64.Mips.Analysis
             /* End of block indicated via delay slot signal */
             if (m_End)
             {
+                #if DEBUG_TRACE_LOG
+                Console.WriteLine("Finish block: {0:X8}", m_CurrentBlock.Address);
+                #endif
+
                 FinishBlock(inst);
             }
 
@@ -219,7 +225,7 @@ namespace cor64.Mips.Analysis
                 m_LastBlock = null;
             }
 
-            if (!m_Frozen)
+            if (!m_CurrentBlock.IsFinished)
             {
                 m_CurrentInst = new InfoBasicBlockInstruction(m_Disassembler, inst);
 
@@ -251,7 +257,6 @@ namespace cor64.Mips.Analysis
                         m_InstToBlockMapping[originalBlock.Address + i] = originalBlock;
                     }
 
-                    m_Frozen = true;
                     m_Blocks.Remove(m_CurrentBlock);
                     m_CurrentBlock = originalBlock;
                 }
@@ -260,14 +265,18 @@ namespace cor64.Mips.Analysis
                     m_CurrentBlock.Append(m_CurrentInst);
                     m_InstToBlockMapping.Add(inst.Address, m_CurrentBlock);
 
-                    // #if DEBUG_TRACE_LOG
-                    // Console.WriteLine("Add inst {0:X8} to block {1:X8}", inst.Address, m_CurrentBlock.Address);
-                    // #endif
+                    #if DEBUG_TRACE_LOG
+                    Console.WriteLine("Add inst {0:X8} to block {1:X8}", inst.Address, m_CurrentBlock.Address);
+                    #endif
                 }
             }
             else
             {
                 if (!m_InstToBlockMapping.ContainsKey(inst.Address)) {
+                    #if DEBUG_TRACE_LOG
+                    Console.WriteLine("Block {0:X8} is frozen but inst {1} is not mapped in it", m_CurrentBlock.Address, m_Disassembler.GetFullDisassembly(inst));
+                    #endif
+
                     throw new InvalidOperationException(String.Format("Inst wasn't found in the block map: {0:X8} {1}", inst.Address, m_Disassembler.GetFullDisassembly(inst)));
                 }
 
@@ -290,13 +299,6 @@ namespace cor64.Mips.Analysis
                 m_HandleExceptionReturn = inst.Opcode.StartsWith("eret");
             }
 
-            /* Process metadata attachments */
-            // if (m_Attachment_MemAccess != null)
-            // {
-            //     m_CurrentInst.AppendMemoryAccess(m_Attachment_MemAccess);
-            //     m_Attachment_MemAccess = null;
-            // }
-
             m_CurrentInst.AppendNullifyUsage(nullified);
 
 #if TRACE_LOG_HALT
@@ -309,8 +311,12 @@ namespace cor64.Mips.Analysis
 
         public IList<String> GenerateTraceLog()
         {
+            // XXX: We are tracking blocks by their object reference
+            //      It is possible to have multiple blocks using the same
+            //      address
+
             List<String> traceLog = new List<string>();
-            Dictionary<ulong, int> blockHitCounter = new Dictionary<ulong, int>();
+            Dictionary<InfoBasicBlock, int> blockHitCounter = new Dictionary<InfoBasicBlock, int>();
             var currBlock = m_Root;
             var blockOffset = 0;
             bool inServiceHandler = false;
@@ -329,18 +335,23 @@ namespace cor64.Mips.Analysis
                     traceLog.Add("/* Exception Handler Begin */");
                 }
 
-                if (!blockHitCounter.ContainsKey(currBlock.Address))
+                if (!blockHitCounter.ContainsKey(currBlock))
                 {
-                    blockHitCounter.Add(currBlock.Address, 0);
+                    blockHitCounter.Add(currBlock, 0);
                 }
 
-                var linkIndex = blockHitCounter[currBlock.Address];
+                var linkIndex = blockHitCounter[currBlock];
 
                 InfoBlockInterruptedLink interruptLink = null;
 
                 // Check if the intruction was interrupted
                 if (linkIndex < links.Count) {
                     interruptLink = links[linkIndex] as InfoBlockInterruptedLink;
+
+                    #if DEBUG_TRACE_LOG
+                    if (interruptLink != null)
+                        Console.WriteLine("TRACEGEN: Interrupt Link {0:X8} found in {1:X8}", interruptLink.TargetAddress, currBlock.Address);
+                    #endif
                 }
 
                 for (int i = blockOffset; i < code.Length; i++)
@@ -394,6 +405,10 @@ namespace cor64.Mips.Analysis
                     /* Get the next link */
                     var link = links[linkIndex];
 
+                    #if DEBUG_TRACE_LOG
+                    Console.WriteLine("TRACEGEN: Next Link {0:X8} found in {1:X8}", link.TargetAddress, currBlock.Address);
+                    #endif
+
                     // Check for repeating links that are adjecent to each other
                     if (linkIndex + 1 < links.Count &&
                        link.TargetAddress == links[linkIndex + 1].TargetAddress &&
@@ -407,7 +422,7 @@ namespace cor64.Mips.Analysis
                             if (oldLinkList[linkIndex].TargetAddress != oldLinkList[i].TargetAddress) {
                                 var sizeForRepeated = currBlock.Size - link.BlockOffset;
                                 traceLog.Add(String.Format("( Repeats for {0} time(s) )", repeat));
-                                blockHitCounter[currBlock.Address] += repeat ;
+                                blockHitCounter[currBlock] += repeat ;
                                 link = links[linkIndex + repeat];
                                 m_VerifyLogPosition += repeat * sizeForRepeated;
                                 break;
@@ -417,7 +432,7 @@ namespace cor64.Mips.Analysis
                         }
                     }
                     else {
-                        blockHitCounter[currBlock.Address]++;
+                        blockHitCounter[currBlock]++;
                     }
 
                     currBlock = link.LinkedBlock;
@@ -425,6 +440,10 @@ namespace cor64.Mips.Analysis
                 }
                 else
                 {
+                    #if DEBUG_TRACE_LOG
+                    Console.WriteLine("TRACEGEN: No more links found for block {0:X8}", currBlock.Address);
+                    #endif
+
                     break;
                 }
             }
@@ -436,7 +455,6 @@ namespace cor64.Mips.Analysis
         {
             if ((Details & TraceDetails.MemoryAccess) == TraceDetails.MemoryAccess)
             {
-                //m_Attachment_MemAccess = new MemoryAccessMeta(address, isWrite, val);
                 m_CurrentInst?.AppendMemoryAccess(new MemoryAccessMeta(address, isWrite, val));
             }
         }

@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Diagnostics;
 using System;
 using System.Collections.Generic;
@@ -15,6 +16,7 @@ using NLog.Config;
 using NLog.Targets;
 using RunN64.Graphics;
 using cor64.BareMetal;
+using cor64.Debugging;
 
 namespace RunN64
 {
@@ -112,6 +114,7 @@ namespace RunN64
             PhaseMsg("Insert Cartridge");
 
             m_Cartridge = MountCartridge(Configuration.RomFilepath);
+            FileEnv.SetCurrentRomFile(Configuration.RomFilepath);
 
             PhaseMsg("System Initialization");
 
@@ -124,7 +127,8 @@ namespace RunN64
 
             if (!String.IsNullOrEmpty(Configuration.ElfFilepath))
             {
-                var elfFilePath = Environment.CurrentDirectory + Path.DirectorySeparatorChar + Configuration.ElfFilepath;
+                //var elfFilePath = Environment.CurrentDirectory + Path.DirectorySeparatorChar + Configuration.ElfFilepath;
+                var elfFilePath = Configuration.ElfFilepath;
 
                 if (File.Exists(elfFilePath)) {
                     m_CpuEngine.Disassembler.AttachSymbolProvider(new DebugSymbolSource(elfFilePath));
@@ -134,12 +138,42 @@ namespace RunN64
             }
 
             m_CpuEngine.SetDebuggingMode(true);
-            m_CpuEngine.SetInstructionDebugMode(InstructionDebugMode.None);
+            // m_CpuEngine.SetInstructionDebugMode(InstructionDebugMode.ProgramOnly);
             // m_CpuEngine.SetTraceMode(ProgramTrace.TraceMode.ProgramOnly);
-            // m_CpuEngine.TraceLog.Details = ProgramTrace.TraceDetails.None;
+            // m_CpuEngine.TraceLog.Details = ProgramTrace.TraceDetails.MemoryAccess;
             // m_CpuEngine.TraceLog.EnableLogVerfication();
 
-            //m_CpuEngine.CoreDbg.AppendInstBreakpointByAddr(0x800F71BC);
+            // m_CpuEngine.CoreDbg.AppendInstBreakpointByAddr(0x80326A68);
+
+            // m_System.Dbg.SpDmaWrite += (dma) => {
+            //     if (!(dma.address >= 0x04001000 && dma.address < 0x04002000)) {
+            //         return;
+            //     }
+
+            //     // Convert to a local IMEM RSP address
+            //     var dmaAddress = dma.address - 0x04001000;
+
+            //     Log.Debug("Dumping RSP UCode: {0:X8}", dmaAddress);
+
+            //     using MemoryStream code = new();
+
+            //     m_System.Dbg.CodePrinter.Print_RspCode(code, dmaAddress, dma.size / 4);
+            //     code.Position = 0;
+
+            //     var hashGen = MD5.Create();
+            //     hashGen.ComputeHash(code);
+            //     code.Position = 0;
+
+            //     StringBuilder hash = new();
+
+            //     foreach (var b in hashGen.Hash)
+            //     {
+            //         hash.Append(b.ToString("X2"));
+            //     }
+
+            //     using var file = FileEnv.Open_RspUcodeDumpFile(dmaAddress, hash.ToString()); 
+            //     code.WriteTo(file);
+            // };
 
             m_System.CPU(m_CpuEngine);
 
@@ -212,14 +246,12 @@ namespace RunN64
         {
             Log.Debug("\n********* Emulator State *********\n");
 
-            StringBuilder sb = new StringBuilder();
-
-            m_System.Dbg.PrintCpuState(sb);
-
-            Log.Debug(sb);
-
-            // Log.Debug("\nStack");
-            // Log.Debug(m_System.DeviceCPU.State.Stack.DumpStack());
+            using (MemoryStream stateStream = new()) {
+                StatePrinter.Print_R4300I_General(m_System, stateStream);
+                stateStream.Position = 0;
+                StreamReader reader = new(stateStream);
+                Log.Debug(reader.ReadToEnd());
+            }
 
             Log.Debug("**********************************\n");
         }
@@ -227,12 +259,25 @@ namespace RunN64
         public void ForceVideoInterrupt() {
             if (m_FramebufferWindow != null) {
                 m_FramebufferWindow.TriggerVI();
-                m_System.DeviceCPU.State.Cp0.Status.SetInterruptsEnabled(true);
+                // m_System.DeviceCPU.State.Cp0.Status.SetInterruptsEnabled(true);
             }
         }
 
         public void ForceInterruptsEnable() {
             m_System.DeviceCPU.State.Cp0.Status.SetInterruptsEnabled(true);
+        }
+
+        private void DumpRspDisasm(uint start, uint end) {
+            String fname = start.ToString("X8") + ".asm";
+
+            if (Directory.Exists("RSP")) {
+                Directory.Delete("RSP");
+                Directory.CreateDirectory("RSP");
+            }
+
+            String file = "RSP" + Path.PathSeparator + fname;
+
+            
         }
 
         public SingleThreadHost Host => m_EmuHost;
