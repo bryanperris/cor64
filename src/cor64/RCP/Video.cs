@@ -115,6 +115,8 @@ namespace cor64.RCP
         private bool m_UseRdp = false;
         private uint m_RdpAddress;
 
+        private bool m_LastActiveState = false;
+
         public Video(N64MemoryController controller, MipsInterface mipsInterface) : base(controller, 0x100000)
         {
             Map(
@@ -134,6 +136,20 @@ namespace cor64.RCP
                 m_YScale);
 
             m_Interface = mipsInterface;
+
+            m_ControlReg.Write += () => {
+                // Log.Debug("Video Control Reg: {0:X8}", m_ControlReg.RegisterValue);
+
+                if (!m_LastActiveState && IsVideoActive) {
+                    Log.Debug("Video is now active");
+                }
+
+                if (m_LastActiveState && !m_LastActiveState) {
+                    Log.Debug("Video is not active");
+                }
+
+                m_LastActiveState = IsVideoActive;
+            };
 
             m_Origin.Write += FramebufferAddressHandler;
             m_CurrentLine.Write += CurrentScanlineHandler;
@@ -163,7 +179,6 @@ namespace cor64.RCP
         private void CurrentScanlineHandler()
         {
             m_Interface.ClearInterrupt(MipsInterface.INT_VI);
-           // m_Interrupt.RegisterValue = 0;
         }
 
         private void FramebufferAddressHandler()
@@ -234,10 +249,14 @@ namespace cor64.RCP
 
         public VideoControlReg ControlReg => m_ControlRegStruct;
 
+        public bool IsVideoActive => (m_ControlReg.RegisterValue & 3) != 0;
+
         // public IntPtr FramebufferPtr => m_Memory.RDRAM.GetRamPointer(FramebufferOffset);
 
         public unsafe void CopyFramebufferRGB5551_16(PinnedBuffer buffer)
         {
+            if (!IsVideoActive) return;
+
             // Converts RGB5551 to RGB565
 
             ushort* srcPixel = (ushort*)m_Memory.RDRAM.GetRamPointer(ReadFramebufferAddressSafe());
@@ -266,6 +285,8 @@ namespace cor64.RCP
 
         public unsafe void CopyFramebufferRGB5551_32(PinnedBuffer buffer)
         {
+            if (!IsVideoActive) return;
+
             ushort* srcPixel = (ushort*)m_Memory.RDRAM.GetRamPointer(ReadFramebufferAddressSafe());
             uint* dstPixel = (uint*)buffer.GetPointer();
 
@@ -300,6 +321,8 @@ namespace cor64.RCP
 
         public unsafe void CopyFramebufferRGBA8888(PinnedBuffer buffer)
         {
+            if (!IsVideoActive) return;
+
             uint* srcPixel = (uint*)m_Memory.RDRAM.GetRamPointer(ReadFramebufferAddressSafe());
             uint* dstPixel = (uint*)buffer.GetPointer();
 
@@ -325,6 +348,8 @@ namespace cor64.RCP
         // }
 
         public void SimulateFullScan() {
+            if (!IsVideoActive) return;
+
             for (m_CurrentLine.RegisterValue = 0; m_CurrentLine.RegisterValue < m_Interrupt.RegisterValue; m_CurrentLine.RegisterValue++) {
                 //Thread.Sleep(1);
             }
@@ -332,8 +357,12 @@ namespace cor64.RCP
 
         public void SetVideoInterrupt()
         {
-            if (m_Interface.IntMaskVI)
+            if (m_Interface.IntMaskVI && IsVideoActive) {
                 m_Interface.SetInterrupt(MipsInterface.INT_VI, true);
+            }
+            else {
+                m_Interface.ClearInterrupt(MipsInterface.INT_VI);
+            }
         }
 
         public void SetFBFromRDP(uint framebufferAddress)

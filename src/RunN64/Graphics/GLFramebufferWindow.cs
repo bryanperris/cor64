@@ -204,19 +204,18 @@ namespace RunN64.Graphics
                     m_VideoInterface.SetVideoInterrupt();
             }
 
-            switch (m_VideoInterface.ControlReg.GetPixelMode())
-            {
-                default:
-                    {
-                        if (m_SourceBitmap != null)
-                            m_SourceBitmap.Dispose();
-
-                        m_SourceBitmap = null;
-                        m_FramebufferColorMode = 0;
-                        break;
-                    }
-                case VideoControlReg.PIXELMODE_16BPP: ReadRGB555(); break;
-                case VideoControlReg.PIXELMODE_32BPP: ReadRGBA8888(); break;
+            if (m_VideoInterface.IsVideoActive) {
+                switch (m_VideoInterface.ControlReg.GetPixelMode())
+                {
+                    default: break;
+                    case VideoControlReg.PIXELMODE_16BPP: ReadRGB555(); break;
+                    case VideoControlReg.PIXELMODE_32BPP: ReadRGBA8888(); break;
+                }
+            }
+            else {
+                m_SourceBitmap?.Dispose();
+                m_SourceBitmap = null;
+                m_FramebufferColorMode = 0;
             }
 
             if (m_SourceBitmap != null)
@@ -272,7 +271,7 @@ namespace RunN64.Graphics
 
             canvas.Clear(SKColors.Black);
 
-            String vidType = m_SourceBitmap == null ? "No Video" : m_Cart.Region.ToString();
+            String vidType = !m_VideoInterface.IsVideoActive ? "No Video" : m_Cart.Region.ToString();
 
             DrawString(vidType, canvas, strPos, 0);
 

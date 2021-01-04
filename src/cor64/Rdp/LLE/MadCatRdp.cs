@@ -5,6 +5,7 @@ using NLog;
 using System.IO;
 using cor64.IO;
 using System.Collections.Generic;
+using cor64.Mips;
 
 namespace cor64.Rdp.LLE {
     public class MadCatRdp : DrawProcessor
@@ -748,16 +749,6 @@ namespace cor64.Rdp.LLE {
             RdpBlender.UpdateInputs(blenderSelections0, blenderSelections1);
 
             GraphicsState.OtherModes.Flags.IsDerivativesStale = true;
-        }
-
-        protected override void SetSync(RdpCommand command) {
-            bool l = (command.Type.Flags & RdpCommandFlags.Load) == RdpCommandFlags.Load;
-            bool p = (command.Type.Flags & RdpCommandFlags.Pipeline) == RdpCommandFlags.Pipeline;
-            bool t = (command.Type.Flags & RdpCommandFlags.Tile) == RdpCommandFlags.Tile;
-
-            if (l && p && t) {
-                // TODO: Set DP interrupt on RCP interface
-            }
         }
     }
 }

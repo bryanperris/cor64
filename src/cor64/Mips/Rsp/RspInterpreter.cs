@@ -27,10 +27,12 @@ namespace cor64.Mips.Rsp
         private int m_DivIn = 0;
         private int m_DivOut = 0;
         private bool m_lastDoublePrecision = false;
-
         private bool m_InterruptOnBroke = false;
+        private bool m_SkipForcedWait = false;
 
         private readonly EventWaitHandle m_CpuRspWait = new EventWaitHandle(false, EventResetMode.ManualReset);
+
+        // TODO: When CPU/RSP run in parallel, use a real semphore between them
 
         
         /* RSP Flag Registers */
@@ -42,10 +44,8 @@ namespace cor64.Mips.Rsp
 
         private const int S16_MIN = -32768;
         private const int S16_MAX = 32767;
-        private const int ADDRESS_MASK = 0xFFF; // RSP has a limited address range, so we need this mask for it.
 
-        private const ulong ADDR_IMEM_START = 0x04001000UL;
-        private const ulong ADDR_IMEM_END = 0x04001FFFUL;
+        private const uint ADDRESS_MASK = 0xFFC;
 
         public RspInterpreter() : base(new Disassembler("o32"))
         {
@@ -62,13 +62,18 @@ namespace cor64.Mips.Rsp
         {
             base.AttachInterface(rcpInterface, iface, rdpInterface);
 
+            iface.PCSet += (pc) => {
+                PC = pc & 0xFFC;
+                // Log.Debug("RSP PC Set: {0:X8}", PC);
+            };
+
             Status.Change += () =>
             {
 
                 if (Status.IsCmdEmpty)
                     return;
 
-                Log.Debug("SP Status Update");
+                // Log.Debug("SP Status Update");
 
                 if (Status.TestCmdFlags(StatusCmdFlags.SetHalt))
                 {
@@ -91,15 +96,13 @@ namespace cor64.Mips.Rsp
                 if (Status.TestCmdFlags(StatusCmdFlags.SetInterruptOnBreak)) {
                     m_InterruptOnBroke = true;
                     Status.StatusFlags |= StatusFlags.InterruptOnBreak;
-                    // Log.Debug("Set RSP interrupt on break instruction flag");
                 }
 
                 if (Status.TestCmdFlags(StatusCmdFlags.ClearInterruptOnBreak)) {
                     m_InterruptOnBroke = false;
                     Status.StatusFlags &= ~StatusFlags.InterruptOnBreak;
-                    // Log.Debug("Clear RSP interrupt on break instruction flag");
                 }
-                
+
                 if (Status.TestCmdFlags(StatusCmdFlags.SetSignal0)) {
                     Status.StatusFlags |= StatusFlags.Signal0Set;
                 }
@@ -164,15 +167,30 @@ namespace cor64.Mips.Rsp
                     Status.StatusFlags &= ~StatusFlags.Signal7Set;
                 }
 
-                /* Process this last so all flags are counted for before starting the RSP */
                 if (Status.TestCmdFlags(StatusCmdFlags.ClearHalt))
                 {
-                    UnhaltFromCpu();
+                    // Allow SP to start execution
+                    ReportSpTaskType();
+                    SetHaltMode(false);
                 }
 
                 /* Clear out the written command flags */
                 Status.ClearCmdFlags();
             };
+        }
+
+        private void ReportSpTaskType() {
+            DMem.ReadData(0xFC0, 4);
+            var type = DMem.Data32;
+
+            switch (type) {
+                case 1: Log.Debug("Executing Graphics SP task"); break;
+                case 2: Log.Debug("Executing Audio SP task"); break;
+                case 3: Log.Debug("Executing Video SP task"); break;
+                case 6: Log.Debug("Executing HVQ SP task"); break;
+                case 7: Log.Debug("Executing HVQM SP task"); break;
+                default: Log.Debug("Executing unknown SP task: {0}", type); break;
+            }
         }
 
         public override void Init()
@@ -214,9 +232,7 @@ namespace cor64.Mips.Rsp
                 TakeBranch = false;
                 UnconditionalJump = false;
 
-                /* Should always be a word-aligned relative PC jump */
-                /* Always force 32-bit addresses */
-                PC = (uint)(TargetAddress & ADDRESS_MASK);
+                PC = TargetAddress;
             }
             else
             {
@@ -332,7 +348,7 @@ namespace cor64.Mips.Rsp
         {
             IsHalted = halted;
 
-            Log.Debug("New RSP halt status: " + (halted ? "Halted" : "Not Halted"));
+            // Log.Debug("New RSP halt status: " + (halted ? "Halted" : "Not Halted"));
 
             if (halted)
             {
@@ -341,34 +357,22 @@ namespace cor64.Mips.Rsp
             }
             else
             {
-                /* 
-                   -------------------------
-                   IMP: Start of RSP execution
-                   ------------------------- 
-                */
-
-                PC = Interface.PC;
-
-                Log.Debug("Start RSP TasK: {0:X8}", PC);
-
-                // Detection of IMEM address range
-                // TODO: This all should be done in a translate stream layer
-                if (PC >= ADDR_IMEM_START && PC <= ADDR_IMEM_END) {
-                    PC = Interface.PC - ADDR_IMEM_START;
-                }
-
                 Status.StatusFlags &= ~StatusFlags.Halt;
+
+                if (!m_SkipForcedWait) {
+                    CpuWaitForFinish();
+                }
+                else {
+                    m_SkipForcedWait = false;
+                }
             }
         }
 
-        private void UnhaltFromCpu() {
-            SetHaltMode(false);
-
-            RcpInterface.ClearInterrupt(MipsInterface.INT_SP);
-
-            // Force CPU to wait for RSP to finish 
-            m_CpuRspWait.Reset();
-            m_CpuRspWait.WaitOne();
+        public void CpuWaitForFinish() {
+            if (!IsHalted) {
+                m_CpuRspWait.Reset();
+                m_CpuRspWait.WaitOne();
+            }
         }
 
         public override void AttachBootManager(BootManager bootManager)
@@ -484,13 +488,12 @@ namespace cor64.Mips.Rsp
             uint target = ReadGPR(inst.Target);
 
             TargetAddress = CoreUtils.ComputeBranchPC(false, PC, CoreUtils.ComputeBranchTargetOffset(inst.Immediate));
-            TakeBranch = ComputeBranchCondition(false, source, target, inst.Op.XferTarget, inst.Op.ArithmeticType);
-
             TargetAddress &= ADDRESS_MASK;
+            TakeBranch = ComputeBranchCondition(false, source, target, inst.Op.XferTarget, inst.Op.ArithmeticType);
 
             if (isLink)
             {
-                Writeback(31, (uint)PC + 8);
+                Writeback(31, (uint)(PC + 8) & ADDRESS_MASK);
             }
 
             // Always true for RSP
@@ -513,10 +516,10 @@ namespace cor64.Mips.Rsp
 
             if (isLink) {
                 if (isRegister && (inst.Target & 0b11) != 0) {
-                    Writeback(inst.Target, (uint)PC + 8);
+                    Writeback(inst.Target, (uint)(PC + 8) & ADDRESS_MASK);
                 }
                 else {
-                    Writeback(31, (uint)PC + 8);
+                    Writeback(31, (uint)(PC + 8) & ADDRESS_MASK);
                 }
             }
         }
@@ -543,7 +546,7 @@ namespace cor64.Mips.Rsp
                 long baseAddress = (long)ReadGPR(inst.Source);
                 long offset = (short)inst.Immediate;
                 address = (ulong)(baseAddress + offset);
-                address &= ADDRESS_MASK;
+                address &= 0xFFF;
 
                 DMem.ReadData((long)address, size);
 
@@ -649,7 +652,7 @@ namespace cor64.Mips.Rsp
             int baseAddress = (int)ReadGPR(inst.Source);
             int offset = (short)inst.Immediate;
             address = (ulong)(baseAddress + offset);
-            address &= ADDRESS_MASK;
+            address &= 0xFFF;
 
             switch (size)
             {
@@ -783,6 +786,8 @@ namespace cor64.Mips.Rsp
 
                 case RegBoundType.Cp0:
                     {
+                        m_SkipForcedWait = true;
+
                         if (regDest >= 0 && regDest < 8)
                     	{
                     		/* Write to SP Interface Regs */
@@ -845,13 +850,13 @@ namespace cor64.Mips.Rsp
         {
             /* Break is used to halt the RSP processor */
             Status.StatusFlags |= StatusFlags.Broke;
+            
+            SetHaltMode(true);
 
             if (m_InterruptOnBroke) {
                 RcpInterface.SetInterrupt(MipsInterface.INT_SP, true);
-                Log.Debug("RSP Interrupt has been set on break");
+                // Log.Debug("RSP Interrupt has been set on break");
             }
-
-            SetHaltMode(true);
         }
 
        /* ----------------------------------------------------------------

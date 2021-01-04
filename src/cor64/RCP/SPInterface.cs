@@ -107,6 +107,8 @@ namespace cor64.RCP
 
         public SPStatusRegister Status { get; }
 
+        public event Action<uint> PCSet;
+
         private uint m_ActualSpAddress;
 
         public SPInterface(N64MemoryController controller) : base (controller, 0x100000)
@@ -119,13 +121,17 @@ namespace cor64.RCP
 
             Status = new SPStatusRegister(m_Status);
 
+            m_PC.Write += () => {
+                PCSet?.Invoke(m_PC.RegisterValue);
+            };
+
             m_DramAddress.Write += () => {
-                m_DramAddress.RegisterValue &= 0x0FFFFFFF;
+                m_DramAddress.RegisterValue &= 0x00FFFFFF;
                 m_DramAddress.RegisterValue &= ~7U;
             };
 
             m_SpMemAddress.Write += () => {
-                m_SpMemAddress.RegisterValue &= 0x00FFFFFF;
+                m_SpMemAddress.RegisterValue &= 0x00001FFF;
                 m_SpMemAddress.RegisterValue &= ~7U;
                 m_ActualSpAddress = 0x04000000 | m_SpMemAddress.RegisterValue;
             };
@@ -173,7 +179,7 @@ namespace cor64.RCP
             uint count = m_SizeFiddler.X(SIZE_FIELD_COUNT, ref len) + 1;
             uint skip = m_SizeFiddler.X(SIZE_FIELD_SKIP, ref len);
 
-            //Log.Debug("SP DMA Write: Len={0}, Count={1}, Skip={2}", size, count, skip);
+            // Log.Debug("SP DMA Write: {3:X8} Len={0}, Count={1}, Skip={2}", size, count, skip, len);
 
             if (size < 1) {
                 size = 7;
@@ -190,7 +196,7 @@ namespace cor64.RCP
 
                 TransferBytes((int)size);
 
-                Debugger.Current.ReportDmaFinish("SP CNT=" + count, false, SourceAddress, DestAddress, (int)size);
+                Debugger.Current.ReportDmaFinish("SP", false, SourceAddress, DestAddress, (int)size);
 
                 SourceAddress += size ;
                 DestAddress += size + skip;
@@ -212,7 +218,7 @@ namespace cor64.RCP
             uint count = m_SizeFiddler.X(SIZE_FIELD_COUNT, ref len) + 1;
             uint skip = m_SizeFiddler.X(SIZE_FIELD_SKIP, ref len);
 
-            //Log.Debug("SP DMA Read: Len={0}, Count={1}, Skip={2}", size, count, skip);
+            // Log.Debug("SP DMA Read: {3:X8} Len={0}, Count={1}, Skip={2}", size, count, skip, len);
 
             if (size < 1) {
                 size = 7;
@@ -229,7 +235,7 @@ namespace cor64.RCP
 
                 TransferBytes((int)size);
 
-                Debugger.Current.ReportDmaFinish("SP CNT=" + count, true, SourceAddress, DestAddress, (int)size);
+                Debugger.Current.ReportDmaFinish("SP", true, SourceAddress, DestAddress, (int)size);
 
                 SourceAddress += size + skip;
                 DestAddress += size;

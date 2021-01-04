@@ -22,7 +22,7 @@ namespace cor64.RCP
         public RcpCore()
         {
             m_Rsp = new RspInterpreter();
-            //m_Rsp.SetInstructionDebugMode(InstructionDebugMode.Full);
+            // m_Rsp.SetInstructionDebugMode(InstructionDebugMode.Full);
 
             m_Rdp = new DummyRdp();
         }

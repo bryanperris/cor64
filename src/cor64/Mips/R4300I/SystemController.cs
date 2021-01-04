@@ -144,6 +144,12 @@ namespace cor64.Mips.R4300I
             }
 #endif
 
+#if DEBUG_EPC
+            if (i == CTS.CP0_REG_EPC) {
+                Log.Debug("EPC CPU Write: {0:X8}", value);
+            }
+#endif
+
             REGS.CpuRegWrite(i, value);
         }
 

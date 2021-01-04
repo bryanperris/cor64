@@ -144,8 +144,8 @@ namespace cor64.RCP {
                 return;
             }
 
-            var start = m_Current.RegisterValue & 0x0FFFFFFFF;
-            var end =   m_End.RegisterValue     & 0x0FFFFFFFF;
+            var start = m_Current.RegisterValue & 0x00FFFFFFF;
+            var end =   m_End.RegisterValue     & 0x00FFFFFFF;
 
             // XBUS Mode: Convert address to DMEM
             if (UseXBus) {
@@ -159,10 +159,11 @@ namespace cor64.RCP {
 
             // Log.Debug("Executing DL: {0:X8}:{1:X8}", start, end);
 
-            DisplayListReady?.Invoke(this, new DisplayList(start, end));
-
             // Update the address regs
+            m_Start.RegisterValue = m_End.RegisterValue;
             m_Current.ReadonlyRegisterValue = m_End.RegisterValue;
+
+            DisplayListReady?.Invoke(this, new DisplayList(start, end));
         }
 
         public void DirectDLSetup(uint address, int size) {

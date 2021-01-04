@@ -31,8 +31,9 @@
     <!-- <DefineConstants>$(DefineConstants);CPU_FORCE_32</DefineConstants> -->
     <!-- <DefineConstants>$(DefineConstants);DEBUG_ADDRESS_CHECKING</DefineConstants> -->
     <!-- <DefineConstants>$(DefineConstants);DEBUG_DMA_HEX</DefineConstants> -->
-    <DefineConstants>$(DefineConstants);DEBUG_DMA_CMDS</DefineConstants>
-    <!-- <DefineConstants>$(DefineConstants);DEBUG_ERET</DefineConstants>  -->
+    <!-- <DefineConstants>$(DefineConstants);DEBUG_DMA_CMDS</DefineConstants> -->
+    <!-- <DefineConstants>$(DefineConstants);DEBUG_ERET</DefineConstants> -->
+    <!-- <DefineConstants>$(DefineConstants);DEBUG_EPC</DefineConstants>  -->
   </PropertyGroup>
   <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>

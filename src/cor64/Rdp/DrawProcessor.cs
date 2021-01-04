@@ -80,6 +80,8 @@ namespace cor64.Rdp {
 
             int size = (int)(displayList.End - displayList.Start);
 
+            // cor64.Debugging.Debugger.Current.TurnOnCpuLogging();
+
             // Log.Debug("Display List: {0:X8}, Size {1}", displayList.Start, size);
 
             // Print out the display list bytes
@@ -132,7 +134,6 @@ namespace cor64.Rdp {
             }
 
             m_Interface.RFlags &= ~ReadStatusFlags.CmdBusy;
-            RcpInterface.SetInterrupt(MipsInterface.INT_DP, true);
 
             // Log.Debug("RDP finished");
         }
@@ -141,7 +142,7 @@ namespace cor64.Rdp {
             m_DebugDL = enable;
         }
 
-        protected void DoNothing(RdpCommand command) {
+        protected static void DoNothing(RdpCommand command) {
             return;
         }
 
@@ -173,7 +174,15 @@ namespace cor64.Rdp {
 
         protected abstract void SetImage(RdpCommand command);
 
-        protected abstract void SetSync(RdpCommand command);
+        protected virtual void SetSync(RdpCommand command) {
+            bool l = (command.Type.Flags & RdpCommandFlags.Load) == RdpCommandFlags.Load;
+            bool p = (command.Type.Flags & RdpCommandFlags.Pipeline) == RdpCommandFlags.Pipeline;
+            bool t = (command.Type.Flags & RdpCommandFlags.Tile) == RdpCommandFlags.Tile;
+
+            if (l && p && t) {
+                RcpInterface.SetInterrupt(MipsInterface.INT_DP, true);
+            }
+        }
 
         protected abstract void Triangle(RdpCommand command);
     }

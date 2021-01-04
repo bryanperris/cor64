@@ -70,6 +70,11 @@ namespace cor64.RCP
                 m_BitRate
             );
 
+            m_Dram.Write += () => {
+                // Log.Debug("Audio RDRAM Set {0:X8}", m_Dram.RegisterValue);
+                m_Dram.RegisterValue &= 0x0FFFFFFF;
+            };
+
             m_Interface = mipsInterface;
 
             m_Length.Write += LengthWrite;
@@ -77,18 +82,21 @@ namespace cor64.RCP
         }
 
         public void LengthWrite() {
-            // TODO: pass to audio sample to audio backend
+            uint len = m_Length.RegisterValue & 0x3FFF8;
+
+            // TODO: pass audio samples to audio backend
+
+            m_Dram.RegisterValue += len;
 
             m_Interface.SetInterrupt(MipsInterface.INT_AI, true);
+            m_Status.ReadonlyRegisterValue &= ~0xC0000001;
 
-            // Log.Debug("AI Interrupt Set");
+            // Log.Debug("Audio Write {0:X8}", len);
         }
 
         public void StatusWrite() {
             m_Interface.ClearInterrupt(MipsInterface.INT_AI);
             m_Status.RegisterValue = 0;
-
-            // Log.Debug("AI Interrupt Cleared");
         }
     }
 }

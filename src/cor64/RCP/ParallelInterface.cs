@@ -85,7 +85,7 @@ namespace cor64.RCP
             m_Status.Write += StatusWrite;
 
             m_DramAddress.Write += () => {
-                m_DramAddress.RegisterValue &= 0x0FFFFFFF;
+                m_DramAddress.RegisterValue &= 0x00FFFFFF;
                 m_DramAddress.RegisterValue &= ~1U;
             };
 

@@ -512,8 +512,8 @@ namespace cor64.Mips.R4300I
                         case 0x7: return m_Core.TLBTranslate(address);
                         case 0x8:
                         case 0x9: m_UseCache = true; return address - 0x80000000;
-                        case 0xA:
-                        case 0xB: return address - 0xA0000000;
+                        case 0xA: return address & 0x1FFFFFFF;
+                        case 0xB: return address & 0x1FFFFFFF;
                         case 0xC:
                         case 0xD:
                         case 0xE:

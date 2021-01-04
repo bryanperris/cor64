@@ -53,6 +53,13 @@ namespace cor64.Mips.R4300I
             if (Cop0.InterpreterPendingInterrupts && (State.Cp0.Status.ErrorLevel || State.Cp0.Status.ExceptionLevel)) {
                 Cop0.InterpreterPendingInterrupts = false;
 
+                // Clear out the branch state
+                TakeBranch = false;
+                BranchDelay = false;
+                UnconditionalJump = false;
+                TargetAddress = 0;
+                NullifyNext = false;
+
                 PC = Cop0.ExceptionHandlerAddress;
 
                 if (State.Cp0.Status.ErrorLevel)
@@ -68,8 +75,6 @@ namespace cor64.Mips.R4300I
                 }
 
                 m_TakenException = true;
-
-                BranchControl.SwitchInterrupt();
             }
         }
 
@@ -99,10 +104,13 @@ namespace cor64.Mips.R4300I
                 else
                 {
                     PC = (uint)Cop0.CpuRegisterRead(CTS.CP0_REG_EPC);
+
+                    #if DEBUG_EPC
+                    Log.Debug("EPC -> PC: {0:X8}", PC);
+                    #endif
+
                     State.Cp0.Status.ExceptionLevel = false;
                 }
-
-                BranchControl.SwitchNormal();
 
                 #if DEBUG_INTERRUPTS
                 Log.Debug("Interrupt service finished");
@@ -110,6 +118,11 @@ namespace cor64.Mips.R4300I
             }
             else {
                 PC = (uint)Cop0.CpuRegisterRead(CTS.CP0_REG_EPC);
+
+                #if DEBUG_EPC
+                Log.Debug("EPC -> PC: {0:X8}", PC);
+                #endif
+
                 State.Cp0.Status.ExceptionLevel = false;
             }
 
@@ -133,50 +146,50 @@ namespace cor64.Mips.R4300I
             State.LLBit = false;
         }
 
+        // TODO: Run RSP directly on CPU thread?
+
         public override void Step()
         {
             /* Step clock */
-            CoreClock.NextTick();
+            // CoreClock.NextTick();
             Cop0.MipsTimerTick(1);
 
             /* Execute next instruction */
-            /* Delay Slot Logic */
-            if (WillJump)
-            {
-                if (BranchDelay)
-                {
+
+            // Check if the system controller detects pending events
+            Cop0.CheckInterrupts(PC, WillJump && BranchDelay);
+
+            // Check if the CPU should start service handling
+            CheckIfNeedServicing();
+
+            if (WillJump) {
+                if (BranchDelay) {
                     BranchDelay = false;
+
+                    Cop0.MipsTimerTick(1);
 
                     if (!ExecuteInst())
                     {
-                        throw new Exception("Failed to execute instruction in delay slot");
+                        throw new Exception(String.Format("Failed to execute delay slot instruction: 0x{0:X8} 0x{1:X8}", m_FailedInstruction.Address, m_FailedInstruction.Inst.inst));
                     }
                 }
-
-                TakeBranch = false;
-                UnconditionalJump = false;
 
                 /* Should always be a word-aligned relative PC jump */
                 /* Always force 32-bit addresses */
                 PC = (uint)TargetAddress;
+
+                TakeBranch = false;
+                UnconditionalJump = false;
+            }
+
+            /* Nornal execution path */
+            if (ExecuteInst())
+            {
+                PC += 4;
             }
             else
             {
-                // Check if the system controller detects pending events
-                Cop0.CheckInterrupts(PC, false);
-
-                // Check if the CPU should start service handling
-                CheckIfNeedServicing();
-
-                /* Nornal execution path */
-                if (ExecuteInst())
-                {
-                    PC += 4;
-                }
-                else
-                {
-                    throw new Exception(String.Format("Failed to execute instruction: 0x{0:X8} 0x{1:X8}", m_FailedInstruction.Address, m_FailedInstruction.Inst.inst));
-                }
+                throw new Exception(String.Format("Failed to execute instruction: 0x{0:X8} 0x{1:X8}", m_FailedInstruction.Address, m_FailedInstruction.Inst.inst));
             }
         }
 

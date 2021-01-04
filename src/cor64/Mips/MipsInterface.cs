@@ -64,12 +64,8 @@ namespace cor64.Mips
         public const int INT_DP = 5;
 
         public const int MODE_CLEAR_DP = 0;
-
-        /* ----------------
-           Based on libdragon,
-           MI_MASK_CLR_SP = 1
-           MI_MASK_SET_SP = 2
-        */
+        public const int MODE_CLEAR_INIT = 1;
+        public const int MODE_SET_INIT = 2;
 
         public const int MASK_CLEAR = 1;
         public const int MASK_SET = 2;
@@ -85,6 +81,8 @@ namespace cor64.Mips
             }
 
             m_ModeFiddler.DefineField(11, 1); // Clear DP Interrupt
+            m_ModeFiddler.DefineField(7, 1); // Clear Init
+            m_ModeFiddler.DefineField(8, 1); // Set Init
 
             m_Mask.Write += ProcessMaskClearSet;
             m_Mode.Write += ModeChanged;
@@ -92,11 +90,23 @@ namespace cor64.Mips
 
         private void ModeChanged() {
             uint val = m_Mode.RegisterValue;
-            uint read = m_ModeFiddler.X(MODE_CLEAR_DP, ref val);
+            uint clearDpInt = m_ModeFiddler.X(MODE_CLEAR_DP, ref val);
+            uint clearInit = m_ModeFiddler.X(MODE_CLEAR_INIT, ref val);
+            uint setInit = m_ModeFiddler.X(MODE_SET_INIT, ref val);
+
+            if (setInit != 0) {
+                Log.Debug("MI: Set Init");
+                m_Mode.ReadonlyRegisterValue |= 0x80;
+            }
+
+            if (clearInit != 0) {
+                Log.Debug("MI: Clear Init");
+                m_Mode.ReadonlyRegisterValue &= ~0x80U;
+            }
 
             // Clear DP interrupt
-            if (read != 0) {
-                Log.Debug("Cleared RDP Interrupt");
+            if (clearDpInt != 0) {
+                Log.Debug("MI: Cleared RDP Interrupt");
                 ClearInterrupt(INT_DP);
             }
 
@@ -175,9 +185,6 @@ namespace cor64.Mips
 
         public void SetInterrupt(int index, bool value)
         {
-            // if (value && !ReadMaskBool(index))
-            //     return;
-
             uint val = value ? 1U : 0;
             uint reg = m_Interrupt.ReadonlyRegisterValue;
             m_IntFiddler.J(index, ref reg, val);
@@ -196,10 +203,6 @@ namespace cor64.Mips
             uint reg = m_Mask.ReadonlyRegisterValue;
             m_IntFiddler.J(index, ref reg, val);
             m_Mask.ReadonlyRegisterValue = reg;
-
-            // if (!value) {
-            //     ClearInterrupt(index);
-            // }
 
 #if DEBUG_INTERRUPTS || DEBUG_MI
             string v = value ? "Enabled" : "Disabled";

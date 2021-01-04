@@ -4,6 +4,7 @@ using cor64.Mips;
 using Newtonsoft.Json;
 using NLog;
 using CommandLine;
+using cor64.Mips.R4300I;
 
 namespace RunN64
 {
@@ -56,8 +57,6 @@ namespace RunN64
                     Log.Error("Exception: {0}", e.Message);
                     Log.Error("Stack Trace: {0}", e.ToString());
                 }
-
-
             });
         }
 
@@ -108,10 +107,12 @@ namespace RunN64
                         s_Emulator.ForceVideoInterrupt();
                     }
 
-                    // if (key.Key == ConsoleKey.I) {
-                    //     Log.Info("Forcing interrupts enable");
-                    //     s_Emulator.ForceInterruptsEnable();
-                    // }
+                    if (key.Key == ConsoleKey.T) {
+                        Log.Info("Force Mips Timer");
+                        var count = s_Emulator.CPU.Cop0.TimerCount;
+                        count += 10000000;
+                        s_Emulator.CPU.Cop0.CpuRegisterWrite(CTS.CP0_REG_COMPARE, count);
+                    }
 
                     if (key.Key == ConsoleKey.D) {
                         s_Emulator.CPU.SetInstructionDebugMode(InstructionDebugMode.Full);

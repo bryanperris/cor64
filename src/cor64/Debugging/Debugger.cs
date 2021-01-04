@@ -70,16 +70,9 @@ namespace cor64.Debugging
 
         public bool StepNext { get; private set; }
 
-        [Conditional("DEBUG_DMA_CMDS")]
+        [Conditional("DEBUG")]
         public void ReportDmaFinish(string type, bool toRcp, uint source, uint dest, int size)
         {
-            if (toRcp) {
-                Log.Debug("{0} DMA: {1:X8} [RDRAM] to {2:X8} [RCP] size={3:X8}", type, source, dest, size);
-            }
-            else {
-                Log.Debug("{0} DMA: {1:X8} [RCP] to {2:X8} [RDRAM] size={3:X8}", type, source, dest, size);
-            }
-
             switch (type) {
                 case "SP": {
                     if (toRcp) {
@@ -90,6 +83,22 @@ namespace cor64.Debugging
 
                 default: break;
             }
+
+            #if DEBUG_DMA_CMDS
+
+            if (toRcp) {
+                Log.Debug("{0} DMA: {1:X8} [RDRAM] to {2:X8} [RCP] size={3:X8}", type, source, dest, size);
+            }
+            else {
+                Log.Debug("{0} DMA: {1:X8} [RCP] to {2:X8} [RDRAM] size={3:X8}", type, source, dest, size);
+            }
+
+            #endif
+        }
+
+        [Conditional("DEBUG")]
+        public void TurnOnCpuLogging() {
+            m_Target.DeviceCPU.SetInstructionDebugMode(InstructionDebugMode.Full);
         }
 
         public DisasmPrinter CodePrinter { get; }

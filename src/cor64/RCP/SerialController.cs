@@ -2,6 +2,7 @@ using System;
 using cor64.Mips;
 using cor64.IO;
 using NLog;
+using cor64.Debugging;
 
 /*
  0x0480 0000 to 0x048F FFFF  Serial interface (SI) registers:
@@ -38,9 +39,12 @@ namespace cor64.RCP {
         private readonly static Logger Log = LogManager.GetCurrentClassLogger();
 
         private readonly MemMappedBuffer m_DramAddressReg = new MemMappedBuffer();
-        private readonly MemMappedBuffer m_PifRead64Reg = new MemMappedBuffer();
-        private readonly MemMappedBuffer m_PifWrite64Reg = new MemMappedBuffer();
+        private readonly MemMappedBuffer m_PifRead64Reg = new MemMappedBuffer(4, MemMappedBuffer.MemModel.SINGLE_WRITEONLY);
+        private readonly MemMappedBuffer m_PifWrite64Reg = new MemMappedBuffer(4, MemMappedBuffer.MemModel.SINGLE_WRITEONLY);
         private readonly MemMappedBuffer m_StatusReg = new MemMappedBuffer();
+
+        private const uint SIZE = 64;
+        private const uint ADDR = 0x1FC007C0;
 
         public SerialController(N64MemoryController controller) : base(controller, 0x100000)
         {
@@ -49,6 +53,11 @@ namespace cor64.RCP {
             Map(m_PifWrite64Reg);
             Map(4);
             Map(m_StatusReg);
+
+            m_DramAddressReg.Write += () => {
+                m_DramAddressReg.RegisterValue &= 0x00FFFFFF;
+                m_DramAddressReg.RegisterValue &= ~3U;
+            };
 
             m_StatusReg.Write += StatusChanged;
 
@@ -78,15 +87,27 @@ namespace cor64.RCP {
         }
 
         private void PifDmaWrite() {
-            Log.Debug("TODO: SI: PIF DMA Write");
+            // RDRAM <- PIF RAM
+            SourceAddress = ADDR;
+            DestAddress = m_DramAddressReg.RegisterValue;
 
+            TransferBytes((int)SIZE);
+            Debugger.Current.ReportDmaFinish("PIF", false, SourceAddress, DestAddress, (int)SIZE);
+
+            m_DramAddressReg.RegisterValue += SIZE;
             m_RcpInterface.SetInterrupt(MipsInterface.INT_SI, true);
             m_StatusReg.ReadonlyRegisterValue |= 0x1000;
         }
 
         private void PifDmaRead() {
-            Log.Debug("TODO: SI: PIF DMA Read");
+            // RDRAM -> PIF RAM
+            SourceAddress = m_DramAddressReg.RegisterValue;
+            DestAddress = ADDR;
 
+            TransferBytes((int)SIZE);
+            Debugger.Current.ReportDmaFinish("PIF", true, SourceAddress, DestAddress, (int)SIZE);
+
+            m_DramAddressReg.RegisterValue += SIZE;
             m_RcpInterface.SetInterrupt(MipsInterface.INT_SI, true);
             m_StatusReg.ReadonlyRegisterValue |= 0x1000;
         }
