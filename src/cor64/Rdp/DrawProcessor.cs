@@ -119,9 +119,9 @@ namespace cor64.Rdp {
 
                 var resolvedCommand = command.ResolveType();
 
-                if (m_DebugDL) {
-                    Log.Debug("RDP_CMD: {0:X8} {1}", address, resolvedCommand.ToString());
-                }
+                #if DEBUG_RDP_COMMANDS
+                Log.Debug("RDP_CMD: {0:X8} {1}", address, resolvedCommand.ToString());
+                #endif
 
                 address += resolvedCommand.Type.Size;
 

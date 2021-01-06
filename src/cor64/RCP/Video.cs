@@ -187,12 +187,12 @@ namespace cor64.RCP
         }
 
         public int ReadFramebufferAddressSafe() {
-            m_RdpWait.WaitOne();
+            // m_RdpWait.WaitOne();
 
-            if (!m_UseRdp)
+            // if (!m_UseRdp)
                 return (int)(m_Origin.RegisterValue & 0x00FFFFFF);
-            else
-                return (int)(m_RdpAddress & 0x00FFFFFF);
+            // else
+            //     return (int)(m_RdpAddress & 0x00FFFFFF);
         }
 
         public uint Origin => m_Origin.RegisterValue;

@@ -63,7 +63,7 @@ namespace cor64.Rdp.LLE {
         public static readonly Color One = new Color(CTS.OneColor, CTS.OneColor, CTS.OneColor, CTS.OneColor);
 
         public override string ToString() {
-            return String.Format("{0:X8}{1:X8}{2:X8}{3:X8}", R, G, B, A);
+            return String.Format("{0:X2}{1:X2}{2:X2}{3:X2}", R, G, B, A);
         }
     }
 }

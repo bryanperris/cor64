@@ -126,12 +126,12 @@ namespace cor64.RCP
             };
 
             m_DramAddress.Write += () => {
-                m_DramAddress.RegisterValue &= 0x00FFFFFF;
+                m_DramAddress.RegisterValue &= 0x007FFFFC;
                 m_DramAddress.RegisterValue &= ~7U;
             };
 
             m_SpMemAddress.Write += () => {
-                m_SpMemAddress.RegisterValue &= 0x00001FFF;
+                m_SpMemAddress.RegisterValue &= 0x00001FFC;
                 m_SpMemAddress.RegisterValue &= ~7U;
                 m_ActualSpAddress = 0x04000000 | m_SpMemAddress.RegisterValue;
             };
@@ -175,13 +175,13 @@ namespace cor64.RCP
             DestAddress = m_DramAddress.RegisterValue;
 
             uint len = m_WriteLen.RegisterValue;
-            uint size = m_SizeFiddler.X(SIZE_FIELD_LEN, ref len);
+            uint size = m_SizeFiddler.X(SIZE_FIELD_LEN, ref len) + 1;
             uint count = m_SizeFiddler.X(SIZE_FIELD_COUNT, ref len) + 1;
             uint skip = m_SizeFiddler.X(SIZE_FIELD_SKIP, ref len);
 
             // Log.Debug("SP DMA Write: {3:X8} Len={0}, Count={1}, Skip={2}", size, count, skip, len);
 
-            if (size < 1) {
+            if (size == 1) {
                 size = 7;
             }
 
@@ -214,13 +214,13 @@ namespace cor64.RCP
             DestAddress = m_ActualSpAddress;
 
             uint len = m_ReadLen.RegisterValue;
-            uint size = m_SizeFiddler.X(SIZE_FIELD_LEN, ref len);
+            uint size = m_SizeFiddler.X(SIZE_FIELD_LEN, ref len) + 1;
             uint count = m_SizeFiddler.X(SIZE_FIELD_COUNT, ref len) + 1;
             uint skip = m_SizeFiddler.X(SIZE_FIELD_SKIP, ref len);
 
             // Log.Debug("SP DMA Read: {3:X8} Len={0}, Count={1}, Skip={2}", size, count, skip, len);
 
-            if (size < 1) {
+            if (size == 1) {
                 size = 7;
             }
 

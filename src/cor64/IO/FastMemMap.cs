@@ -73,6 +73,7 @@ namespace cor64.IO
             var blkOffset = m_ReadMap.GetDeviceOffset(address);
             var ptr = blkPtr[blkOffset / 4];
             var off = (int)(address % 4);
+
             Marshal.Copy(ptr.Offset(off), buffer, offset, count);
         }
 

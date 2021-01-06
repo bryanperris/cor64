@@ -300,7 +300,7 @@ namespace Tests
                 if ((m_TestCase.ExpectationFlags & TestCase.Expectations.Link) == TestCase.Expectations.Link)
                 {
                     /* Return address check */
-                    Assert.AreEqual(L(4UL), L(ReadRA()));
+                    Assert.AreEqual(L(8UL), L(ReadRA()));
                 }
                 else
                 {

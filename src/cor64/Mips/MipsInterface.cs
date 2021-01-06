@@ -95,18 +95,18 @@ namespace cor64.Mips
             uint setInit = m_ModeFiddler.X(MODE_SET_INIT, ref val);
 
             if (setInit != 0) {
-                Log.Debug("MI: Set Init");
+                // Log.Debug("MI: Set Init");
                 m_Mode.ReadonlyRegisterValue |= 0x80;
             }
 
             if (clearInit != 0) {
-                Log.Debug("MI: Clear Init");
+                // Log.Debug("MI: Clear Init");
                 m_Mode.ReadonlyRegisterValue &= ~0x80U;
             }
 
             // Clear DP interrupt
             if (clearDpInt != 0) {
-                Log.Debug("MI: Cleared RDP Interrupt");
+                // Log.Debug("MI: Cleared RDP Interrupt");
                 ClearInterrupt(INT_DP);
             }
 

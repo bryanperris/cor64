@@ -170,7 +170,7 @@ namespace cor64.Mips.Rsp
                 if (Status.TestCmdFlags(StatusCmdFlags.ClearHalt))
                 {
                     // Allow SP to start execution
-                    ReportSpTaskType();
+                    // ReportSpTaskType();
                     SetHaltMode(false);
                 }
 
@@ -181,6 +181,8 @@ namespace cor64.Mips.Rsp
 
         private void ReportSpTaskType() {
             DMem.ReadData(0xFC0, 4);
+            core_MemAccessNote = null;
+
             var type = DMem.Data32;
 
             switch (type) {
@@ -358,13 +360,7 @@ namespace cor64.Mips.Rsp
             else
             {
                 Status.StatusFlags &= ~StatusFlags.Halt;
-
-                if (!m_SkipForcedWait) {
-                    CpuWaitForFinish();
-                }
-                else {
-                    m_SkipForcedWait = false;
-                }
+                CpuWaitForFinish();
             }
         }
 
@@ -616,7 +612,7 @@ namespace cor64.Mips.Rsp
 
             if (inst.IsVariableShift())
             {
-                shiftAmount = (int)(ReadGPR(inst.Source) & 0x3F);
+                shiftAmount = (int)(ReadGPR(inst.Source) & 0x1F);
             }
             else
             {
@@ -631,7 +627,7 @@ namespace cor64.Mips.Rsp
             }
             else
             {
-                bool sign = ((value >> 31) == 1);
+                bool sign = (value >> 31) == 1;
 
                 value >>= shiftAmount;
 

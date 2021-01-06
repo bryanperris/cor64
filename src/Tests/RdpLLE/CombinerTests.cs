@@ -17,7 +17,7 @@ namespace Tests.RdpLLE {
 
             system.RdpExecute();
 
-            Assert.AreEqual("DEADBABE", rdp.RdpCombiner.S0.SubtractA.ToString());
+            Assert.AreEqual("DEADBABE", rdp.RdpCombiner.S0.SubtractA.GetColor().ToString());
         }
 
         [Test]
@@ -73,7 +73,7 @@ namespace Tests.RdpLLE {
                 rdp.RdpCombiner.Pass_2Cycle_Cycle0(aseed, cvg, ref acalpha);
 
                 Assert.AreEqual(expectedAcAlpha, acalpha.ToString("X8"));
-                Assert.AreEqual(expectedColor, rdp.GraphicsState.CombinedColor.ToString());
+                Assert.AreEqual(expectedColor, rdp.GraphicsState.CombinedColor.GetColor().ToString());
             }
 
             void Pass_1(int aseed, String expectedCvg, String expectedColor, String expectedPixelColor) {
@@ -85,8 +85,8 @@ namespace Tests.RdpLLE {
                 rdp.RdpCombiner.Pass_2Cycle_Cycle0(aseed, ref cvg);
 
                 Assert.AreEqual(expectedCvg, cvg.ToString("X8"));
-                Assert.AreEqual(expectedColor, rdp.GraphicsState.CombinedColor.ToString());
-                Assert.AreEqual(expectedPixelColor, rdp.GraphicsState.PixelColor.ToString());
+                Assert.AreEqual(expectedColor, rdp.GraphicsState.CombinedColor.GetColor().ToString());
+                Assert.AreEqual(expectedPixelColor, rdp.GraphicsState.PixelColor.GetColor().ToString());
             }
 
             Pass_0(0, 0, "00000000", "B4D440F0");

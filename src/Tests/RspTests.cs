@@ -2,7 +2,7 @@ using cor64.Mips.Rsp;
 using NUnit.Framework;
 using static Tests.RspTestHelper;
 
-namespace Tests.Rsp
+namespace Tests
 {
     [TestFixture]
     public class RspTests : BaseTest

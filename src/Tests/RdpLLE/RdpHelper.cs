@@ -170,7 +170,8 @@ namespace Tests.RdpLLE {
             int highT)
              {
                 var tiles = rdp.GraphicsState.Tiles;
-
+                
+                tiles[tileIndex] = new Tile();
                 tiles[tileIndex].Format = (int)format;
                 tiles[tileIndex].Line = lineSize;
                 tiles[tileIndex].S.Mask = maskS;

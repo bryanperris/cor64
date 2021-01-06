@@ -50,6 +50,13 @@ namespace cor64.IO
         {
             //Interlocked.Increment(ref m_CountReaders);
 
+            #if CHECK_ADDRESS_LEN
+            var d = this.m_MemModel.GetDevice((uint)address);
+            var r = address + count;
+            var t = this.m_MemModel.GetBaseAddress((uint)address) + d.Size;
+            System.Diagnostics.Debug.Assert(r < t, String.Format("N64 memory read goes out of bounds {0:X8}>={1:X8}", r, t));
+            #endif
+
             #if SAFE_MEMORY_ACCESS
             _ReadMemAligned((uint)address, buffer, offset, count);
             #else
@@ -62,6 +69,13 @@ namespace cor64.IO
         public void Write(long address, byte[] buffer, int offset, int count)
         {
             Interlocked.Increment(ref m_CountWriters);
+
+            #if CHECK_ADDRESS_LEN
+            var d = this.m_MemModel.GetDevice((uint)address);
+            var r = address + count;
+            var t = this.m_MemModel.GetBaseAddress((uint)address) + d.Size;
+            System.Diagnostics.Debug.Assert(r < t, String.Format("N64 memory write goes out of bounds {0:X8}>={1:X8}", r, t));
+            #endif
 
             #if SAFE_MEMORY_ACCESS
             _WriteMemAligned((uint)address, buffer, offset, count);

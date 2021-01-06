@@ -17,6 +17,7 @@ using NLog.Targets;
 using RunN64.Graphics;
 using cor64.BareMetal;
 using cor64.Debugging;
+using cor64.Rdp.Renderers;
 
 namespace RunN64
 {
@@ -178,6 +179,7 @@ namespace RunN64
             m_System.CPU(m_CpuEngine);
 
             m_System.DeviceRcp.SetRdpDevice(new MadCatRdp());
+            // m_System.DeviceRcp.SetRdpDevice(new DummyRdp());
             m_System.DeviceRcp.DeviceRdp.SetDLDebug(true);
 
             Log.Info("Signal Processor Engine: {0}", m_System.DeviceRcp.DeviceRsp.Description);

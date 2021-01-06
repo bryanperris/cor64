@@ -32,6 +32,8 @@
     <!-- <DefineConstants>$(DefineConstants);DEBUG_ADDRESS_CHECKING</DefineConstants> -->
     <!-- <DefineConstants>$(DefineConstants);DEBUG_DMA_HEX</DefineConstants> -->
     <!-- <DefineConstants>$(DefineConstants);DEBUG_DMA_CMDS</DefineConstants> -->
+    <DefineConstants>$(DefineConstants);DEBUG_RDP_COMMANDS</DefineConstants>
+    <!-- <DefineConstants>$(DefineConstants);CHECK_ADDRESS_LEN</DefineConstants> -->
     <!-- <DefineConstants>$(DefineConstants);DEBUG_ERET</DefineConstants> -->
     <!-- <DefineConstants>$(DefineConstants);DEBUG_EPC</DefineConstants>  -->
   </PropertyGroup>
