@@ -8,7 +8,7 @@ namespace cor64
 {
     public class BitFiddler
     {
-        private List<_Field> m_Fields = new List<_Field>();
+        private readonly List<_Field> m_Fields = new List<_Field>();
 
         private struct _Field
         {
@@ -20,7 +20,7 @@ namespace cor64
         {
             _Field field;
             field.shift = offset;
-            field.mask = ((~(0xFFFFFFFFU >> size << size)) << field.shift);
+            field.mask = (~(0xFFFFFFFFU >> size << size)) << field.shift;
             m_Fields.Add(field);
         }
 

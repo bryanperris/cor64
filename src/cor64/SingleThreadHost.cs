@@ -35,7 +35,7 @@ namespace cor64
             m_Running = true;
             m_StartWaitEvent.Set();
 
-            m_SiReadyDelayTimer = new Timer((_) => m_System.DeviceRcp.SerialDevice.SignalSiReady(), null, 7000, 0);
+            // m_SiReadyDelayTimer = new Timer((_) => m_System.DeviceRcp.SerialDevice.SignalSiReady(), null, 7000, 0);
 
             try
             {
@@ -74,6 +74,9 @@ namespace cor64
 
                     m_System.Tick();
 
+                    // while (!m_System.DeviceRcp.DeviceRsp.IsHalted)
+                    m_System.DeviceRcp.DeviceRsp.Step();
+
                     if (m_StepOnce)
                     {
                         m_System.Dbg.Break();
@@ -110,10 +113,13 @@ namespace cor64
                         {
                             m_System.DeviceRcp.DeviceRsp.Step();
 
+                            #if DEBUG
                             // We must sleep some to allow other events be processed
+                            // This is needed to allow the .NET debugger to function
                             if (m_System.DeviceRcp.DeviceRsp.IsHalted) {
                                 Thread.Sleep(100);
                             }
+                            #endif
                         }
                     }
                     catch (Exception e)
@@ -139,7 +145,7 @@ namespace cor64
                 Name = "RSP Core Thread"
             };
 
-            m_RspThread.Start();
+            // m_RspThread.Start();
         }
 
         public void Start()

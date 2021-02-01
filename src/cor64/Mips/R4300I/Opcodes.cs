@@ -19,23 +19,23 @@ namespace cor64.Mips.R4300I
         public static readonly Opcode LWC1 = Define(LoadFpu, "lwc1", I_FTIS, Data32);
 
         /* Reg to reg FPU ops */
-        public static readonly Opcode MFC1 = Define(Fpu, "mfc1", Cop1_TC, Cp1, Gpr);
-        public static readonly Opcode DMFC1 = Define(Fpu, "dmfc1", Cop1_TC, Cp1, Gpr, Data64);
+        public static readonly Opcode MFC1 = Define(Fpu, "mfc1", Cop1_CT, Cp1, Gpr);
+        public static readonly Opcode DMFC1 = Define(Fpu, "dmfc1", Cop1_CT, Cp1, Gpr, Data64);
         public static readonly Opcode CFC1 = Define(Fpu, "cfc1", Cop1_FromCtrl, Cp1Ctl, Gpr, Data32);
-        public static readonly Opcode MTC1 = Define(Fpu, "mtc1", Cop0_CT, Gpr, Cp1, Data32);
-        public static readonly Opcode DMTC1 = Define(Fpu, "dmtc1", Cop0_CT, Gpr, Cp1, Data64);
+        public static readonly Opcode MTC1 = Define(Fpu, "mtc1", Cop1_TC, Gpr, Cp1, Data32);
+        public static readonly Opcode DMTC1 = Define(Fpu, "dmtc1", Cop1_TC, Gpr, Cp1, Data64);
         public static readonly Opcode CTC1 = Define(Fpu, "ctc1", Cop1_ToCtrl, Gpr, Cp1Ctl, Data32);
 
         /* MMU Operations */
         public static readonly Opcode CACHE = Define(Cache, "cache", I_TIS);
         public static readonly Opcode SYNC = Define(Synchronize, "sync", Sync);
-        public static readonly Opcode TLBR = Define(Tlb, "tlbr ", TLB);
-        public static readonly Opcode TLBWI = Define(Tlb, "tlbwi ", TLB);
-        public static readonly Opcode TLBWR = Define(Tlb, "tlbwr ", TLB);
-        public static readonly Opcode TLBP = Define(Tlb, "tlbp ", TLB);
+        public static readonly Opcode TLBR = Define(Tlb, "tlbr ", OperandType.TLB);
+        public static readonly Opcode TLBWI = Define(Tlb, "tlbwi ", OperandType.TLB);
+        public static readonly Opcode TLBWR = Define(Tlb, "tlbwr ", OperandType.TLB, Random);
+        public static readonly Opcode TLBP = Define(Tlb, "tlbp ", OperandType.TLB);
 
         /* Operating system */
-        public static readonly Opcode ERET = Define(Branch, "eret ", TLB);
+        public static readonly Opcode ERET = Define(Branch, "eret ", Empty);
 
         /* Trapping */
         public static readonly Opcode TGEI = Define(Trap, "tgei", I_SI, ArithmeticOp.GREATER_THAN, Immediate);

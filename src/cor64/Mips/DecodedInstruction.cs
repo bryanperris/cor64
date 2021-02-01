@@ -31,6 +31,8 @@ namespace cor64.Mips
 
         public bool IsBranch => Op.Family == OperationFamily.Branch;
 
+        public bool IsMipsNop => Inst.inst == 0;
+
         public FpuValueType Format => m_Inst.fmtType;
 
         public int FloatSource => m_Inst.fs;

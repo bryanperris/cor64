@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using cor64.Mips.R4300I.TLB;
 using NLog;
 
 namespace cor64.Mips.R4300I
@@ -23,7 +24,7 @@ namespace cor64.Mips.R4300I
 
         private uint m_LocalCount;
 
-        public ControlRegisters()
+        public ControlRegisters(TLBCache tlbCache = null)
         {
             m_Registers = new ulong[SIZE];
             m_WriteMap = new Action<int, ulong>[SIZE];
@@ -68,6 +69,37 @@ namespace cor64.Mips.R4300I
                 else if (i == CTS.CP0_REG_CONFIG) {
                     m_ReadMap[i] = (_) => 0x7006E463;
                     m_WriteMap[i] = VoidWrite;
+                }
+                else if (tlbCache != null && i == CTS.CP0_REG_ENTRY_HI) {
+                    m_ReadMap[i] = (_) => tlbCache.EntryHi;
+                    m_WriteMap[i] = (_, x) => tlbCache.EntryHi = x;
+                }
+                else if (tlbCache != null && i == CTS.CP0_REG_ENTRY_LO_0) {
+                    m_ReadMap[i] = (_) => tlbCache.EntryLo0;
+                    m_WriteMap[i] = (_, x) => tlbCache.EntryLo0 = x;
+                }
+                else if (tlbCache != null && i == CTS.CP0_REG_ENTRY_LO_1) {
+                    m_ReadMap[i] = (_) => tlbCache.EntryLo1;
+                    m_WriteMap[i] = (_, x) => tlbCache.EntryLo1 = x;
+                }
+                else if (tlbCache != null && i == CTS.CP0_REG_INDEX) {
+                    m_ReadMap[i] = (_) => tlbCache.Index;
+                    m_WriteMap[i] = (_, x) => tlbCache.Index = x;
+                }
+                else if (tlbCache != null && i == CTS.CP0_REG_PAGEMASK) {
+                    m_ReadMap[i] = (_) => tlbCache.PageMask;
+                    m_WriteMap[i] = (_, x) => tlbCache.PageMask = x;
+                }
+                else if (tlbCache != null && i == CTS.CP0_REG_RANDOM) {
+                    m_ReadMap[i] = (_) => tlbCache.Random;
+                    m_WriteMap[i] = (_, x) => tlbCache.Random = x;
+                }
+                else if (tlbCache != null && i == CTS.CP0_REG_WIRED) {
+                    m_ReadMap[i] = (_) => tlbCache.Wired;
+                    m_WriteMap[i] = (_, x) => {
+                        tlbCache.Wired = x;
+                        tlbCache.WireSetNotify();
+                    };
                 }
                 else
                 {

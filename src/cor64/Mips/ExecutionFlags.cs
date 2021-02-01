@@ -34,7 +34,8 @@ namespace cor64.Mips
         CondUn     = 0b1000000000000000000000,
         CondNot    = 0b10000000000000000000000,
         CondOrd    = 0b100000000000000000000000,  // Indicates that unordered values throws an exception
-        Carry      = 0b1000000000000000000000000
+        Carry      = 0b1000000000000000000000000,
+        Random     = 0b10000000000000000000000000
     }
 
     public static class ExecutionFlagsHelper

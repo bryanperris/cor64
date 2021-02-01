@@ -3,7 +3,7 @@ using cor64.IO;
 
 namespace cor64.Rdp.LLE {
     public class TextureMemory {
-        private readonly PinnedBuffer m_TMemory = new PinnedBuffer(0x1000);
+        private readonly UnmanagedBuffer m_TMemory = new UnmanagedBuffer(0x1000);
         private readonly TextureMemReader m_TmemReader;
         private readonly State m_State;
 

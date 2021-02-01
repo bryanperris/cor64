@@ -80,10 +80,6 @@ namespace cor64.IO
         public void Write(uint address, byte[] buffer, int offset, int count)
         {
             var blkPtr = m_WriteMap.GetDevice(address);
-            
-            if (address == 0x80024400) {
-                Console.ResetColor();
-            }
 
             #if DEBUG_ADDRESS_CHECKING
             if (blkPtr == null) {

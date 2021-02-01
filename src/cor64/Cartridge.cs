@@ -14,7 +14,7 @@ namespace cor64
     {
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
         private bool m_Disposed;
-        private readonly PinnedBuffer m_RomBuffer;
+        private readonly UnmanagedBuffer m_RomBuffer;
         private readonly CartridgeBlock m_CartridgeBlock;
 
         public const int BootSize = 4032;
@@ -141,7 +141,7 @@ namespace cor64
                 writer.Write(v);
             }
 
-            m_RomBuffer = new PinnedBuffer((int)RomStream.Length);
+            m_RomBuffer = new UnmanagedBuffer((int)RomStream.Length);
             byte[] buffer = new byte[RomStream.Length];
             RomStream.Position = 0;
             RomStream.Read(buffer, 0, buffer.Length);

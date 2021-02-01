@@ -7,19 +7,19 @@ namespace cor64.Mips.Rsp
 {
     public unsafe class RspVector : IEquatable<RspVector>
     {
-        private readonly PinnedBuffer m_MemSource;
+        private readonly UnmanagedBuffer m_MemSource;
         private Elements* m_ElementsPtr;
 
-        public RspVector(PinnedBuffer pinnedBuffer, int index)
+        public RspVector(UnmanagedBuffer pinnedBuffer, int index)
         {
             int ptrOffset = index * 16;
-            m_MemSource = new PinnedBuffer(pinnedBuffer, index * 16, 16);
+            m_MemSource = new UnmanagedBuffer(pinnedBuffer, index * 16, 16);
             m_ElementsPtr = (Elements*)m_MemSource.GetPointer();
         }
 
         public RspVector()
         {
-            m_MemSource = new PinnedBuffer(16);
+            m_MemSource = new UnmanagedBuffer(16);
             m_ElementsPtr = (Elements*)m_MemSource.GetPointer();
         }
 

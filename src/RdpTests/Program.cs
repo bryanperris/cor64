@@ -36,8 +36,6 @@ namespace RdpTests
 
             // Setup the DP interface
             system.DeviceRcp.DisplayProcessorCommandInterface.DirectDLSetup(0, displayList.Length);
-
-            system.DeviceRcp.DisplayProcessorCommandInterface.DirectDLExecute();
         }
 
         static void SetupLogging()

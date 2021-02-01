@@ -51,5 +51,7 @@ namespace cor64.Mips.Rsp
         void VectorCompare(DecodedInstruction inst);
 
         void VectorClip(DecodedInstruction inst);
+        
+        void VectorMove(DecodedInstruction inst);
     }
 }

@@ -100,9 +100,9 @@ namespace cor64.RCP
                 m_Register.Write += OnChange;
             }
 
-            private uint Cmd { 
+            public uint Cmd { 
                 get => m_Register.RegisterValue;
-                set => m_Register.RegisterValue = value;
+                private set => m_Register.RegisterValue = value;
             }
 
             private uint Status {

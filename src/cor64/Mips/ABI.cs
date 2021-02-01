@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using cor64.Mips.R4300I;
+
+// More info: https://techpubs.jurassic.nl/manuals/0630/developer/Mpro_n32_ABI/sgi_html/ch01.html#id73069
 
 namespace cor64.Mips
 {
@@ -111,5 +114,19 @@ namespace cor64.Mips
         {
             return InterruptName[index];
         }
+
+        #region CPU ABI 32 Helpers
+
+        public static uint CPUABI32_ReadArgData(this InterpreterBaseR4300I core, int index) {
+            return core.State.GetGpr32(4 + index);
+        }
+
+        public static uint CPUABI32_ReadArgDataPtr(this InterpreterBaseR4300I core, int index) {
+            var address = core.CPUABI32_ReadArgData(index);
+            core.DataMem.ReadData(address, 4);
+            return core.DataMem.Data32;
+        }
+
+        #endregion
     }
 }

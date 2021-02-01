@@ -27,12 +27,11 @@ namespace RunN64.Graphics
         private readonly NativeWindow m_Window;
         private readonly Video m_VideoInterface;
         private readonly DPCInterface m_RdpInterface;
-        private readonly PinnedBuffer m_FBData;
+        private readonly UnmanagedBuffer m_FBData;
         private SKBitmap m_SourceBitmap;
         private SKBitmap m_FramebufferBitmap;
         private int m_FramebufferColorMode = 0;
         private readonly Cartridge m_Cart;
-        private int m_FrameCount;
         private const int RES_X = 640;
         private const int RES_Y = 480;
         private const int BAR_HEIGHT = 20;
@@ -43,7 +42,6 @@ namespace RunN64.Graphics
         private readonly GRGlInterface m_GLInterface;
         private readonly Object m_GLContext;
 
-        private double m_ViTime = 0;
         private bool m_Created = false;
 
 
@@ -59,8 +57,8 @@ namespace RunN64.Graphics
             m_Window = new NativeWindow(RES_X + 1, RES_Y + BAR_HEIGHT, "N64 Framebuffer");
 
             // Glfw.IconifyWindow(m_Window);
-        
-            m_FBData = new PinnedBuffer(RES_X * RES_Y * 4);
+
+            m_FBData = new UnmanagedBuffer(RES_X * RES_Y * 4);
             m_SourceBitmap = null;
             m_VideoInterface = system.DeviceRcp.VideoInterface;
             m_RdpInterface = system.DeviceRcp.DisplayProcessorCommandInterface;
@@ -89,28 +87,13 @@ namespace RunN64.Graphics
         }
 
         public void Start() {
-            double lastTime = Glfw.Time;
-            //double lastTime = (double)m_System.DeviceCPU.State.Cp0.Count;
-            double delta = 0;
-
             m_Created = true;
 
             while (!m_Window.IsClosing)
             {
-                var now = Glfw.Time;
-                // var now =  (double)m_System.DeviceCPU.State.Cp0.Count;
-                delta += (now - lastTime) / (1.0 / 60.0);
-                lastTime = now;
-
-                while (delta >= 1.0)
-                {
-                    Scan();
-                    delta--;
-                }
-
+                Scan();
                 Render();
-
-                // Thread.Sleep(100);
+                Thread.Sleep(17);
             }
         }
 
@@ -161,8 +144,7 @@ namespace RunN64.Graphics
 
             if (m_SourceBitmap == null || m_VideoInterface.Width != m_SourceBitmap.Width || m_VideoInterface.Height != m_SourceBitmap.Height || m_FramebufferColorMode != VideoControlReg.PIXELMODE_16BPP)
             {
-                if (m_SourceBitmap != null)
-                    m_SourceBitmap.Dispose();
+                m_SourceBitmap?.Dispose();
 
                 #if USE_RGBA8888_FOR_16BPP
                 m_SourceBitmap = new SKBitmap(m_VideoInterface.Width, m_VideoInterface.Height, SKColorType.Rgba8888, SKAlphaType.Opaque);
@@ -180,8 +162,7 @@ namespace RunN64.Graphics
 
             if (m_SourceBitmap == null || m_VideoInterface.Width != m_SourceBitmap.Width || m_VideoInterface.Height != m_SourceBitmap.Height || m_FramebufferColorMode != VideoControlReg.PIXELMODE_32BPP)
             {
-                if (m_SourceBitmap != null)
-                    m_SourceBitmap.Dispose();
+                m_SourceBitmap?.Dispose();
 
                 m_SourceBitmap = new SKBitmap(m_VideoInterface.Width, m_VideoInterface.Height, SKColorType.Rgba8888, SKAlphaType.Opaque);
                 m_FramebufferColorMode = VideoControlReg.PIXELMODE_32BPP;
@@ -190,21 +171,7 @@ namespace RunN64.Graphics
 
         private void Scan()
         {
-            if (m_VideoInterface.ControlReg.GetPixelMode() != VideoControlReg.PIXELMODE_NONE && m_VideoInterface.Interrupt != 0) {
-                while ((m_RdpInterface.RFlags & ReadStatusFlags.CmdBusy) == ReadStatusFlags.CmdBusy) {
-                    Thread.Sleep(100);
-                }
-
-                // Run through the scanlines
-                for (uint i = 0; i <= m_VideoInterface.Interrupt; i++) {
-                    m_VideoInterface.Line = i;
-                }
-
-                if (m_VideoInterface.Interrupt != 0)
-                    m_VideoInterface.SetVideoInterrupt();
-            }
-
-            if (m_VideoInterface.IsVideoActive) {
+            if (m_VideoInterface.IsVideoActive && !m_RdpInterface.IsBusy) {
                 switch (m_VideoInterface.ControlReg.GetPixelMode())
                 {
                     default: break;
@@ -213,6 +180,8 @@ namespace RunN64.Graphics
                 }
             }
             else {
+                Thread.Sleep(10);
+
                 m_SourceBitmap?.Dispose();
                 m_SourceBitmap = null;
                 m_FramebufferColorMode = 0;
@@ -240,18 +209,15 @@ namespace RunN64.Graphics
         {
             float dstRatio = dstW / dstH;
             float srcRatio = srcW / srcH;
-            float scaleFactor = 0.0f;
 
             if (dstRatio > srcRatio)
             {
-                scaleFactor = dstH / srcH;
+                return dstH / srcH;
             }
             else
             {
-                scaleFactor = dstW / srcW;
+                return dstW / srcW;
             }
-
-            return scaleFactor;
         }
 
         private void DrawString(String str, SKCanvas canvas, int x, int y)
@@ -308,7 +274,7 @@ namespace RunN64.Graphics
                 DrawString(mipsCount, canvas, strPos, 0);
 
                 float sf = ComputeScaleFactor(m_SourceBitmap.Width, m_SourceBitmap.Height, RES_X, RES_Y);
-                
+
                 // DEBUG: Zoom in
                 //sf = 18.0f;
 

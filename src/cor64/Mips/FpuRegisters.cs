@@ -16,7 +16,7 @@ namespace cor64.Mips
 {
     public class FpuRegisters
     {
-        private PinnedBuffer m_RegMem;
+        private UnmanagedBuffer m_RegMem;
         public readonly RTypeWord S32;
         public readonly RTypeDword S64;
         public readonly RTypeSingle F32;
@@ -29,7 +29,7 @@ namespace cor64.Mips
 
         public FpuRegisters()
         {
-            m_RegMem = new PinnedBuffer(32 * 8);
+            m_RegMem = new UnmanagedBuffer(32 * 8);
             m_RegMem.Clear();
             S32 = new RTypeWord(m_RegMem.GetPointer());
             S64 = new RTypeDword(m_RegMem.GetPointer());

@@ -12,8 +12,8 @@ namespace cor64.IO
     public class CartridgeBlock : BlockDevice
     {
         //private Stream m_SourceStream;
-        private PinnedBuffer m_RomBuffer;
-        private PinnedBuffer m_DummyRead = new PinnedBuffer(4);
+        private UnmanagedBuffer m_RomBuffer;
+        private UnmanagedBuffer m_DummyRead = new UnmanagedBuffer(4);
         private int m_RealSize;
 
         //public CartridgeBlock(Stream streamSource)
@@ -24,7 +24,7 @@ namespace cor64.IO
         //    byte[] buffer = new byte[m_RomBuffer]
         //}
 
-        public CartridgeBlock(PinnedBuffer romBuffer, int size)
+        public CartridgeBlock(UnmanagedBuffer romBuffer, int size)
         {
             m_RomBuffer = romBuffer;
             m_RealSize = size;

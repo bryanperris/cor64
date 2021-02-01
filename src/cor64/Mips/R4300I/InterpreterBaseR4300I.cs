@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using cor64.Debugging;
 using cor64.IO;
+using cor64.Mips.R4300I.TLB;
 using cor64.RCP;
 using NLog;
 using static cor64.Cartridge;
@@ -22,12 +23,13 @@ namespace cor64.Mips.R4300I
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
         protected readonly Opcodes.CallTable CallTable = Opcodes.CreateCallTable();
         private SystemController m_Coprocessor0;
-        private Clock m_CoreClock;
+        private readonly ControlRegisters m_Cop0Regs;
+        private readonly Clock m_CoreClock;
         protected DataMemory m_DataMemory;
         public bool StartedWithProfiler { get; protected set; }
-        private CoreDebugger m_CoreDebugger = new CoreDebugger();
-
+        private readonly CoreDebugger m_CoreDebugger = new CoreDebugger();
         private readonly BranchUnit m_BranchUnit = new BranchUnit();
+        private readonly TLBCache m_TLBCache;
 
 
         /* TODO: When we do have a cache system, 
@@ -41,9 +43,15 @@ namespace cor64.Mips.R4300I
         {
             // Attach core debugger
             State.SetCoreDebugger(m_CoreDebugger);
+            
 
             m_CoreClock = new Clock(10, 2);
-            m_Coprocessor0 = new SystemController(State, m_CoreClock);
+            m_TLBCache = new TLBCache();
+            m_Cop0Regs = new ControlRegisters(m_TLBCache);
+            m_Coprocessor0 = new SystemController(m_Cop0Regs, State);
+
+            m_TLBCache.AttachCoprocessor0(m_Coprocessor0);
+            m_TLBCache.Initialize();
 
             CallTable
             .Map(Add32, ADD, ADDU, ADDI, ADDIU)
@@ -68,6 +76,10 @@ namespace cor64.Mips.R4300I
             .Map(ExceptionReturn, ERET)
             .Map(Trap, TGEI, TGEIU, TLTI, TLTIU, TEQI, TNEI, TGE, TGEU, TLT, TLTU, TEQ, TNE)
             .Map(Break, BREAK)
+            .Map(TLBWrite, TLBWI, TLBWR)
+            .Map(TLBProbe, TLBP)
+            .Map(TLBRead, TLBR)
+            .Map(Syscall, SYSCALL)
 
             /* FPU Hooks */
             .Map(FloatLoad, LDC1, LWC1)
@@ -86,9 +98,6 @@ namespace cor64.Mips.R4300I
             .Map(Floor, FLOOR_L, FLOOR_W)
             .Map(Convert, CVT_D, CVT_L, CVT_S, CVT_W)
             .Map(Condition, C_F, C_UN, C_EQ, C_UEQ, C_OLT, C_ULT, C_OLE, C_ULE, C_SF, C_NGLE, C_SEQ, C_NGL, C_LT, C_NGE, C_LE, C_NGT)
-
-            /* Things on the ignore list until future implentation */
-            .Map(InstructionIgnore, TLBWI, TLBP, TLBR)
 
             .Finish();
         }
@@ -188,17 +197,24 @@ namespace cor64.Mips.R4300I
 
         public SystemController Cop0 => m_Coprocessor0;
 
-        public ExceptionType Exceptions => State.Cp0.Cause.Exception;
+        public ControlRegisters Cop0State => m_Cop0Regs;
 
-        public bool IsAddress64 => State.Cp0.Status.IsAddress64;
+        public TLBCache TLB => m_TLBCache;
+
+        public ExceptionType Exceptions => m_Cop0Regs.Cause.Exception;
+
+        public bool IsAddress64 => m_Cop0Regs.Status.IsAddress64;
 
         public bool IsOperation64 {
             get {
-
-                #if CPU_FORCE_32
-                return false;
+                #if CPU_FORCE_32 && !CPU_ALWAYS_64
+                    return false;
                 #else
-                return State.Cp0.Status.IsOperation64;
+                    #if CPU_ALWAYS_64
+                        return true;
+                    #else
+                        return m_Cop0Regs.Status.IsOperation64;
+                    #endif
                 #endif
             }
         }
@@ -234,13 +250,20 @@ namespace cor64.Mips.R4300I
 
         public void SetOperation64Mode(bool mode)
         {
-            State.Cp0.Status.DebugSet_Operation64(mode);
+            m_Cop0Regs.Status.DebugSet_Operation64(mode);
         }
 
         public void SetExceptionState(ExceptionType type)
         {
-            State.LLBit = false; // All exceptions cause atomic operations to fail
-            State.Cp0.Cause.SetException(type);
+            Cop0.RaiseMipsException(type);
+        }
+
+        public void SetSyscallException() {
+            Cop0.SyscallException();
+        }
+
+        public void SetBreakException() {
+            Cop0.BreakException();
         }
 
         protected void Writeback32(int reg, ulong value)
@@ -305,19 +328,40 @@ namespace cor64.Mips.R4300I
             return State.GetFprW(select);
         }
 
-        protected ulong ReadFPR_DW(int select)
-        {
+        protected ulong ReadFPR_DW(int select) {
             return State.GetFprDW(select);
         }
 
         protected void WriteFPR_DW(int select, ulong value)
         {
-            State.SetFprDW(select, value);
+            if (!Cop0State.Status.FRMode)
+            {
+                if ((select % 2) != 0) {
+                    State.SetFprDW(select - 1, value);
+                    State.SetFprDW(select - 0, value);
+                }
+            }
+            else
+            {
+                State.SetFprDW(select, value);
+            }
         }
 
         protected void WriteFPR_W(int select, uint value)
         {
-            State.SetFprW(select, value);
+           if (!Cop0State.Status.FRMode) {
+               var newSelect = select & 2;
+
+               if ((select % 2) != 0) {
+                   State.SetFprDW(newSelect, ((ulong)value << 32) | (uint)State.GetFprDW(newSelect));
+               }
+               else {
+                   State.SetFprW(newSelect, value);
+               }
+           }
+           else {
+               State.SetFprW(select, value);
+           }
         }
 
         protected void WriteFPR_D(int select, double value)
@@ -350,10 +394,7 @@ namespace cor64.Mips.R4300I
 
         public override void AttachBootManager(BootManager bootManager)
         {
-            bootManager.PCWrite += (pc) =>
-            {
-                PC = pc;
-            };
+            bootManager.PCWrite += (pc) => PC = pc;
 
             bootManager.MemWrite += (addr, val) =>
             {
@@ -374,12 +415,9 @@ namespace cor64.Mips.R4300I
                 SetDebuggingMode(debugMode);
             };
 
-            bootManager.RegWrite += (off, val) =>
-            {
-                State.SetGpr64(off, val);
-            };
+            bootManager.RegWrite += (off, val) => State.SetGpr64(off, val);
 
-            bootManager.CP0Write += (i, x) => State.Cp0.Write(i, x);
+            bootManager.CP0Write += (i, x) => m_Cop0Regs.Write(i, x);
         }
 
         /********************************************************
@@ -413,9 +451,26 @@ namespace cor64.Mips.R4300I
 
         protected DataMemory DMemoryStream => m_DataMemory;
 
-        private long TLBTranslate(long address)
+        private long TLBTranslate(long vaddress, bool isStore)
         {
-            throw new NotImplementedException(String.Format("TLB Mapped Memory not yet supported: {0:X8}", address));
+            // if (!TLB.TLBWritten) {
+            //     // Nothing has setup entries, throw an error
+            //     throw new EmuException("TLB was requested but nothing has been mapped");
+            // }
+
+            var result =  TLB.TranslateVirtualAddress(vaddress, isStore);
+
+            #if DEBUG_TLB_TRANSLATE
+            Log.Debug("TLB Translation: {0:X8} -> {1:X8}", vaddress, result);
+            #endif
+
+            // TLB raised an exception,  don't do anything else
+            if (m_Coprocessor0.TLBException) {
+                throw new TLBRaisedException();
+                // TODO: Trace log should make note
+            }
+
+            return result;
         }
 
         private sealed class SimpleVMemStream : VMemStream
@@ -476,7 +531,7 @@ namespace cor64.Mips.R4300I
                 return sb.ToString();
             }
 
-            protected override long TranslateAddress(long address)
+            protected override long TranslateAddress(long address, bool isStore)
             {
                 if (m_Core.BypassMMU)
                     return address;
@@ -509,7 +564,7 @@ namespace cor64.Mips.R4300I
                         case 0x4:
                         case 0x5:
                         case 0x6:
-                        case 0x7: return m_Core.TLBTranslate(address);
+                        case 0x7: return m_Core.TLBTranslate(address, isStore);
                         case 0x8:
                         case 0x9: m_UseCache = true; return address - 0x80000000;
                         case 0xA: return address & 0x1FFFFFFF;
@@ -517,7 +572,7 @@ namespace cor64.Mips.R4300I
                         case 0xC:
                         case 0xD:
                         case 0xE:
-                        case 0xF: return m_Core.TLBTranslate(address);
+                        case 0xF: return m_Core.TLBTranslate(address, isStore);
                     }
                 }
             }
@@ -585,5 +640,9 @@ namespace cor64.Mips.R4300I
         public abstract void ExceptionReturn(DecodedInstruction inst);
         public abstract void Trap(DecodedInstruction inst);
         public abstract void Break(DecodedInstruction inst);
+        public abstract void TLBProbe(DecodedInstruction inst);
+        public abstract void TLBWrite(DecodedInstruction inst);
+        public abstract void TLBRead(DecodedInstruction inst);
+        public abstract void Syscall(DecodedInstruction inst);
     }
 }

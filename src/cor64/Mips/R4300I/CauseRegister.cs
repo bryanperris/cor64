@@ -49,10 +49,10 @@ namespace cor64.Mips.R4300I
             set => m_Value = value;
         }
 
-        public void SetException(ExceptionType exceptionType)
+        public void SetException(ExceptionType exceptionType, bool raise = true)
         {
             m_Exception = exceptionType;
-            m_ExceptionThrown = true;
+            m_ExceptionThrown = raise;
 
             byte code = 0;
 
@@ -63,7 +63,7 @@ namespace cor64.Mips.R4300I
             switch (exceptionType)
             {
                 default: throw new InvalidOperationException("invalid exception type");
-                case ExceptionType.Interrupt: break;
+                case ExceptionType.Interrupt: code = 0; break;
                 case ExceptionType.TLBMod: code = 1; break;
                 case ExceptionType.TLBLoad: code = 2; break;
                 case ExceptionType.TLBStore: code = 3; break;
@@ -102,8 +102,20 @@ namespace cor64.Mips.R4300I
 
         internal void ClearThrownException()
         {
-            m_Exception = ExceptionType.Undefined;
             m_ExceptionThrown = false;
+        }
+
+        internal void ClearExeceptionCode() {
+            m_Exception = ExceptionType.Interrupt; // Interrupts are 0
+            m_Fiddler.J(F_EXCEPTCODE, ref m_Value, 0);
+        }
+
+        internal void ClearCe() {
+            m_Fiddler.J(F_CE, ref m_Value, 0);
+        }
+
+        internal void ClearAll() {
+            m_Value = 0;
         }
 
         public void SetInterruptPending(int interrupt)
@@ -132,10 +144,6 @@ namespace cor64.Mips.R4300I
         {
             uint val = m_Fiddler.X(F_IP, ref m_Value);
             return m_IntFiddler.X(interrupt, ref val) != 0;
-        }
-
-        public void ClearExceptionState() {
-            m_Value &= 0xFFFF0000U;
         }
 
         public uint InterruptPending => m_Fiddler.X(F_IP, ref m_Value);

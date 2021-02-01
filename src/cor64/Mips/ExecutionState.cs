@@ -1,5 +1,6 @@
 ﻿using cor64.IO;
 using cor64.Mips.R4300I;
+using cor64.Mips.R4300I.TLB;
 using System;
 using System.Diagnostics;
 using System.Globalization;
@@ -16,9 +17,8 @@ namespace cor64.Mips
         const int STACK_POINTER = 29;
 
         public FloatControlRegister FCR { get; } = new FloatControlRegister();
-        public ControlRegisters Cp0 { get; } = new ControlRegisters();
 
-        private PinnedBuffer m_RegMem;
+        private readonly UnmanagedBuffer m_RegMem;
         private ulong* m_GprRegs64;
         private uint* m_GprRegs32;
         private double* m_FprRegsDouble;
@@ -30,11 +30,11 @@ namespace cor64.Mips
         private bool* m_LLbit;
 
         private CoreDebugger m_CoreDbg;
-        private StackMonitor m_StackMonitor = new StackMonitor();
+        private readonly StackMonitor m_StackMonitor = new StackMonitor();
 
         public ExecutionState()
         {
-            m_RegMem = new PinnedBuffer(SIZE_GPR + SIZE_FPR + SIZE_HILO);
+            m_RegMem = new UnmanagedBuffer(SIZE_GPR + SIZE_FPR + SIZE_HILO);
             m_RegMem.Clear();
 
             IntPtr ptr = m_RegMem.GetPointer();

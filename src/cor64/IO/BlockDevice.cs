@@ -10,8 +10,8 @@ namespace cor64.IO
 {
     public abstract class BlockDevice : IDisposable
     {
-        private static readonly PinnedBuffer m_DummyRead = new PinnedBuffer(4);
-        private static readonly PinnedBuffer m_DummyWrite = new PinnedBuffer(4);
+        private static readonly UnmanagedBuffer m_DummyRead = new UnmanagedBuffer(4);
+        private static readonly UnmanagedBuffer m_DummyWrite = new UnmanagedBuffer(4);
 
         public abstract long Size { get; }
 

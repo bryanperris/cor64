@@ -233,10 +233,10 @@ namespace cor64.Rdp.LLE
 
         public int ColorEquation(int a, int b, int c, int d)
         {
-            a = s_ExtTable[a];
-            b = s_ExtTable[b];
-            c = Utils.SignF(c, 9);
-            d = s_ExtTable[d];
+            a = s_ExtTable[a & 0x1FF];
+            b = s_ExtTable[b & 0x1FF];
+            c = Utils.SignF(c & 0x1FF, 9);
+            d = s_ExtTable[d & 0x1FF];
             a = ((a - b) * c) + (d << 8) + 0x80;
 
             return a & 0x1FFFF;
@@ -244,10 +244,10 @@ namespace cor64.Rdp.LLE
 
         public int AlphaEquation(int a, int b, int c, int d)
         {
-            a = s_ExtTable[a];
-            b = s_ExtTable[b];
-            c = Utils.SignF(c, 9);
-            d = s_ExtTable[d];
+            a = s_ExtTable[a & 0x1FF];
+            b = s_ExtTable[b & 0x1FF];
+            c = Utils.SignF(c & 0x1FF, 9);
+            d = s_ExtTable[d & 0x1FF];
             a = (((a - b) * c) + (d << 8) + 0x80) >> 8;
             return a & 0x1FF;
         }

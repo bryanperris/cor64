@@ -117,6 +117,8 @@ namespace cor64.RCP
 
         private bool m_LastActiveState = false;
 
+        private int m_Ticks;
+
         public Video(N64MemoryController controller, MipsInterface mipsInterface) : base(controller, 0x100000)
         {
             Map(
@@ -176,9 +178,26 @@ namespace cor64.RCP
             m_ControlRegStruct = new VideoControlReg(m_ControlReg);
         }
 
+        public void Tick() {
+            // m_Ticks++;
+
+            m_Ticks += 10;
+
+            Line = 0;
+
+            if (m_Ticks >= (93750000 / 60)) {
+                if (IsVideoActive) {
+                    Line = Interrupt;
+                    SetVideoInterrupt();
+                }
+                m_Ticks = 0;
+            }
+        }
+
         private void CurrentScanlineHandler()
         {
             m_Interface.ClearInterrupt(MipsInterface.INT_VI);
+            m_Ticks = 0;
         }
 
         private void FramebufferAddressHandler()
@@ -249,11 +268,11 @@ namespace cor64.RCP
 
         public VideoControlReg ControlReg => m_ControlRegStruct;
 
-        public bool IsVideoActive => (m_ControlReg.RegisterValue & 3) != 0;
+        public bool IsVideoActive => (m_ControlReg.RegisterValue & 3) != 0 && m_Interrupt.RegisterValue > 0;
 
         // public IntPtr FramebufferPtr => m_Memory.RDRAM.GetRamPointer(FramebufferOffset);
 
-        public unsafe void CopyFramebufferRGB5551_16(PinnedBuffer buffer)
+        public unsafe void CopyFramebufferRGB5551_16(UnmanagedBuffer buffer)
         {
             if (!IsVideoActive) return;
 
@@ -283,7 +302,7 @@ namespace cor64.RCP
             }
         }
 
-        public unsafe void CopyFramebufferRGB5551_32(PinnedBuffer buffer)
+        public unsafe void CopyFramebufferRGB5551_32(UnmanagedBuffer buffer)
         {
             if (!IsVideoActive) return;
 
@@ -319,7 +338,7 @@ namespace cor64.RCP
             }
         }
 
-        public unsafe void CopyFramebufferRGBA8888(PinnedBuffer buffer)
+        public unsafe void CopyFramebufferRGBA8888(UnmanagedBuffer buffer)
         {
             if (!IsVideoActive) return;
 
@@ -355,14 +374,12 @@ namespace cor64.RCP
             }
         }
 
-        public void SetVideoInterrupt()
-        {
-            if (m_Interface.IntMaskVI && IsVideoActive) {
-                m_Interface.SetInterrupt(MipsInterface.INT_VI, true);
-            }
-            else {
-                m_Interface.ClearInterrupt(MipsInterface.INT_VI);
-            }
+        public void SetVideoInterrupt() {
+            m_Interface.SetInterrupt(MipsInterface.INT_VI, true);
+        }
+
+        public void ClearVideoInterrupt() {
+            m_Interface.ClearInterrupt(MipsInterface.INT_VI);
         }
 
         public void SetFBFromRDP(uint framebufferAddress)

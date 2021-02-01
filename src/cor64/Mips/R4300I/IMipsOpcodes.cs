@@ -83,5 +83,13 @@ namespace cor64.Mips.R4300I
         void Trap(DecodedInstruction inst);
 
         void Break(DecodedInstruction inst);
+
+        void TLBProbe(DecodedInstruction inst);
+
+        void TLBWrite(DecodedInstruction inst);
+
+        void TLBRead(DecodedInstruction inst);
+
+        void Syscall(DecodedInstruction inst);
     }
 }

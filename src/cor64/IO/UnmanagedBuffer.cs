@@ -10,28 +10,21 @@ namespace cor64.IO
 {
     // TODO: Implement stream access for this class
 
-    public class PinnedBuffer : IDisposable
+    public class UnmanagedBuffer : IDisposable
     {
-        private byte[] m_Buffer;
         private IntPtr m_Ptr;
         private bool m_Disposed = false;
         private readonly Memory<byte> m_MemoryBlock;
-        private readonly MemoryHandle m_PinHandle;
-        private PinnedBuffer m_Parent;
+        private readonly UnmanagedBuffer m_Parent;
 
-        public PinnedBuffer(int size)
+        public UnmanagedBuffer(int size)
         {
             Size = size;
-            m_Buffer = new byte[size];
-            m_MemoryBlock = new Memory<byte>(m_Buffer, 0, m_Buffer.Length);
-            m_PinHandle = m_MemoryBlock.Pin();
-
-            unsafe {
-                m_Ptr = (IntPtr)m_PinHandle.Pointer;
-            }
+            m_Ptr = Marshal.AllocHGlobal(size);
+            Clear();
         }
 
-        public PinnedBuffer(PinnedBuffer parent, int offset, int size) {
+        public UnmanagedBuffer(UnmanagedBuffer parent, int offset, int size) {
             Size = size;
             m_Parent = parent;
             m_Ptr = parent.m_Ptr.Offset(offset);
@@ -60,7 +53,7 @@ namespace cor64.IO
 
         public int Size { get; }
 
-        public bool IsDisposed => m_Disposed || (m_Parent != null && m_Parent.m_Disposed);
+        public bool IsDisposed => m_Disposed || (m_Parent?.m_Disposed == true);
 
         protected virtual void Dispose(bool disposing)
         {
@@ -68,17 +61,16 @@ namespace cor64.IO
             {
                 if (disposing)
                 {
-                    m_Buffer = null;
                     m_Ptr = IntPtr.Zero;
                 }
 
-                m_PinHandle.Dispose();
+                Marshal.FreeHGlobal(m_Ptr);
 
                 m_Disposed = true;
             }
         }
 
-        ~PinnedBuffer()
+        ~UnmanagedBuffer()
         {
             Dispose(false);
         }

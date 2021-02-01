@@ -9,6 +9,8 @@ using cor64.IO;
 using cor64.Debugging;
 using System.Diagnostics;
 using System.Threading;
+using cor64.HLE;
+using cor64.HLE.OS;
 
 namespace cor64.Mips.R4300I
 {
@@ -17,10 +19,10 @@ namespace cor64.Mips.R4300I
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
         private bool m_WarnInfiniteJump;
         private DecodedInstruction? m_InjectedInst;
-        private DecodedInstruction m_FailedInstruction;
         private bool m_TakenException;
-        private bool m_BranchUnitBusy = false;
         private ulong? m_InfiniteJumpAddress;
+        private readonly Dictionary<ulong, CpuCodeHook> m_Hooks = new();
+
 
         public Interpreter(string abi = "o32") : base(new Disassembler(abi))
         {
@@ -36,6 +38,9 @@ namespace cor64.Mips.R4300I
 
         private bool IsReserved(DecodedInstruction inst)
         {
+            #if !CPU_CHECK_RESERVED
+            return false;
+            #else
             #if !CPU_FORCE_32
             return
                 (((inst.Op.Flags & ExecutionFlags.Reserved32) == ExecutionFlags.Reserved32) && !IsOperation64) ||
@@ -43,15 +48,30 @@ namespace cor64.Mips.R4300I
             #else
             return false;
             #endif
+            #endif
+        }
+
+        protected override void EntryPointHit()
+        {
+            base.EntryPointHit();
+
+            DataMem.ReadData(0x80000314, 4);
+            var osVersion = DataMem.Data32;
+
+            Log.Debug("osVersion: {0}", osVersion);
+
+            OSHooks_1.AddHooks(this, m_Hooks);
+
+            //m_Hooks.Add(0x8018D298, new FatalPrintf(this));
         }
 
         public override string Description => "MIPS Interpreter";
 
-        public void CheckIfNeedServicing()
+        public bool CheckIfNeedServicing()
         {
-            // Do not do anything if the system controll has not signeled interrupts that need servicing
-            if (Cop0.InterpreterPendingInterrupts && (State.Cp0.Status.ErrorLevel || State.Cp0.Status.ExceptionLevel)) {
-                Cop0.InterpreterPendingInterrupts = false;
+            // Do not do anything if the system control has not signeled interrupts that need servicing
+            if (Cop0.ServicingRequred && (Cop0State.Status.ErrorLevel || Cop0State.Status.ExceptionLevel)) {
+                Cop0.ServicingRequred = false;
 
                 // Clear out the branch state
                 TakeBranch = false;
@@ -62,7 +82,7 @@ namespace cor64.Mips.R4300I
 
                 PC = Cop0.ExceptionHandlerAddress;
 
-                if (State.Cp0.Status.ErrorLevel)
+                if (Cop0State.Status.ErrorLevel)
                 {
                     #if DEBUG_INTERRUPTS
                     Log.Debug("Error Handler Taken: " + PC.ToString("X8"));
@@ -75,7 +95,11 @@ namespace cor64.Mips.R4300I
                 }
 
                 m_TakenException = true;
+
+                return true;
             }
+
+            return false;
         }
 
         public sealed override void ExceptionReturn(DecodedInstruction inst)
@@ -91,15 +115,12 @@ namespace cor64.Mips.R4300I
 
             #endif
 
-            // XXX: Always clear the exception state
-            Cop0.ClearExceptionState();
-
             if (m_TakenException) {
-                if (State.Cp0.Status.ErrorLevel)
+                if (Cop0State.Status.ErrorLevel)
                 {
                     // when servicing an error trap
                     PC = (uint)Cop0.CpuRegisterRead(CTS.CP0_REG_ERROR_EPC);
-                    State.Cp0.Status.ErrorLevel = false;
+                    Cop0State.Status.ErrorLevel = false;
                 }
                 else
                 {
@@ -109,7 +130,7 @@ namespace cor64.Mips.R4300I
                     Log.Debug("EPC -> PC: {0:X8}", PC);
                     #endif
 
-                    State.Cp0.Status.ExceptionLevel = false;
+                    Cop0State.Status.ExceptionLevel = false;
                 }
 
                 #if DEBUG_INTERRUPTS
@@ -123,12 +144,12 @@ namespace cor64.Mips.R4300I
                 Log.Debug("EPC -> PC: {0:X8}", PC);
                 #endif
 
-                State.Cp0.Status.ExceptionLevel = false;
+                Cop0State.Status.ExceptionLevel = false;
             }
 
             #if DEBUG_INTERRUPTS || DEBUG_ERET
 
-            if (State.Cp0.Status.ErrorLevel && m_TakenException) {
+            if (Cop0State.Status.ErrorLevel && m_TakenException) {
                 Log.Debug("Jump to Error EPC: " + PC.ToString("X16"));
             }
             else {
@@ -139,41 +160,110 @@ namespace cor64.Mips.R4300I
 
             PC &= 0xFFFFFFFF;
 
-            // We must subtract by 4 due to the PC increment made after the instuction call
+            // Must do this since PC increments after executed inst
             PC -= 4;
 
             m_TakenException = false;
             State.LLBit = false;
         }
 
-        // TODO: Run RSP directly on CPU thread?
-
         public override void Step()
         {
-            /* Step clock */
-            // CoreClock.NextTick();
-            Cop0.MipsTimerTick(1);
+            try {
+                ExecuteNext();
+            }
+            catch (TLBRaisedException) {
+                // Do nothing, exception should be serviced on the next issued Step()
+                Log.Debug("TLB Raised an exception");
+            }
+        }
 
-            /* Execute next instruction */
+        private bool ExecuteNext() {
+            #if !DISABLE_CPU_HOOKS
+            if (m_Hooks.TryGetValue(PC, out CpuCodeHook hook))
+            {
+                var result = hook.Execute();
+
+                if (result == CpuCodeHook.ReturnControl.HLECall) {
+                    TakeBranch = false;
+                    BranchDelay = false;
+                    UnconditionalJump = false;
+                    TargetAddress = 0;
+                    NullifyNext = false;
+
+                    return true;
+                }
+            }
+            #endif
+
+            var inDelaySlot = WillJump && BranchDelay;
+
+            // In Delay Slot
+            if (inDelaySlot) {
+                BranchDelay = false;
+            }
 
             // Check if the system controller detects pending events
-            Cop0.CheckInterrupts(PC, WillJump && BranchDelay);
+            Cop0.CheckInterrupts(PC, inDelaySlot);
 
             // Check if the CPU should start service handling
             CheckIfNeedServicing();
 
-            if (WillJump) {
-                if (BranchDelay) {
-                    BranchDelay = false;
+            CurrentInst = DecodeNext();
 
-                    Cop0.MipsTimerTick(1);
+            if (CurrentInst.IsMipsNop) {
+                Cop0.MipsTimerTick(2);
+            }
+            else {
+                Cop0.MipsTimerTick(1);
+            }
 
-                    if (!ExecuteInst())
-                    {
-                        throw new Exception(String.Format("Failed to execute delay slot instruction: 0x{0:X8} 0x{1:X8}", m_FailedInstruction.Address, m_FailedInstruction.Inst.inst));
-                    }
-                }
+            // TODO: remove failed inst field
 
+            if (!ValidateInstruction(CurrentInst))
+                return false;
+
+            var instHandler = CallTable[CurrentInst];
+
+            if (instHandler == null)
+                throw new NotSupportedException(String.Format("Opcode {0} not supported", CurrentInst.Op.Op));
+
+            #if DEBUG
+            CoreDbg.TestForInstBreakpoint(CurrentInst);
+
+            TraceInstruction(CurrentInst, false, m_TakenException);
+            #endif
+
+            /* --- EXECUTE INSTRUCTION HANDLER */
+
+            #if CPU_PROFILER
+            BeginInstructionProfile(CurrentInst);
+            #endif
+
+            // EXECUTE HANDLER
+            instHandler(CurrentInst);
+
+            #if CPU_PROFILER
+            EndInstructionProfile();
+            #endif
+
+            #if DEBUG
+            DebugInstruction(CurrentInst, PC, m_TakenException);
+            #endif
+
+            /* --------------------------------- */
+
+            // Checked for rasied exceptions
+            Cop0.CheckExceptions(PC, inDelaySlot);
+
+            // Check if the CPU should start service handling
+            if (!CheckIfNeedServicing()) {
+                // Shift PC to next instruction
+                PC += 4;
+            }
+
+            // perform the branching
+            if (!NullifyNext && WillJump && !BranchDelay) {
                 /* Should always be a word-aligned relative PC jump */
                 /* Always force 32-bit addresses */
                 PC = (uint)TargetAddress;
@@ -182,84 +272,26 @@ namespace cor64.Mips.R4300I
                 UnconditionalJump = false;
             }
 
-            /* Nornal execution path */
-            if (ExecuteInst())
-            {
-                PC += 4;
+            // Nullify the delay slot (branch likely not taken)
+            if (NullifyNext) {
+                TraceInstruction(CurrentInst, true, m_TakenException);
+                NullifyNext = false;
+                PC += 4; // Move PC to inst after delay slot
             }
-            else
-            {
-                throw new Exception(String.Format("Failed to execute instruction: 0x{0:X8} 0x{1:X8}", m_FailedInstruction.Address, m_FailedInstruction.Inst.inst));
-            }
+
+            return true;
         }
 
-        private bool ExecuteInst()
-        {
-            DecodedInstruction decoded;
-
+        private DecodedInstruction DecodeNext() {
             if (m_InjectedInst.HasValue)
             {
-                decoded = m_InjectedInst.Value;
+                var decoded = m_InjectedInst.Value;
                 m_InjectedInst = null;
+                return decoded;
             }
             else
             {
-                decoded = Decode();
-            }
-
-            // Process NOP
-            if (decoded.Inst.op == 0) {
-                Cop0.MipsTimerTick(1);
-            }
-
-            if (ValidateInstruction(decoded))
-            {
-                var call = CallTable[decoded];
-
-                if (call == null)
-                {
-                    throw new NotSupportedException(String.Format("Opcode {0} not supported", decoded.Op.Op));
-                }
-                else
-                {
-                    CurrentInst = decoded;
-
-                    if (!NullifyNext)
-                    {
-                        CoreDbg.TestForInstBreakpoint(decoded);
-
-                        #if DEBUG
-                        TraceInstruction(decoded, false, m_TakenException);
-                        #endif
-
-                        #if CPU_PROFILER
-                        BeginInstructionProfile(decoded);
-                        #endif
-
-                        var pc = PC;
-                        var inInt = m_TakenException;
-
-                        call(decoded);
-
-                        #if CPU_PROFILER
-                        EndInstructionProfile();
-                        #endif
-
-                        DebugInstruction(decoded, pc, inInt);
-                    }
-                    else
-                    {
-                        NullifyNext = false;
-                        TraceInstruction(decoded, true, m_TakenException);
-                    }
-
-                    return true;
-                }
-            }
-            else
-            {
-                m_FailedInstruction = decoded;
-                return false;
+                return Decode();
             }
         }
 
@@ -1018,12 +1050,11 @@ namespace cor64.Mips.R4300I
                             return;
                         }
 
-                        value = ReadFPR_W(inst.FloatSource);
-
-                        /* If running 64-bit mode, with the 32-bit version, then sign extend */
-                        if (IsOperation64 && inst.IsData32())
-                        {
-                            value = (ulong)(int)(uint)value;
+                        if (inst.IsData64()) {
+                            value = ReadFPR_DW(inst.FloatSource);
+                        }
+                        else {
+                            value = ReadFPR_W(inst.FloatSource);
                         }
 
                         break;
@@ -1082,24 +1113,10 @@ namespace cor64.Mips.R4300I
                             return;
                         }
 
-                        if (State.Cp0.Status.FRMode)
-                        {
-                            value &= 0xFFFFFFFF;
+                        if (inst.IsData64()) {
                             WriteFPR_DW(inst.FloatSource, value);
                         }
-                        else
-                        {
-                            // XXX: Needs testing
-                            // Load hi for even
-                            if (inst.FloatSource % 2 == 0)
-                            {
-                                value >>= 16;
-                            }
-                            else
-                            {
-                                value &= 0xFFFF;
-                            }
-
+                        else {
                             WriteFPR_W(inst.FloatSource, (uint)value);
                         }
 
@@ -1138,17 +1155,10 @@ namespace cor64.Mips.R4300I
 
             // Branch delay is always taken for non-likely else, if likely, then condition must be true
             BranchDelay = !isLikely || (TakeBranch && isLikely);
+            NullifyNext = !TakeBranch && !BranchDelay;
 
-            /* Clear target if not taken */
-            if (!TakeBranch)
-            {
-                TargetAddress = 0;
-
-                if (!BranchDelay)
-                {
-                    // Nullify the branch delay slot
-                    NullifyNext = true;
-                }
+            if (NullifyNext) {
+                Console.ResetColor();
             }
         }
 
@@ -1213,6 +1223,12 @@ namespace cor64.Mips.R4300I
                 case 4: m_DataMemory.Data32 = (uint)ReadGPR32(inst.Target); break;
                 case 8: m_DataMemory.Data64 = ReadGPR64(inst.Target); break;
             }
+
+            // just for debugging
+            // if (size == 4 && (uint)address == 0x80400000) {
+            //     Console.WriteLine("MY DEBUG WRITE: {0:X8} {0}", m_DataMemory.Data32);
+            //     return;
+            // }
 
             try
             {
@@ -1922,12 +1938,29 @@ namespace cor64.Mips.R4300I
             }
 
             if (result) {
-                SetExceptionState(ExceptionType.Trap);
+                Cop0.TrapException();
             }
         }
 
         public override void Break(DecodedInstruction inst) {
-            SetExceptionState(ExceptionType.Breakpoint);
+            SetBreakException();
+        }
+
+        public override void TLBProbe(DecodedInstruction inst) {
+            TLB.Probe();
+        }
+
+        public override void TLBWrite(DecodedInstruction inst) {
+            TLB.Write(inst.Op.Flags.TestFlag(ExecutionFlags.Random));
+        }
+
+        public override void TLBRead(DecodedInstruction inst) {
+            TLB.Read();
+        }
+
+        public override void Syscall(DecodedInstruction inst)
+        {
+            SetSyscallException();
         }
 
         public bool InfiniteLoopWarn => m_WarnInfiniteJump;

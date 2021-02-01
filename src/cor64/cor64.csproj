@@ -36,6 +36,13 @@
     <!-- <DefineConstants>$(DefineConstants);CHECK_ADDRESS_LEN</DefineConstants> -->
     <!-- <DefineConstants>$(DefineConstants);DEBUG_ERET</DefineConstants> -->
     <!-- <DefineConstants>$(DefineConstants);DEBUG_EPC</DefineConstants>  -->
+    <!-- <DefineConstants>$(DefineConstants);DEBUG_TLB</DefineConstants> -->
+    <!-- <DefineConstants>$(DefineConstants);DEBUG_TLB_TRANSLATE</DefineConstants> -->
+    <!-- <DefineConstants>$(DefineConstants);DEBUG_TLB_ENTRYHI</DefineConstants> -->
+    <!-- <DefineConstants>$(DefineConstants);CPU_CHECK_RESERVED</DefineConstants> -->
+    <DefineConstants>$(DefineConstants);CPU_ALWAYS_64</DefineConstants>
+    <!-- <DefineConstants>$(DefineConstants);DEBUG_OS</DefineConstants> -->
+    <DefineConstants>$(DefineConstants);DISABLE_CPU_HOOKS</DefineConstants>
   </PropertyGroup>
   <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>

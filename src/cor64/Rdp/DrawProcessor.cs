@@ -52,14 +52,9 @@ namespace cor64.Rdp {
             .Finish();
         }
 
-        public void Step() {
-            
-        }
-
         public virtual void Init() {
-            m_Interface.RFlags |= ReadStatusFlags.ColorBufferReady;
-            m_Interface.RFlags |= ReadStatusFlags.StartGClk;
-            m_Interface.RFlags |= ReadStatusFlags.PipeBusy;
+            // m_Interface.RFlags |= ReadStatusFlags.StartGClk;
+            // m_Interface.RFlags |= ReadStatusFlags.PipeBusy;
         }
 
         public void AttachInterface(MipsInterface rcpInterface, DPCInterface iface, Video videoInterface) {
@@ -134,6 +129,7 @@ namespace cor64.Rdp {
             }
 
             m_Interface.RFlags &= ~ReadStatusFlags.CmdBusy;
+            m_Interface.RFlags |= ReadStatusFlags.ColorBufferReady;
 
             // Log.Debug("RDP finished");
         }

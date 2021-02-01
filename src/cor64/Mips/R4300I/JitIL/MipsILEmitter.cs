@@ -14,8 +14,8 @@ namespace cor64.Mips.R4300I.JitIL
 {
     public abstract class MipsILEmitter : ILEmitter, IMipsOpcodes
     {
-        private Dictionary<String, MethodInfo> m_MipsBindings = new Dictionary<string, MethodInfo>();
-        private Dictionary<String, MethodInfo> m_BlockBindings = new Dictionary<string, MethodInfo>();
+        private readonly Dictionary<String, MethodInfo> m_MipsBindings = new Dictionary<string, MethodInfo>();
+        private readonly Dictionary<String, MethodInfo> m_BlockBindings = new Dictionary<string, MethodInfo>();
         public bool IsDelaySlot { get; set; }
         protected EmitterRegisterMap m_RegAllocationMap;
         protected RuntimeBasicBlock m_TargetBlock;
@@ -1415,5 +1415,9 @@ namespace cor64.Mips.R4300I.JitIL
         public abstract void Convert(DecodedInstruction inst);
         public abstract void Trap(DecodedInstruction inst);
         public abstract void Break(DecodedInstruction inst);
+        public abstract void TLBProbe(DecodedInstruction inst);
+        public abstract void TLBWrite(DecodedInstruction inst);
+        public abstract void TLBRead(DecodedInstruction inst);
+        public abstract void Syscall(DecodedInstruction inst);
     }
 }

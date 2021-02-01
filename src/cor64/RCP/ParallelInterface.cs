@@ -84,13 +84,6 @@ namespace cor64.RCP
             m_WriteLen.Write += WriteLengthWrite;
             m_Status.Write += StatusWrite;
 
-            m_DramAddress.Write += () => {
-                m_DramAddress.RegisterValue &= 0x00FFFFFF;
-                m_DramAddress.RegisterValue &= ~1U;
-            };
-
-            m_CartAddress.Write += () => m_CartAddress.RegisterValue &= ~1U;
-
             Map(
                 m_DramAddress, m_CartAddress, m_ReadLen, m_WriteLen,
                 m_Status,
@@ -126,14 +119,16 @@ namespace cor64.RCP
 
         private void WriteLengthWrite()
         {
+            m_DramAddress.RegisterValue &= 0x00FFFFFF;
+            m_DramAddress.RegisterValue &= ~1U;
+            m_CartAddress.RegisterValue &= ~1U;
+
             SourceAddress = m_CartAddress.RegisterValue;
             DestAddress = m_DramAddress.RegisterValue;
-            int size = (int)m_WriteLen.RegisterValue;
+            int size = (int)m_WriteLen.RegisterValue + 1;
 
             // Force length alignment
             // size = (size + 7U) & ~7U;
-            // XXX: It seems to always add 1 to the size
-            size++;
 
             if ((size % 8) == 0) {
                 var off = (int)(DestAddress % 8);
@@ -162,14 +157,16 @@ namespace cor64.RCP
 
         private void ReadLengthWrite()
         {
+            m_DramAddress.RegisterValue &= 0x00FFFFFF;
+            m_DramAddress.RegisterValue &= ~1U;
+            m_CartAddress.RegisterValue &= ~1U;
+
             SourceAddress = m_DramAddress.RegisterValue;
             DestAddress = m_CartAddress.RegisterValue;
-            int size = (int)m_WriteLen.RegisterValue;
+            int size = (int)m_WriteLen.RegisterValue + 1;
 
             // Force length alignment
             // size = (size + 7U) & ~7U;
-            // XXX: It seems to always add 1 to the size
-            size++;
 
             if ((size % 8) == 0) {
                 var off = (int)(DestAddress % 8);
@@ -188,8 +185,15 @@ namespace cor64.RCP
 
             Debugger.Current.ReportDmaFinish("PI", true, SourceAddress, DestAddress, size);
 
-            m_DramAddress.RegisterValue += (uint)size+1;
-            m_CartAddress.RegisterValue += (uint)size+1;
+            m_DramAddress.RegisterValue += (uint)size;
+            m_CartAddress.RegisterValue += (uint)size;
+
+            // This helps pass some DMA unalignement tests..
+            m_DramAddress.RegisterValue++;
+            m_CartAddress.RegisterValue++;
+
+            m_DramAddress.WriteNotify();
+            m_CartAddress.WriteNotify();
 
             // Some strange address alignment/shift happens here
 

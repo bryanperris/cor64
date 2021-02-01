@@ -1,4 +1,5 @@
 using cor64.Debugging;
+using cor64.HLE;
 using cor64.IO;
 using cor64.Mips.Analysis;
 using cor64.Mips.R4300I;
@@ -25,8 +26,6 @@ namespace cor64.Mips
         private ulong m_ProgramStart;
         protected Profiler m_Profiler = new Profiler();
 
-        private ExecutionState m_ProtectedState;
-
         public event Action<DecodedInstruction> TraceStep;
 
         protected BaseInterpreter(BaseDisassembler disassembler)
@@ -38,15 +37,6 @@ namespace cor64.Mips
             {
                 FilterInterruptHandlers = true
             };
-        }
-
-        protected void EnterProtectedState() {
-            m_ProtectedState = State;
-            State = new ExecutionState();
-        }
-
-        protected void LeaveProtectedState() {
-            State = m_ProtectedState;
         }
 
         public virtual void SafeSetPC(ulong address)
@@ -322,6 +312,7 @@ namespace cor64.Mips
         public ProgramTrace TraceLog { get; }
 
         public ExecutionState State { get; private set; }
+
 
         public bool DebugMode { get; private set; }
 

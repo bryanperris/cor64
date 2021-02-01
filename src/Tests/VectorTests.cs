@@ -58,7 +58,7 @@ namespace Tests {
 
         [Test]
         public void MemoryTests() {
-            var pinnedBuffer = new PinnedBuffer(3 * 16);
+            var pinnedBuffer = new UnmanagedBuffer(3 * 16);
             var vec1 = new RspVector(pinnedBuffer, 0);
             var vec2 = new RspVector(pinnedBuffer, 1);
             var vec3 = new RspVector(pinnedBuffer, 2);

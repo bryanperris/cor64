@@ -129,7 +129,7 @@ namespace Tests
                     }
                 case RegBoundType.Cp0:
                     {
-                        State.Cp0.Write(test.SourceCp0.Key, test.SourceCp0.Value); break;
+                        Cop0State.Write(test.SourceCp0.Key, test.SourceCp0.Value); break;
                     }
                 default: throw new NotImplementedException();
             }

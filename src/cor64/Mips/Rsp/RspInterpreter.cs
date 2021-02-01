@@ -6,6 +6,7 @@ using System.IO;
 using cor64.IO;
 using cor64.RCP;
 using NLog;
+using cor64.HLE;
 
 /* RSP Notes:
     * VCO = Vector Not Equal and Carry Out
@@ -23,18 +24,28 @@ namespace cor64.Mips.Rsp
         public override string Description => "Rsp Interpreter";
         public DecodedInstruction FailedInstruction { get => m_FailedInstruction; set => m_FailedInstruction = value; }
         public RspVector[] m_VecRegs;
-        private readonly PinnedBuffer m_VecPinnedMemory;
+        private readonly UnmanagedBuffer m_VecPinnedMemory;
         private int m_DivIn = 0;
         private int m_DivOut = 0;
         private bool m_lastDoublePrecision = false;
         private bool m_InterruptOnBroke = false;
         private bool m_SkipForcedWait = false;
 
+        private TaskType m_SpTaskType;
+
         private readonly EventWaitHandle m_CpuRspWait = new EventWaitHandle(false, EventResetMode.ManualReset);
 
-        // TODO: When CPU/RSP run in parallel, use a real semphore between them
-
+        private readonly EventWaitHandle m_HaltWait = new EventWaitHandle(false, EventResetMode.ManualReset);
         
+        enum TaskType : int {
+            Unknown = 0,
+            Graphics,
+            Audio,
+            Video,
+            HVQ = 6,
+            HHVQM
+        }
+
         /* RSP Flag Registers */
         private readonly RspCarryFlag m_VCarry = new RspCarryFlag();      // VCO
         private readonly RspCompareFlag m_VccClip = new RspCompareFlag(); // VCC - Clip
@@ -45,12 +56,13 @@ namespace cor64.Mips.Rsp
         private const int S16_MIN = -32768;
         private const int S16_MAX = 32767;
 
-        private const uint ADDRESS_MASK = 0xFFC;
+        private const uint PC_ALIGN_MASK = 0xFFC;
+        private const uint DATA_ALIGN_MASK = 0xFFF;
 
         public RspInterpreter() : base(new Disassembler("o32"))
         {
             m_VecRegs = new RspVector[32];
-            m_VecPinnedMemory = new PinnedBuffer(m_VecRegs.Length * 16);
+            m_VecPinnedMemory = new UnmanagedBuffer(m_VecRegs.Length * 16);
 
             for (int i = 0; i < m_VecRegs.Length; i++)
             {
@@ -63,7 +75,7 @@ namespace cor64.Mips.Rsp
             base.AttachInterface(rcpInterface, iface, rdpInterface);
 
             iface.PCSet += (pc) => {
-                PC = pc & 0xFFC;
+                PC = pc & PC_ALIGN_MASK;
                 // Log.Debug("RSP PC Set: {0:X8}", PC);
             };
 
@@ -73,12 +85,7 @@ namespace cor64.Mips.Rsp
                 if (Status.IsCmdEmpty)
                     return;
 
-                // Log.Debug("SP Status Update");
-
-                if (Status.TestCmdFlags(StatusCmdFlags.SetHalt))
-                {
-                    SetHaltMode(true);
-                }
+                // Log.Debug("SP Status Update: {0:X8}", Status.Cmd);
 
                 if (Status.TestCmdFlags(StatusCmdFlags.ClearBroke))
                 {
@@ -88,95 +95,114 @@ namespace cor64.Mips.Rsp
                 if (Status.TestCmdFlags(StatusCmdFlags.ClearIntterupt)) {
                     RcpInterface.ClearInterrupt(MipsInterface.INT_SP);
                 }
-
-                if (Status.TestCmdFlags(StatusCmdFlags.SetInterrupt)) {
+                else if (Status.TestCmdFlags(StatusCmdFlags.SetInterrupt)) {
                     RcpInterface.SetInterrupt(MipsInterface.INT_SP, true);
-                }
-
-                if (Status.TestCmdFlags(StatusCmdFlags.SetInterruptOnBreak)) {
-                    m_InterruptOnBroke = true;
-                    Status.StatusFlags |= StatusFlags.InterruptOnBreak;
                 }
 
                 if (Status.TestCmdFlags(StatusCmdFlags.ClearInterruptOnBreak)) {
                     m_InterruptOnBroke = false;
                     Status.StatusFlags &= ~StatusFlags.InterruptOnBreak;
                 }
-
-                if (Status.TestCmdFlags(StatusCmdFlags.SetSignal0)) {
-                    Status.StatusFlags |= StatusFlags.Signal0Set;
+                else if (Status.TestCmdFlags(StatusCmdFlags.SetInterruptOnBreak)) {
+                    m_InterruptOnBroke = true;
+                    Status.StatusFlags |= StatusFlags.InterruptOnBreak;
                 }
 
-                if (Status.TestCmdFlags(StatusCmdFlags.ClearSignal0)) {
-                    Status.StatusFlags &= ~StatusFlags.Signal0Set;
-                }
+                ProcessFlag(StatusCmdFlags.ClearSingleStep, StatusCmdFlags.SetSingleStep, StatusFlags.SingleStep);
+                ProcessFlag(StatusCmdFlags.ClearSignal0, StatusCmdFlags.SetSignal0, StatusFlags.Signal0Set);
+                ProcessFlag(StatusCmdFlags.ClearSignal1, StatusCmdFlags.SetSignal1, StatusFlags.Signal1Set);
+                ProcessFlag(StatusCmdFlags.ClearSignal2, StatusCmdFlags.SetSignal2, StatusFlags.Signal2Set);
+                ProcessFlag(StatusCmdFlags.ClearSignal3, StatusCmdFlags.SetSignal3, StatusFlags.Signal3Set);
+                ProcessFlag(StatusCmdFlags.ClearSignal4, StatusCmdFlags.SetSignal4, StatusFlags.Signal4Set);
+                ProcessFlag(StatusCmdFlags.ClearSignal5, StatusCmdFlags.SetSignal5, StatusFlags.Signal5Set);
+                ProcessFlag(StatusCmdFlags.ClearSignal6, StatusCmdFlags.SetSignal6, StatusFlags.Signal6Set);
+                ProcessFlag(StatusCmdFlags.ClearSignal7, StatusCmdFlags.SetSignal7, StatusFlags.Signal7Set);
 
-                if (Status.TestCmdFlags(StatusCmdFlags.SetSignal1)) {
-                    Status.StatusFlags |= StatusFlags.Signal1Set;
-                }
-
-                if (Status.TestCmdFlags(StatusCmdFlags.ClearSignal1)) {
-                    Status.StatusFlags &= ~StatusFlags.Signal1Set;
-                }
-
-                if (Status.TestCmdFlags(StatusCmdFlags.SetSignal2)) {
-                    Status.StatusFlags |= StatusFlags.Signal2Set;
-                }
-
-                if (Status.TestCmdFlags(StatusCmdFlags.ClearSignal2)) {
-                    Status.StatusFlags &= ~StatusFlags.Signal2Set;
-                }
-
-                if (Status.TestCmdFlags(StatusCmdFlags.SetSignal3)) {
-                    Status.StatusFlags |= StatusFlags.Signal3Set;
-                }
-
-                if (Status.TestCmdFlags(StatusCmdFlags.ClearSignal3)) {
-                    Status.StatusFlags &= ~StatusFlags.Signal3Set;
-                }
-
-                if (Status.TestCmdFlags(StatusCmdFlags.SetSignal4)) {
-                    Status.StatusFlags |= StatusFlags.Signal4Set;
-                }
-
-                if (Status.TestCmdFlags(StatusCmdFlags.ClearSignal4)) {
-                    Status.StatusFlags &= ~StatusFlags.Signal4Set;
-                }
-
-                if (Status.TestCmdFlags(StatusCmdFlags.SetSignal5)) {
-                    Status.StatusFlags |= StatusFlags.Signal5Set;
-                }
-
-                if (Status.TestCmdFlags(StatusCmdFlags.ClearSignal5)) {
-                    Status.StatusFlags &= ~StatusFlags.Signal5Set;
-                }
-
-                if (Status.TestCmdFlags(StatusCmdFlags.SetSignal6)) {
-                    Status.StatusFlags |= StatusFlags.Signal6Set;
-                }
-
-                if (Status.TestCmdFlags(StatusCmdFlags.ClearSignal6)) {
-                    Status.StatusFlags &= ~StatusFlags.Signal6Set;
-                }
-
-                if (Status.TestCmdFlags(StatusCmdFlags.SetSignal7)) {
-                    Status.StatusFlags |= StatusFlags.Signal7Set;
-                }
-
-                if (Status.TestCmdFlags(StatusCmdFlags.ClearSignal7)) {
-                    Status.StatusFlags &= ~StatusFlags.Signal7Set;
-                }
+                //DebugUltraSignaling();
 
                 if (Status.TestCmdFlags(StatusCmdFlags.ClearHalt))
                 {
                     // Allow SP to start execution
-                    // ReportSpTaskType();
+                    ReportSpTaskType();
+                    Status.ClearCmdFlags();
                     SetHaltMode(false);
+                }
+                else if (Status.TestCmdFlags(StatusCmdFlags.SetHalt))
+                {
+                    SetHaltMode(true);
                 }
 
                 /* Clear out the written command flags */
                 Status.ClearCmdFlags();
             };
+        }
+
+        private void DebugUltraSignaling() {
+            if (Status.TestCmdFlags(StatusCmdFlags.ClearSignal0)) {
+                Log.Debug("RSP SIG: Clear Yield");
+            }
+            else if (Status.TestCmdFlags(StatusCmdFlags.SetSignal0)) {
+                Log.Debug("RSP SIG: Set Yield");
+            }
+
+            if (Status.TestStatusFlags(StatusFlags.Signal0Set)) {
+                Log.Debug("RSP SIG: STATUS signals Yield");
+            }
+
+            if (Status.TestCmdFlags(StatusCmdFlags.ClearSignal1)) {
+                Log.Debug("RSP SIG: Clear Yielded");
+            }
+            else if (Status.TestCmdFlags(StatusCmdFlags.SetSignal1)) {
+                Log.Debug("RSP SIG: Set Yielded");
+            }
+
+            if (Status.TestStatusFlags(StatusFlags.Signal1Set)) {
+                Log.Debug("RSP SIG: STATUS signals Yielded");
+            }
+
+            if (Status.TestCmdFlags(StatusCmdFlags.ClearSignal2)) {
+                Log.Debug("RSP SIG: Clear TaskDone");
+            }
+            else if (Status.TestCmdFlags(StatusCmdFlags.SetSignal2)) {
+                Log.Debug("RSP SIG: Set TaskDone");
+            }
+
+            if (Status.TestStatusFlags(StatusFlags.Signal2Set)) {
+                Log.Debug("RSP SIG: STATUS signals TaskDone");
+            }
+
+            if (Status.TestCmdFlags(StatusCmdFlags.ClearSignal3)) {
+                Log.Debug("RSP SIG: Clear RspSignal");
+            }
+            else if (Status.TestCmdFlags(StatusCmdFlags.SetSignal3)) {
+                Log.Debug("RSP SIG: Set RspSignal");
+            }
+
+            if (Status.TestStatusFlags(StatusFlags.Signal3Set)) {
+                Log.Debug("RSP SIG: STATUS signals RspSignal");
+            }
+
+            if (Status.TestCmdFlags(StatusCmdFlags.ClearSignal4)) {
+                Log.Debug("RSP SIG: Clear CpuSignal");
+            }
+            else if (Status.TestCmdFlags(StatusCmdFlags.SetSignal4)) {
+                Log.Debug("RSP SIG: Set CpuSignal");
+            }
+
+            if (Status.TestStatusFlags(StatusFlags.Signal4Set)) {
+                Log.Debug("RSP SIG: STATUS signals CpuSignal");
+            }
+        }
+
+        private void ProcessFlag(StatusCmdFlags c, StatusCmdFlags s, StatusFlags f) {
+            // Clear
+            if (Status.TestCmdFlags(c)) {
+                Status.StatusFlags &= ~f;
+            }
+            // Set
+            else if (Status.TestCmdFlags(s)) {
+                Status.StatusFlags |= f;
+            }
         }
 
         private void ReportSpTaskType() {
@@ -185,6 +211,20 @@ namespace cor64.Mips.Rsp
 
             var type = DMem.Data32;
 
+            // PrintSpTaskType(type);
+
+            m_SpTaskType = TaskType.Unknown;
+
+            switch (type) {
+                case 1: m_SpTaskType = TaskType.Graphics; break;
+                case 2: m_SpTaskType = TaskType.Audio; break;
+                case 3: m_SpTaskType = TaskType.Video; break;
+                case 6: m_SpTaskType = TaskType.HVQ; break;
+                case 7: m_SpTaskType = TaskType.HHVQM; break;
+            }
+        }
+
+        private void PrintSpTaskType(int type) {
             switch (type) {
                 case 1: Log.Debug("Executing Graphics SP task"); break;
                 case 2: Log.Debug("Executing Audio SP task"); break;
@@ -194,6 +234,8 @@ namespace cor64.Mips.Rsp
                 default: Log.Debug("Executing unknown SP task: {0}", type); break;
             }
         }
+
+        public bool IsGraphicsTask => m_SpTaskType == TaskType.Graphics;
 
         public override void Init()
         {
@@ -206,13 +248,17 @@ namespace cor64.Mips.Rsp
                 return;
             }
 
+            //m_HaltWait.WaitOne();
+
             /* Execute next instruction */
             ExecuteNextInst();
         }
 
+        // TODO: Step with locking and step with polling
+
         public override void ManualStart(ulong pc)
         {
-            PC = pc;
+            PC = pc & PC_ALIGN_MASK;
             IsHalted = false;
         }
 
@@ -242,14 +288,17 @@ namespace cor64.Mips.Rsp
                 if (ExecuteInst())
                 {
                     PC += 4;
+                    PC &= PC_ALIGN_MASK;
                 }
                 else
                 {
                     throw new Exception(
-                        String.Format("Failed to execute instruction: 0x{0:X8} 0x{1:X8} {2}", 
+                        String.Format("Failed to execute instruction (INV:{3}:OOB:{4}): 0x{0:X8} 0x{1:X8} {2}", 
                             m_FailedInstruction.Address, 
                             m_FailedInstruction.Inst.inst, 
-                            DisassembleFailedInst()));
+                            DisassembleFailedInst(),
+                            m_FailedInstruction.IsInvalid,
+                            m_FailedInstruction.IsNull));
                 }
             }
         }
@@ -355,12 +404,14 @@ namespace cor64.Mips.Rsp
             if (halted)
             {
                 Status.StatusFlags |= StatusFlags.Halt;
-                m_CpuRspWait.Set();
+                m_HaltWait.Reset();
+                // m_CpuRspWait.Set();
             }
             else
             {
                 Status.StatusFlags &= ~StatusFlags.Halt;
-                CpuWaitForFinish();
+                m_HaltWait.Set();
+                // CpuWaitForFinish();
             }
         }
 
@@ -427,6 +478,7 @@ namespace cor64.Mips.Rsp
         public override void Add(DecodedInstruction inst)
         {
             bool isUnsigned = inst.IsUnsigned();
+            // bool isUnsigned = true;
             bool isImmediate = inst.IsImmediate();
             uint operandA = ReadGPR(inst.Source);
             uint operandB = isImmediate ? (uint)(short)inst.Immediate : ReadGPR(inst.Target);
@@ -484,12 +536,12 @@ namespace cor64.Mips.Rsp
             uint target = ReadGPR(inst.Target);
 
             TargetAddress = CoreUtils.ComputeBranchPC(false, PC, CoreUtils.ComputeBranchTargetOffset(inst.Immediate));
-            TargetAddress &= ADDRESS_MASK;
+            TargetAddress &= PC_ALIGN_MASK;
             TakeBranch = ComputeBranchCondition(false, source, target, inst.Op.XferTarget, inst.Op.ArithmeticType);
 
             if (isLink)
             {
-                Writeback(31, (uint)(PC + 8) & ADDRESS_MASK);
+                Writeback(31, (uint)(PC + 8) & PC_ALIGN_MASK);
             }
 
             // Always true for RSP
@@ -508,14 +560,14 @@ namespace cor64.Mips.Rsp
             UnconditionalJump = true;
 
             TargetAddress = CoreUtils.ComputeTargetPC(isRegister, PC, ReadGPR(inst.Source), inst.Inst.target);
-            TargetAddress &= ADDRESS_MASK;
+            TargetAddress &= PC_ALIGN_MASK;
 
             if (isLink) {
                 if (isRegister && (inst.Target & 0b11) != 0) {
-                    Writeback(inst.Target, (uint)(PC + 8) & ADDRESS_MASK);
+                    Writeback(inst.Target, (uint)(PC + 8) & PC_ALIGN_MASK);
                 }
                 else {
-                    Writeback(31, (uint)(PC + 8) & ADDRESS_MASK);
+                    Writeback(31, (uint)(PC + 8) & PC_ALIGN_MASK);
                 }
             }
         }
@@ -542,7 +594,7 @@ namespace cor64.Mips.Rsp
                 long baseAddress = (long)ReadGPR(inst.Source);
                 long offset = (short)inst.Immediate;
                 address = (ulong)(baseAddress + offset);
-                address &= 0xFFF;
+                address &= DATA_ALIGN_MASK;
 
                 DMem.ReadData((long)address, size);
 
@@ -572,6 +624,7 @@ namespace cor64.Mips.Rsp
         public override void SetOnLessThan(DecodedInstruction inst)
         {
             bool unsigned = inst.IsUnsigned();
+            // bool unsigned = true;
             bool immediate = inst.IsImmediate();
             int dest = immediate ? inst.Target : inst.Destination;
             byte result = 0;
@@ -648,7 +701,7 @@ namespace cor64.Mips.Rsp
             int baseAddress = (int)ReadGPR(inst.Source);
             int offset = (short)inst.Immediate;
             address = (ulong)(baseAddress + offset);
-            address &= 0xFFF;
+            address &= DATA_ALIGN_MASK;
 
             switch (size)
             {
@@ -664,6 +717,7 @@ namespace cor64.Mips.Rsp
         public override void Subtract(DecodedInstruction inst)
         {
             bool isUnsigned = inst.IsUnsigned();
+            // bool isUnsigned = true;
             uint operandA = ReadGPR(inst.Source);
             uint operandB = ReadGPR(inst.Target);
             uint result;
@@ -715,14 +769,6 @@ namespace cor64.Mips.Rsp
 
                             // Log.Debug("SP Interface -> RSP: {0} {1:X8}", regSource, value);
                             value = Interface.ReadRegForRsp(regSource);
-
-                            if (regSource == 7) {
-                                // This matters more when RSP/CPU bth run in parallel and trying to share the DMA
-                                //Log.Debug("RSP read semaphore");
-
-                                // value = 1;
-                                // m_CpuRspWait.Set();
-                            }
                     	}
                     	else if (regSource >= 8 && regSource < 16)
                     	{
@@ -846,7 +892,7 @@ namespace cor64.Mips.Rsp
         {
             /* Break is used to halt the RSP processor */
             Status.StatusFlags |= StatusFlags.Broke;
-            
+
             SetHaltMode(true);
 
             if (m_InterruptOnBroke) {
@@ -954,6 +1000,12 @@ namespace cor64.Mips.Rsp
                         VectorLoadStoreHelper.LoadTranposed(DMem, address, m_VecRegs, inst.VTarget, element);
                         break;
                     }
+
+                    case VectorOpFlags.Rest: {
+                        Log.Debug("TODO: LRV");
+                        break;
+                    }
+
                     default: throw new EmuException("Invalid RSP VectorLoad Vector Flag");
                 }
             }
@@ -1048,6 +1100,12 @@ namespace cor64.Mips.Rsp
                         VectorLoadStoreHelper.StoreTranposed(DMem, address, m_VecRegs, inst.VTarget, element);
                         break;
                     }
+
+                    case VectorOpFlags.Rest: {
+                        Log.Debug("TODO: SRV");
+                        break;
+                    }
+
                     default: throw new EmuException("Invalid RSP VectorStore Vector Flag");
                 }
             }
@@ -1239,12 +1297,6 @@ namespace cor64.Mips.Rsp
                         break;
                     }
 
-                    case ArithmeticOp.MOVE: {
-                        result = target;
-                        m_VecRegs[inst.VDest].PackedU16(inst.VSource & 7, m_VecRegs[inst.VTarget].PackedU16(inst.VSource & 7));
-                        break;
-                    }
-
                     case ArithmeticOp.ABSOLUTE: {
                         var s = (short)source;
                         var t = (short)target;
@@ -1273,8 +1325,7 @@ namespace cor64.Mips.Rsp
                 ushort value = (ushort)result;
                 Acc[i] = value;
 
-                if (inst.Op.ArithmeticType != ArithmeticOp.MOVE)
-                    m_VecRegs[inst.VDest].PackedU16(i, value);
+                m_VecRegs[inst.VDest].PackedU16(i, value);
             }
         }
 
@@ -1558,6 +1609,17 @@ namespace cor64.Mips.Rsp
                     M_VccCompare.SetBool(i, flag_compare);
                 }
             }
+        }
+        public override void VectorMove(DecodedInstruction inst)
+        {
+            var target = m_VecRegs[inst.VTarget].Resolve(inst.Element);
+            var dest = m_VecRegs[inst.VDest];
+
+            int elementSelect = inst.VSource & 7;
+
+            var element = target.PackedU16(elementSelect);
+            Acc.SetLoFromVector(target);
+            dest.PackedU16(elementSelect, element);
         }
     }
 }

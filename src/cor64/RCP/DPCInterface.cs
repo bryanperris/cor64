@@ -128,24 +128,35 @@ namespace cor64.RCP {
         }
 
         public uint ReadRegForRsp(int select) {
+            m_RegSelects[select].ReadNotify();
             return m_RegSelects[select].ReadonlyRegisterValue;
         }
 
         private void DisplayListStart() {
+            m_Start.RegisterValue &= 0x00FFFFFFF;
             m_Current.ReadonlyRegisterValue = m_Start.RegisterValue;
-            m_Status.ReadonlyRegisterValue = 0x400; // Mark valid start
+            // m_Status.ReadonlyRegisterValue = 0x400; // Mark valid start
+            // Log.Debug("DPC Start: {0:X8}", m_Start.RegisterValue);
         }
 
         private void DisplayListEnd() {
-            m_Status.ReadonlyRegisterValue = 0x200; // Mark valid end
+            m_End.RegisterValue &= 0x00FFFFFFF;
+            // m_Status.ReadonlyRegisterValue = 0x200; // Mark valid end
+
+            // Log.Debug("DPC End: {0:X8}",  m_End.RegisterValue);
+
+            var start = m_Current.ReadonlyRegisterValue;
+            var end =   m_End.RegisterValue;
+
+            // Alignment
+            start &= ~7U;
+            end &= ~7U;
 
             // Nothing happens when START and END are set to the same value
-            if (m_Start.RegisterValue == m_End.RegisterValue) {
+            if (m_End.RegisterValue <= m_Start.RegisterValue) {
+                // Log.Debug("DPC: End <= Start");
                 return;
             }
-
-            var start = m_Current.RegisterValue & 0x00FFFFFFF;
-            var end =   m_End.RegisterValue     & 0x00FFFFFFF;
 
             // XBUS Mode: Convert address to DMEM
             if (UseXBus) {
@@ -153,22 +164,19 @@ namespace cor64.RCP {
                end =   0x04000000 + (end   & 0x3FF);
             }
 
-            // Alignment
-            start &= ~7U;
-            end &= ~7U;
-
             // Log.Debug("Executing DL: {0:X8}:{1:X8}", start, end);
 
-            // Update the address regs
-            m_Start.RegisterValue = m_End.RegisterValue;
+            // Update current before the interrupt
             m_Current.ReadonlyRegisterValue = m_End.RegisterValue;
 
             DisplayListReady?.Invoke(this, new DisplayList(start, end));
         }
 
         public void DirectDLSetup(uint address, int size) {
-            m_Start.RegisterValue = address;
+            m_Start.ReadonlyRegisterValue = address;
+            m_Start.WriteNotify();
             m_End.RegisterValue = (uint)(address + size);
+            m_End.WriteNotify();
         }
 
         public void DirectDLExecute() {
@@ -189,9 +197,9 @@ namespace cor64.RCP {
                 RFlags &= ~ReadStatusFlags.XbusDmemDma;
             }
 
-            if ((flags & WriteStatusFlags.SetFreeze) == WriteStatusFlags.SetFreeze) {
-                RFlags |= ReadStatusFlags.Freeze;
-            }
+            // if ((flags & WriteStatusFlags.SetFreeze) == WriteStatusFlags.SetFreeze) {
+            //     RFlags |= ReadStatusFlags.Freeze;
+            // }
 
             if ((flags & WriteStatusFlags.ClearFreeze) == WriteStatusFlags.ClearFreeze) {
                 RFlags &= ~ReadStatusFlags.Freeze;
@@ -206,6 +214,8 @@ namespace cor64.RCP {
             get => (ReadStatusFlags)m_Status.ReadonlyRegisterValue;
             set => m_Status.ReadonlyRegisterValue = (uint)value;
         }
+
+        public bool IsBusy => (RFlags & ReadStatusFlags.CmdBusy) == ReadStatusFlags.CmdBusy;
 
         public bool UseXBus => (RFlags & ReadStatusFlags.XbusDmemDma) == ReadStatusFlags.XbusDmemDma;
     }

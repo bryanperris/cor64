@@ -17,9 +17,10 @@ namespace cor64.IO
             DUAL_READ_WRITE,    // 2 read-writables buffers are shared between the CPU and device: CPU writes are read into the devuce, device writes are readout to CPU
         }
 
-        private readonly PinnedBuffer m_BufferA;
-        private readonly PinnedBuffer m_BufferB;
+        private readonly UnmanagedBuffer m_BufferA;
+        private readonly UnmanagedBuffer m_BufferB;
         public event Action Write;
+        public event Action Read;
 
         public MemMappedBuffer() : this(4) {
             
@@ -28,9 +29,10 @@ namespace cor64.IO
         public MemMappedBuffer(int size, MemModel mode = MemModel.SINGLE_READ_WRITE)
         {
             Size = size;
-            m_BufferA = new PinnedBuffer(size);
+            m_BufferA = new UnmanagedBuffer(size);
             m_BufferB = m_BufferA;
             Write = EmptyHandler;
+            Read = EmptyHandler;
 
             switch (mode)
             {
@@ -54,15 +56,15 @@ namespace cor64.IO
                     {
                         CanRead = true;
                         CanWrite = true;
-                        m_BufferB = new PinnedBuffer(size);
+                        m_BufferB = new UnmanagedBuffer(size);
                         break;
                     }
             }
         }
 
-        public MemMappedBuffer(int offset, int size, PinnedBuffer parent) {
+        public MemMappedBuffer(int offset, int size, UnmanagedBuffer parent) {
             Size = size;
-            m_BufferA = new PinnedBuffer(parent, offset, size);
+            m_BufferA = new UnmanagedBuffer(parent, offset, size);
             m_BufferB = m_BufferA;
             Write = EmptyHandler;
             CanRead = true;
@@ -79,11 +81,15 @@ namespace cor64.IO
             Write.Invoke();
         }
 
+        public virtual void ReadNotify() {
+            Read.Invoke();
+        }
+
         public IntPtr ReadPtr => m_BufferB.GetPointer();
 
         public IntPtr WritePtr => m_BufferA.GetPointer();
 
-        public PinnedBuffer BufferA => m_BufferA;
+        public UnmanagedBuffer BufferA => m_BufferA;
 
         public String Tag { get; set; }
 

@@ -1,4 +1,5 @@
-﻿using System;
+using System.Threading;
+using System;
 using System.IO;
 using cor64.Debugging;
 using cor64.IO;
@@ -81,6 +82,23 @@ namespace cor64.RCP
                  [2] BIST clear                [2] BIST done
                                                [6:3] BIST fail
         0x0408 0008 to 0x040F FFFF  Unused
+
+    // ultra notes
+    #define SP_CLR_YIELD		SP_CLR_SIG0
+    #define SP_SET_YIELD		SP_SET_SIG0
+    #define SP_STATUS_YIELD		SP_STATUS_SIG0
+    #define SP_CLR_YIELDED		SP_CLR_SIG1
+    #define SP_SET_YIELDED		SP_SET_SIG1
+    #define SP_STATUS_YIELDED	SP_STATUS_SIG1
+    #define SP_CLR_TASKDONE		SP_CLR_SIG2
+    #define SP_SET_TASKDONE		SP_SET_SIG2
+    #define SP_STATUS_TASKDONE	SP_STATUS_SIG2
+    #define	SP_CLR_RSPSIGNAL	SP_CLR_SIG3
+    #define	SP_SET_RSPSIGNAL	SP_SET_SIG3
+    #define	SP_STATUS_RSPSIGNAL	SP_STATUS_SIG3
+    #define	SP_CLR_CPUSIGNAL	SP_CLR_SIG4
+    #define	SP_SET_CPUSIGNAL	SP_SET_SIG4
+    #define	SP_STATUS_CPUSIGNAL	SP_STATUS_SIG4
 	 */
     public class SPInterface : PerpherialDevice
     {
@@ -109,6 +127,8 @@ namespace cor64.RCP
 
         public event Action<uint> PCSet;
 
+        private readonly EventWaitHandle m_CpuRspWait = new EventWaitHandle(false, EventResetMode.ManualReset);
+
         private uint m_ActualSpAddress;
 
         public SPInterface(N64MemoryController controller) : base (controller, 0x100000)
@@ -121,20 +141,7 @@ namespace cor64.RCP
 
             Status = new SPStatusRegister(m_Status);
 
-            m_PC.Write += () => {
-                PCSet?.Invoke(m_PC.RegisterValue);
-            };
-
-            m_DramAddress.Write += () => {
-                m_DramAddress.RegisterValue &= 0x007FFFFC;
-                m_DramAddress.RegisterValue &= ~7U;
-            };
-
-            m_SpMemAddress.Write += () => {
-                m_SpMemAddress.RegisterValue &= 0x00001FFC;
-                m_SpMemAddress.RegisterValue &= ~7U;
-                m_ActualSpAddress = 0x04000000 | m_SpMemAddress.RegisterValue;
-            };
+            m_PC.Write += () => PCSet?.Invoke(m_PC.RegisterValue);
 
             m_ReadLen.Write += ReadLengthWrite;
             m_WriteLen.Write += WriteLengthWrite;
@@ -150,7 +157,25 @@ namespace cor64.RCP
                 m_Semaphore     // $c7
             };
 
-            m_Semaphore.Write += () => m_Semaphore.RegisterValue = 0;
+            // m_Semaphore.Write += () => {
+            //     m_Semaphore.RegisterValue = 0;
+            //     m_CpuRspWait.Set();
+            // };
+
+            // m_Semaphore.Read += () => {
+            //     m_Semaphore.RegisterValue = 0;
+            //     m_CpuRspWait.WaitOne();
+            //     m_CpuRspWait.Reset();
+            // };
+
+            m_Semaphore.Write += () => {
+                m_Semaphore.RegisterValue = 0;
+            };
+
+            m_Semaphore.Read += () => {
+                m_Semaphore.RegisterValue = 0;
+            };
+
 
             m_SizeFiddler.DefineField(0, 12);
             m_SizeFiddler.DefineField(12, 8);
@@ -163,6 +188,7 @@ namespace cor64.RCP
         }
 
         public uint ReadRegForRsp(int select) {
+            m_RegSelects[select].ReadNotify();
             return m_RegSelects[select].ReadonlyRegisterValue;
         }
 
@@ -171,8 +197,8 @@ namespace cor64.RCP
         /// </summary>
         private void WriteLengthWrite()
         {
-            SourceAddress = m_ActualSpAddress;
-            DestAddress = m_DramAddress.RegisterValue;
+            m_DramAddress.RegisterValue &= ~7U;
+            m_SpMemAddress.RegisterValue &= ~3U;
 
             uint len = m_WriteLen.RegisterValue;
             uint size = m_SizeFiddler.X(SIZE_FIELD_LEN, ref len) + 1;
@@ -192,14 +218,21 @@ namespace cor64.RCP
             // Force length alignment
             size = (size + 7U) & ~7U;
 
+            // Check for length overflowing
+            if (((m_SpMemAddress.RegisterValue & 0xFFF) + size) > 0x1000) {
+                size = 0x1000 - (m_SpMemAddress.RegisterValue & 0xFFF);
+            }
+
             for (; count > 0; count--) {
+                DestAddress = m_DramAddress.RegisterValue & 0x007FFFFC;
+                SourceAddress =  0x04000000 | (m_SpMemAddress.RegisterValue & 0x00001FFC);
 
                 TransferBytes((int)size);
 
                 Debugger.Current.ReportDmaFinish("SP", false, SourceAddress, DestAddress, (int)size);
 
-                SourceAddress += size ;
-                DestAddress += size + skip;
+                m_DramAddress.RegisterValue += size + skip;
+                m_SpMemAddress.RegisterValue += size;
             }
 
             ClearDmaBusy();
@@ -210,8 +243,8 @@ namespace cor64.RCP
         /// </summary>
         private void ReadLengthWrite()
         {
-            SourceAddress = m_DramAddress.RegisterValue;
-            DestAddress = m_ActualSpAddress;
+            m_DramAddress.RegisterValue &= ~7U;
+            m_SpMemAddress.RegisterValue &= ~3U;
 
             uint len = m_ReadLen.RegisterValue;
             uint size = m_SizeFiddler.X(SIZE_FIELD_LEN, ref len) + 1;
@@ -231,14 +264,21 @@ namespace cor64.RCP
             // Force length alignment
             size = (size + 7U) & ~7U;
 
+            // Check for length overflowing
+            if (((m_SpMemAddress.RegisterValue & 0xFFF) + size) > 0x1000) {
+                size = 0x1000 - (m_SpMemAddress.RegisterValue & 0xFFF);
+            }
+
             for (; count > 0; count--) {
+                SourceAddress = m_DramAddress.RegisterValue & 0x007FFFFC;
+                DestAddress =  0x04000000 | (m_SpMemAddress.RegisterValue & 0x00001FFC);
 
                 TransferBytes((int)size);
 
                 Debugger.Current.ReportDmaFinish("SP", true, SourceAddress, DestAddress, (int)size);
 
-                SourceAddress += size + skip;
-                DestAddress += size;
+                m_DramAddress.RegisterValue += size + skip;
+                m_SpMemAddress.RegisterValue += size;
             }
 
             ClearDmaBusy();

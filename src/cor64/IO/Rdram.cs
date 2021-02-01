@@ -13,10 +13,10 @@ namespace cor64.IO
         private const int NORMAL_SIZE = 4 * 1024 * 1024;
         private const int MAXSIZE = 2 * NORMAL_SIZE;
 
-        private readonly PinnedBuffer m_Ram = new PinnedBuffer(MAXSIZE);
-        private readonly PinnedBuffer m_HiddenRam = new PinnedBuffer(NORMAL_SIZE);
-        private readonly PinnedBuffer m_DummyRead = new PinnedBuffer(4);
-        private readonly PinnedBuffer m_DummyWrite = new PinnedBuffer(4);
+        private readonly UnmanagedBuffer m_Ram = new UnmanagedBuffer(MAXSIZE);
+        private readonly UnmanagedBuffer m_HiddenRam = new UnmanagedBuffer(NORMAL_SIZE);
+        private readonly UnmanagedBuffer m_DummyRead = new UnmanagedBuffer(4);
+        private readonly UnmanagedBuffer m_DummyWrite = new UnmanagedBuffer(4);
 
         public override long Size => 0x03EFFFFF + 1;
 

@@ -41,11 +41,16 @@ namespace cor64.Mips.Rsp
             .Map(VectorSubtract, VSUB, VSUBC)
             .Map(VectorMultiply, VMULF, VMULU, VMUDL, VMUDM, VMUDN, VMUDH, VMACF, VMACU, VMADL, VMADM, VMADN, VMADH)
             .Map(VectorAccumulatorRead, VSAR)
-            .Map(VectorBitwise, VABS, VMOV, VAND, VNAND, VOR, VNOR, VXOR, VNXOR)
+            .Map(VectorBitwise, VABS, VAND, VNAND, VOR, VNOR, VXOR, VNXOR)
             .Map(VectorReciprocal, VRCP, VRCPL, VRCPH, VRSQ, VRSQL, VRSQH)
             .Map(VectorCompare, VEQ, VNE, VLT, VGE)
             .Map(VectorClip, VCL, VCH, VCR, VMRG)
+            .Map(VectorMove, VMOV)
             .Finish();
+        }
+
+        private void NothingOp(DecodedInstruction inst) {
+
         }
 
         public abstract void WriteVCC(ushort vcc);
@@ -69,7 +74,7 @@ namespace cor64.Mips.Rsp
 
             public override long Position {
                 get => m_BaseStream.Position;
-                set => m_BaseStream.Position = value;
+                set => m_BaseStream.Position = value & 0xFFF;
             }
 
             public override bool CanRead => m_BaseStream.CanRead;
@@ -234,5 +239,6 @@ namespace cor64.Mips.Rsp
         public abstract void VectorReciprocal(DecodedInstruction inst);
         public abstract void VectorCompare(DecodedInstruction inst);
         public abstract void VectorClip(DecodedInstruction inst);
+        public abstract void VectorMove(DecodedInstruction inst);
     }
 }

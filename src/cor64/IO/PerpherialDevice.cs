@@ -11,12 +11,13 @@ namespace cor64.IO
         private long m_BuilderOffset;
         private int m_Size;
         private MemMappedBuffer[] m_MappedDevices;
-        private PinnedBuffer m_WriteTemp = new PinnedBuffer(4);
-        private PinnedBuffer m_ReadTemp = new PinnedBuffer(4);
+        private UnmanagedBuffer m_WriteTemp = new UnmanagedBuffer(4);
+        private UnmanagedBuffer m_ReadTemp = new UnmanagedBuffer(4);
 
         private IntPtr[] m_ReadMap;
         private IntPtr[] m_WriteMap;
         private Action[] m_WriteFunc;
+        private Action[] m_ReadFunc;
 
         protected PerpherialDevice(N64MemoryController controller, int size) : base(controller)
         {
@@ -29,6 +30,7 @@ namespace cor64.IO
             m_ReadMap = new IntPtr[arraySize];
             m_WriteMap = new IntPtr[arraySize];
             m_WriteFunc = new Action[arraySize];
+            m_ReadFunc = new Action[arraySize];
 
             Fill(m_ReadMap, m_ReadTemp.GetPointer());
             Fill(m_WriteMap, m_WriteTemp.GetPointer());
@@ -75,6 +77,7 @@ namespace cor64.IO
                     if (device.CanWrite) m_WriteMap[ind] = IntPtr.Add(device.WritePtr, ptrOff);
 
                     m_WriteFunc[ind] = device.WriteNotify;
+                    m_ReadFunc[ind] = device.ReadNotify;
                 }
 
                 m_BuilderOffset += device.Size;
@@ -99,7 +102,9 @@ namespace cor64.IO
             //    //_buffer.Read(buffer, _offset, offset, count);
             //}
 
-            Marshal.Copy(m_ReadMap[(int)position / 4], buffer, offset, count);
+            var ind = (int)position / 4;
+            m_ReadFunc[ind].Invoke();
+            Marshal.Copy(m_ReadMap[ind], buffer, offset, count);
         }
 
         public sealed override void Write(long position, byte[] buffer, int offset, int count)

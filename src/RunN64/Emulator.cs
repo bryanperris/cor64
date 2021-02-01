@@ -266,7 +266,7 @@ namespace RunN64
         }
 
         public void ForceInterruptsEnable() {
-            m_System.DeviceCPU.State.Cp0.Status.SetInterruptsEnabled(true);
+            m_System.DeviceCPU.Cop0State.Status.SetInterruptsEnabled(true);
         }
 
         private void DumpRspDisasm(uint start, uint end) {

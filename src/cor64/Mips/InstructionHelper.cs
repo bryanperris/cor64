@@ -90,5 +90,11 @@ namespace cor64.Mips
         {
             return (inst.Op.Flags & ExecutionFlags.Data32) == ExecutionFlags.Data32;
         }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool IsData64(this DecodedInstruction inst)
+        {
+            return (inst.Op.Flags & ExecutionFlags.Data64) == ExecutionFlags.Data64;
+        }
     }
 }

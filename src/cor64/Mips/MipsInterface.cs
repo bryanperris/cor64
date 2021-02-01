@@ -136,6 +136,10 @@ namespace cor64.Mips
             m_Interrupt.ReadonlyRegisterValue = val;
         }
 
+        public void ClearVI() {
+            ClearInterrupt(INT_VI);
+        }
+
         public void ProcessMaskClearSet()
         {
             uint value = m_Mask.RegisterValue;

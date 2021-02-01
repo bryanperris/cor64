@@ -17,17 +17,17 @@ namespace cor64.Mips
             m_BaseStream = stream;
         }
 
-        protected abstract long TranslateAddress(long address);
+        protected abstract long TranslateAddress(long address, bool isStore);
 
         public override int Read(byte[] buffer, int offset, int count)
         {
-            m_BaseStream.Position = TranslateAddress((uint)Position);
+            m_BaseStream.Position = TranslateAddress((uint)Position, false);
             return m_BaseStream.Read(buffer, offset, count);
         }
 
         public override void Write(byte[] buffer, int offset, int count)
         {
-            m_BaseStream.Position = TranslateAddress((uint)Position);
+            m_BaseStream.Position = TranslateAddress((uint)Position, true);
             m_BaseStream.Write(buffer, offset, count);
         }
 

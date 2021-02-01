@@ -46,6 +46,24 @@ namespace cor64.IO
             m_FastMemMap.Init(m_MemModel);
         }
 
+        private void DebugValue32(long address, byte[] buffer, uint testValue, bool isRead) {
+            unsafe {
+                fixed (byte * ptr = &buffer[0]) {
+                    IntPtr p = (IntPtr)ptr;
+                    var v = p.AsType_32Swp();
+
+                    if (v == testValue) {
+                        if (isRead) {
+                            Console.WriteLine("MEM32 DEBUG READ: {0:X8} {1:X8}", (uint)address, v);
+                        }
+                        else {
+                            Console.WriteLine("MEM32 DEBUG WRITE: {0:X8} {1:X8}", (uint)address, v);
+                        }
+                    }
+                }
+            }
+        }
+
         public void Read(long address, byte[] buffer, int offset, int count)
         {
             //Interlocked.Increment(ref m_CountReaders);

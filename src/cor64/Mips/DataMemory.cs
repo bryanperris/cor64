@@ -1,4 +1,5 @@
 ﻿using cor64.IO;
+using cor64.Mips.R4300I;
 using NLog;
 using System;
 using System.Collections.Generic;
@@ -75,6 +76,9 @@ namespace cor64.Mips
 
                 //Console.WriteLine("Read {0:X16} from {1:X8}", Data64, address);
             }
+            catch (TLBRaisedException) {
+                throw;
+            }
             catch (Exception e)
             {
                 Log.Error(e, e.Message);
@@ -98,6 +102,9 @@ namespace cor64.Mips
 
                 m_DataStream.Position = address;
                 m_DataStream.Write(m_DataBuffer, 0, size);
+            }
+            catch (TLBRaisedException) {
+                throw;
             }
             catch (Exception e)
             {
@@ -177,6 +184,11 @@ namespace cor64.Mips
             return buffer;
         }
         
+
+        public uint ReadData32(long address) {
+            ReadData(address, 4);
+            return Data32;
+        }
 
         #region IDisposable Support
         private bool disposedValue = false; // To detect redundant calls

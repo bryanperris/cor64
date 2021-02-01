@@ -11,13 +11,15 @@ using cor64.Mips.R4300I;
 using cor64.Debugging;
 using cor64.RCP;
 using cor64.Rdp.LLE;
+using cor64.HLE;
+using cor64.HLE.OS;
 
 namespace cor64
 {
     public class N64System
     {
         private readonly static Logger Log = LogManager.GetCurrentClassLogger();
-        private BootManager m_BootManager;
+        private readonly BootManager m_BootManager;
         private Cartridge m_Cartridge;
 
         public N64System()
@@ -112,7 +114,11 @@ namespace cor64
             DeviceCPU.Step();
             Dbg.LeaveExecution();
             DeviceCPU.CoreDbg.SkipBreakpoint = false;
+
+            VI.Tick();
         }
+
+        public Video VI => DeviceRcp.VideoInterface;
 
         /// <summary>
         /// If an exception is thrown during a tick, call this to cleanup anything aftwards

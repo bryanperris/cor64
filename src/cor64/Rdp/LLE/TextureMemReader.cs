@@ -6,7 +6,7 @@ namespace cor64.Rdp.LLE {
         private readonly int[] m_TextureAddress = new int[4];
         private readonly Color[] m_TexelColor = new Color[4];
         private static readonly byte[] s_ReplicatedRgba = new byte[32];
-        private readonly PinnedBuffer m_TextureMemory;
+        private readonly UnmanagedBuffer m_TextureMemory;
         private readonly State GS;
 
         private const int BYTE_XOR_DWORD_SWAP = 7;
@@ -21,7 +21,7 @@ namespace cor64.Rdp.LLE {
             }
         }
 
-        public TextureMemReader(State state, PinnedBuffer tmem) {
+        public TextureMemReader(State state, UnmanagedBuffer tmem) {
             GS = state;
             m_TextureMemory = tmem;
         }

@@ -53,11 +53,13 @@ namespace cor64.RCP
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
         private readonly MemMappedBuffer m_Dram = new MemMappedBuffer(4);
         private readonly MemMappedBuffer m_Length = new MemMappedBuffer(4);
-        private readonly MemMappedBuffer m_Control = new MemMappedBuffer(4);
+        private readonly MemMappedBuffer m_Control = new MemMappedBuffer(4, MemMappedBuffer.MemModel.SINGLE_WRITEONLY);
         private readonly MemMappedBuffer m_Status = new MemMappedBuffer(4, MemMappedBuffer.MemModel.DUAL_READ_WRITE);
         private readonly MemMappedBuffer m_DigitalToAudioRate= new MemMappedBuffer(4);
         private readonly MemMappedBuffer m_BitRate = new MemMappedBuffer(4);
         private readonly MipsInterface m_Interface;
+
+        private bool m_EnableDma = false;
 
         public Audio(N64MemoryController controller, MipsInterface mipsInterface) : base(controller, 0x100000)
         {
@@ -75,6 +77,10 @@ namespace cor64.RCP
                 m_Dram.RegisterValue &= 0x0FFFFFFF;
             };
 
+            m_Control.Write += () => {
+                m_EnableDma = (m_Control.RegisterValue & 1) != 0;
+            };
+
             m_Interface = mipsInterface;
 
             m_Length.Write += LengthWrite;
@@ -82,6 +88,11 @@ namespace cor64.RCP
         }
 
         public void LengthWrite() {
+            if (!m_EnableDma)
+                return;
+                
+            // TODO: Support the AI DMA hardware bug
+
             uint len = m_Length.RegisterValue & 0x3FFF8;
 
             // TODO: pass audio samples to audio backend

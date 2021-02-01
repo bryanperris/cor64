@@ -99,7 +99,8 @@ namespace cor64
             WR0(CTS.CP0_REG_ERROR_EPC, 0xFFFFFFFF);
             WR0(CTS.CP0_REG_BADVADDR, 0xFFFFFFFF);
             WR0(CTS.CP0_REG_EPC, 0xFFFFFFFF);
-            WR0(CTS.CP0_REG_CONTEXT, 0x0000005C);
+            // WR0(CTS.CP0_REG_CONTEXT, 0x0000005C);
+            WR0(CTS.CP0_REG_CONTEXT, 0x007FFFF0);
 
             MMIOWR(MMIORegWriteKind.MiVersion, 0x02020102);
             MMIOWR(MMIORegWriteKind.SpStatus, 1);
@@ -130,6 +131,8 @@ namespace cor64
             WR(19, 0);
 
             // osTvType
+            // PAL = 0
+            // NTSC = 1
             WR(20, (uint)region);
 
             // osResetType: 0: ColdReset, 1: NMI
@@ -141,10 +144,23 @@ namespace cor64
             // osVersion: 00 = 1.0, 15 = 2.5, etc
             WR(23, 0); /* S7: Unknown */
 
-
-            WR(24, 0x0000000000000003);
             WR(29, 0xFFFFFFFFA4001FF0); // Stack pointer
-            WR(31, 0xFFFFFFFFA4001550);
+
+            switch (region)
+            {
+                case RegionType.MPAL:
+                case RegionType.PAL:
+                    {
+                        WR(23, 0x0000000000000006);
+                        WR(31, 0xFFFFFFFFA4001554);
+                        break;
+                    }
+                default: {
+                    WR(24, 0x0000000000000003);
+                    WR(31, 0xFFFFFFFFA4001550);
+                    break;
+                }
+            }
 
             /* Notes:
              * GPR5 is used with the IPL CRC checksum algorithm, its muliplied with the hardcoded seed

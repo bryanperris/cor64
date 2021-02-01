@@ -589,5 +589,21 @@ namespace cor64.Mips.R4300I.JitIL
         public override void Break(DecodedInstruction inst) {
             throw new NotImplementedException();
         }
+
+        public override void TLBProbe(DecodedInstruction inst) {
+            throw new NotImplementedException();
+        }
+        
+        public override void TLBRead(DecodedInstruction inst) {
+            throw new NotImplementedException();
+        }
+
+        public override void TLBWrite(DecodedInstruction inst) {
+            throw new NotImplementedException();
+        }
+
+        public override void Syscall(DecodedInstruction inst) {
+            throw new NotImplementedException();
+        }
     }
 }

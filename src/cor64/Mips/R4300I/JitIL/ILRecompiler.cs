@@ -360,13 +360,11 @@ namespace cor64.Mips.R4300I.JitIL
         {
             while (true)
             {
-                /* Step clock */
-                CoreClock.NextTick();
+                Cop0.MipsTimerTick(1);
 
-                /* Step coprocessor 0 */
-                Cop0.ProcessorTick(0, false);
+                // TODO: FIgure out improved interrupt/exception checking for the recompiler
 
-                m_ExceptionFlag = State.Cp0.Status.ErrorLevel || State.Cp0.Status.ExceptionLevel;
+                m_ExceptionFlag = Cop0State.Status.ErrorLevel || Cop0State.Status.ExceptionLevel;
             }
         }
 
@@ -472,6 +470,14 @@ namespace cor64.Mips.R4300I.JitIL
         public sealed override void Trap(DecodedInstruction inst) => EmitFallback(inst);
 
         public sealed override void Break(DecodedInstruction inst) => EmitFallback(inst);
+
+        public sealed override void TLBProbe(DecodedInstruction inst) => EmitFallback(inst);
+
+        public sealed override void TLBRead(DecodedInstruction inst) => EmitFallback(inst);
+
+        public sealed override void TLBWrite(DecodedInstruction inst) => EmitFallback(inst);
+
+        public override void Syscall(DecodedInstruction inst) => EmitFallback(inst);
 
         uint IDynamicMips.ReadGPR32(int select)
         {
@@ -724,8 +730,8 @@ namespace cor64.Mips.R4300I.JitIL
 
             m_Emitter32.IsExceptionPath = false;
             m_Emitter64.IsExceptionPath = false;
-            State.Cp0.Status.ErrorLevel = false;
-            State.Cp0.Status.ExceptionLevel = false;
+            Cop0State.Status.ErrorLevel = false;
+            Cop0State.Status.ExceptionLevel = false;
             m_JitExecute = true;
 
             m_CompiledProgramCache = cache;
