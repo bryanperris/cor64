@@ -59,12 +59,13 @@ namespace cor64.IO
         {
             if (!IsDisposed)
             {
+                if (m_Parent == null)
+                    Marshal.FreeHGlobal(m_Ptr);
+
                 if (disposing)
                 {
                     m_Ptr = IntPtr.Zero;
                 }
-
-                Marshal.FreeHGlobal(m_Ptr);
 
                 m_Disposed = true;
             }

@@ -54,5 +54,23 @@ namespace RunN64 {
 
             return File.Open(path, FileMode.CreateNew, FileAccess.ReadWrite);
         }
+
+        public static string GetDumpPath_RawRdpTex() {
+            var path = GetCurrentDumpDir() + Path.DirectorySeparatorChar + "RDP_Textures";
+
+            CheckDir(path);
+
+            return path;
+        }
+
+        public static FileStream Open_RdpTexDumpFile(uint address, int index, int size) {
+            var path = GetDumpPath_RawRdpTex() + Path.DirectorySeparatorChar + String.Format("{0:X8}_{1}_{2}.raw", address, index, size);
+
+            if (File.Exists(path)) {
+                File.Delete(path);
+            }
+
+            return File.Open(path, FileMode.CreateNew, FileAccess.ReadWrite);
+        }
     }
 }

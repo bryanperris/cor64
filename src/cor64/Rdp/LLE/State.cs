@@ -94,7 +94,7 @@ namespace cor64.Rdp.LLE
 
         // Texture
         public int TextureInputFormat;
-        public int TextureInputSize;
+        public int TextureInputTexelSize;
         public int TextureInputWidth;
         public uint TextureInputAddress;
 

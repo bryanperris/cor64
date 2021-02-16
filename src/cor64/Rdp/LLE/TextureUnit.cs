@@ -1,6 +1,7 @@
 using System;
 using cor64.Rdp.Commands;
 using NLog;
+using static cor64.Rdp.DrawProcessor;
 
 namespace cor64.Rdp.LLE
 {
@@ -392,7 +393,7 @@ namespace cor64.Rdp.LLE
             int tiadvance = 0;
             int spanadvance = 0;
 
-            switch ((ImageSizeType)GS.TextureInputSize)
+            switch ((ImageSizeType)GS.TextureInputTexelSize)
             {
                 case ImageSizeType.SizeInBytes_4:
                     {
@@ -441,10 +442,14 @@ namespace cor64.Rdp.LLE
                 int t = GS.SpanBuffer[i].t;
 
                 int ti_index = (GS.TextureInputWidth * i) + xend;
-                int tiptr = (int)(GS.TextureInputAddress + Utils.PixelsToBytes(ti_index, GS.TextureInputSize));
+                int tiptr = (int)(GS.TextureInputAddress + Utils.PixelsToBytes(ti_index, GS.TextureInputTexelSize));
 
                 int dsinc = GS.SpansDs;
                 int dtinc = GS.SpansDt;
+
+                // Notify texture info
+                var texelSize = tiadvance / spanadvance;
+                m_Rdp.NotifyTextureLoad(new TexLoadArgs((uint)tiptr, ti_index, length * texelSize));
 
                 for (int j = 0; j < length; j += spanadvance)
                 {
@@ -465,7 +470,6 @@ namespace cor64.Rdp.LLE
                     TextureMemory.GetTmemIndex(tile, sss, sst, ref tmemidx0, ref tmemidx1, ref tmemidx2, ref tmemidx3, ref bit3f, ref hibit);
 
                     /* XXX: Convert the tex pointer into a full address */
-
                     uint readidx32 = (uint)((tiptr >> 2) & ~1);
                     uint readval0 = RDRAM.ReadIdx32(readidx32);
 

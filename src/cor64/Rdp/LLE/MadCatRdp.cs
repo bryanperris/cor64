@@ -318,7 +318,7 @@ namespace cor64.Rdp.LLE {
                     var cmd = command.As<SetTextureImage>();
 
                     GraphicsState.TextureInputFormat = (int)cmd.Format;
-                    GraphicsState.TextureInputSize = (int)cmd.Size;
+                    GraphicsState.TextureInputTexelSize = (int)cmd.Size;
                     GraphicsState.TextureInputWidth = cmd.Width + 1;
                     GraphicsState.TextureInputAddress = (uint)(cmd.DramAddress & 0x0FFFFFF);
 
@@ -418,7 +418,7 @@ namespace cor64.Rdp.LLE {
 
             int yh = (((tlclamped << 2) | 3) << 16) | (tlclamped << 2);
             int xl = sh << 16;
-            uint tsize = ((0x80U >> GraphicsState.TextureInputSize) << 16) | ((uint)dxt >> 8);
+            uint tsize = ((0x80U >> GraphicsState.TextureInputTexelSize) << 16) | ((uint)dxt >> 8);
             dxt = (dxt & 0xFF) << 8;
 
             var data = new EdgeWalkerLoadData
@@ -465,7 +465,7 @@ namespace cor64.Rdp.LLE {
             int yh = ((th | 3) << 16) | tl;
             int xl = ((sh >> 2) << 16) | ((sh & 3) << 14);
 
-            uint tisize = (0x200U >> GraphicsState.TextureInputSize) << 16;
+            uint tisize = (0x200U >> GraphicsState.TextureInputTexelSize) << 16;
 
             var data = new EdgeWalkerLoadData
             {

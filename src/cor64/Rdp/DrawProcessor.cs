@@ -22,6 +22,20 @@ namespace cor64.Rdp {
         private bool m_DebugDL;
         private Video m_VideoInterface;
 
+        public class TexLoadArgs : EventArgs {
+            public uint RdramAddress { get; }
+            public int Size { get; }
+            public int Index { get; }
+
+            internal TexLoadArgs(uint address, int index, int size) {
+                RdramAddress = address;
+                Size = size;
+                Index = index;
+            }
+        }
+
+        public event EventHandler<TexLoadArgs> Load;
+
         protected readonly RdpCommandTypeFactory.CallTable CallTable = RdpCommandTypeFactory.CreateCallTable();
         
         public abstract String Description { get; }
@@ -53,8 +67,6 @@ namespace cor64.Rdp {
         }
 
         public virtual void Init() {
-            // m_Interface.RFlags |= ReadStatusFlags.StartGClk;
-            // m_Interface.RFlags |= ReadStatusFlags.PipeBusy;
         }
 
         public void AttachInterface(MipsInterface rcpInterface, DPCInterface iface, Video videoInterface) {
@@ -69,10 +81,16 @@ namespace cor64.Rdp {
             m_DpReader = new DisplayListReader(m_Memory);
         }
 
-        protected virtual void DisplayListHandler(object sender, DPCInterface.DisplayList displayList) {
-            m_Interface.RFlags |= ReadStatusFlags.CmdBusy;
-            m_Interface.RFlags &= ~ReadStatusFlags.Freeze;
+        internal void NotifyTextureLoad(TexLoadArgs args) {
+            Load?.Invoke(this, args);
+        }
 
+        public void ReadTexture(uint rdramAddress, byte[] buffer, int offset, int count) {
+            m_Memory.Position = rdramAddress;
+            m_Memory.Read(buffer, offset, count);
+        }
+
+        protected virtual void DisplayListHandler(object sender, DPCInterface.DisplayList displayList) {
             int size = (int)(displayList.End - displayList.Start);
 
             // cor64.Debugging.Debugger.Current.TurnOnCpuLogging();
@@ -93,6 +111,27 @@ namespace cor64.Rdp {
 
             /* Now read memory of the display list */
             var commands = m_DpReader.ReadDisplayList(address, size);
+
+            // RDP is frozen, sleep
+            while ((m_Interface.RFlags & ReadStatusFlags.Freeze) == ReadStatusFlags.Freeze) {
+                // Signal RDP profiler start (RDP is frozen ready for profiling)
+                m_Interface.RFlags |= ReadStatusFlags.StartGClk;
+
+                Log.Debug("RDP is frozen");
+                Thread.Sleep(1);
+            }
+
+            // Clear RDP profiler start (FROZEN status)
+            m_Interface.RFlags |= ReadStatusFlags.StartGClk;
+
+            // Mark the start, end valid bits invalid
+            m_Interface.RFlags |= ReadStatusFlags.StartValid;
+            m_Interface.RFlags |= ReadStatusFlags.EndValid;
+
+            // Indicate the RDP pipeline is busy
+            m_Interface.RFlags |= ReadStatusFlags.PipeBusy;
+
+            // TODO: TMEM busy should be set specificly when loading data into TMEM
 
             for (int i = 0; i < commands.Count; i++) {
                 var command = commands[i];
@@ -120,7 +159,13 @@ namespace cor64.Rdp {
 
                 address += resolvedCommand.Type.Size;
 
+                // Set command busy
+                m_Interface.RFlags |= ReadStatusFlags.CmdBusy;
+
                 var handler = CallTable[command];
+
+                // Clear command busy
+                m_Interface.RFlags &= ~ReadStatusFlags.CmdBusy;
 
                 if (handler != null)
                     handler?.Invoke(command);
@@ -128,7 +173,14 @@ namespace cor64.Rdp {
                     throw new InvalidOperationException("RDP command handler is null");
             }
 
-            m_Interface.RFlags &= ~ReadStatusFlags.CmdBusy;
+            // Clear the RDP pipeline busy status
+            m_Interface.RFlags &= ~ReadStatusFlags.PipeBusy;
+
+            // Done reading the display, we can clear these bits
+            m_Interface.RFlags &= ~ReadStatusFlags.StartValid;
+            m_Interface.RFlags &= ~ReadStatusFlags.EndValid;
+
+            // Indicate that the RDP color buffer (framebuffer) is ready to be read
             m_Interface.RFlags |= ReadStatusFlags.ColorBufferReady;
 
             // Log.Debug("RDP finished");

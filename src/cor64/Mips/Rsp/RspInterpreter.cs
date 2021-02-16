@@ -477,33 +477,18 @@ namespace cor64.Mips.Rsp
 
         public override void Add(DecodedInstruction inst)
         {
-            bool isUnsigned = inst.IsUnsigned();
-            // bool isUnsigned = true;
             bool isImmediate = inst.IsImmediate();
             uint operandA = ReadGPR(inst.Source);
             uint operandB = isImmediate ? (uint)(short)inst.Immediate : ReadGPR(inst.Target);
             uint result;
             int dest = isImmediate ? inst.Target : inst.Destination;
 
-            if (isUnsigned)
-            {
-                unchecked
-                {
-                    result = operandA + operandB;
-                }
-            }
-            else
-            {
-                int r = 0;
-                int _a = (int)operandA;
-                int _b = (int)operandB;
+            // RSP does not trap any exceptions
+            // checking for overflow is useless
 
-                unchecked
-                {
-                    r = _a + _b;
-                }
-
-                result = (uint)r;
+            unchecked
+            {
+                result = operandA + operandB;
             }
 
             Writeback(dest, result);
@@ -515,9 +500,7 @@ namespace cor64.Mips.Rsp
             uint a = ReadGPR(inst.Source);
             uint b = isImmediate ? inst.Immediate : ReadGPR(inst.Target);
 
-            uint result;
-
-            result = inst.Op.ArithmeticType switch
+            uint result = inst.Op.ArithmeticType switch
             {
                 ArithmeticOp.AND => a & b,
                 ArithmeticOp.OR => a | b,
@@ -526,7 +509,7 @@ namespace cor64.Mips.Rsp
                 _ => throw new InvalidOperationException("Bitwise logic"),
             };
 
-            Writeback((isImmediate ? inst.Target : inst.Destination), result);
+            Writeback(isImmediate ? inst.Target : inst.Destination, result);
         }
 
         public override void Branch(DecodedInstruction inst)
@@ -623,37 +606,16 @@ namespace cor64.Mips.Rsp
 
         public override void SetOnLessThan(DecodedInstruction inst)
         {
-            bool unsigned = inst.IsUnsigned();
-            // bool unsigned = true;
-            bool immediate = inst.IsImmediate();
-            int dest = immediate ? inst.Target : inst.Destination;
+            bool isImmediate = inst.IsImmediate();
+            int dest = isImmediate ? inst.Target : inst.Destination;
             byte result = 0;
 
             uint operandA = ReadGPR(inst.Source);
-            uint operandB = 0;
+            uint operandB = isImmediate ? (uint)(short)inst.Immediate : ReadGPR(inst.Target);
 
-            if (immediate)
+            if (operandA < operandB)
             {
-                operandB = (uint)(short)inst.Immediate;
-            }
-            else
-            {
-                operandB = ReadGPR(inst.Target);
-            }
-
-            if (unsigned)
-            {
-                if (operandA < operandB)
-                {
-                    result = 1;
-                }
-            }
-            else
-            {
-                if ((int)operandA < (int)operandB)
-                {
-                    result = 1;
-                }
+                result = 1;
             }
 
             Writeback(dest, result);
@@ -661,7 +623,7 @@ namespace cor64.Mips.Rsp
 
         public override void Shift(DecodedInstruction inst)
         {
-            int shiftAmount = 0;
+            int shiftAmount;
 
             if (inst.IsVariableShift())
             {
@@ -680,14 +642,13 @@ namespace cor64.Mips.Rsp
             }
             else
             {
-                bool sign = (value >> 31) == 1;
-
-                value >>= shiftAmount;
-
-                if (sign && !inst.IsUnsigned())
-                {
-                    /* Sign extend */
-                    value |= ~(~0U >> shiftAmount);
+                if (inst.IsUnsigned()) {
+                    value >>= shiftAmount;
+                }
+                else {
+                    unchecked {
+                        value = (uint)((int)value >> shiftAmount);
+                    }
                 }
             }
 
@@ -716,32 +677,16 @@ namespace cor64.Mips.Rsp
 
         public override void Subtract(DecodedInstruction inst)
         {
-            bool isUnsigned = inst.IsUnsigned();
-            // bool isUnsigned = true;
             uint operandA = ReadGPR(inst.Source);
             uint operandB = ReadGPR(inst.Target);
             uint result;
 
-            if (isUnsigned)
+            // RSP does not trap on any exceptions
+            // no need to check for underflows
+
+            unchecked
             {
-                unchecked
-                {
-                    result = operandA - operandB;
-                }
-            }
-            else
-            {
-                int r = 0;
-                int _a = (int)operandA;
-                int _b = (int)operandB;
-
-                unchecked
-                {
-                    r = _a - _b;
-                }
-
-
-                result = (uint)r;
+                result = operandA - operandB;
             }
 
             Writeback(inst.Destination, result);

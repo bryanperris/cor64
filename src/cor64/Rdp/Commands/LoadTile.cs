@@ -14,7 +14,7 @@ namespace cor64.Rdp.Commands {
         /// Tile Descriptor Index
         /// </summary>
         /// <returns></returns>
-        public int Tile => ReadField(24, 0b11);
+        public int Tile => ReadField(24, 0b111);
 
         public int LowT => ReadField(32, 0xFFF);
 

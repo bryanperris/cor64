@@ -73,7 +73,7 @@ namespace cor64.RCP {
             ColorBufferReady = 0b10000000,
             DmaBusy = 0b100000000,
             EndValid=  0b1000000000,
-            Startvalid=0b10000000000
+            StartValid=0b10000000000
         }
 
         private readonly static Logger Log = LogManager.GetCurrentClassLogger();
@@ -135,13 +135,11 @@ namespace cor64.RCP {
         private void DisplayListStart() {
             m_Start.RegisterValue &= 0x00FFFFFFF;
             m_Current.ReadonlyRegisterValue = m_Start.RegisterValue;
-            // m_Status.ReadonlyRegisterValue = 0x400; // Mark valid start
             // Log.Debug("DPC Start: {0:X8}", m_Start.RegisterValue);
         }
 
         private void DisplayListEnd() {
             m_End.RegisterValue &= 0x00FFFFFFF;
-            // m_Status.ReadonlyRegisterValue = 0x200; // Mark valid end
 
             // Log.Debug("DPC End: {0:X8}",  m_End.RegisterValue);
 
@@ -197,9 +195,9 @@ namespace cor64.RCP {
                 RFlags &= ~ReadStatusFlags.XbusDmemDma;
             }
 
-            // if ((flags & WriteStatusFlags.SetFreeze) == WriteStatusFlags.SetFreeze) {
-            //     RFlags |= ReadStatusFlags.Freeze;
-            // }
+            if ((flags & WriteStatusFlags.SetFreeze) == WriteStatusFlags.SetFreeze) {
+                RFlags |= ReadStatusFlags.Freeze;
+            }
 
             if ((flags & WriteStatusFlags.ClearFreeze) == WriteStatusFlags.ClearFreeze) {
                 RFlags &= ~ReadStatusFlags.Freeze;

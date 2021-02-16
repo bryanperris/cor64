@@ -172,7 +172,7 @@ namespace RunN64
             //         hash.Append(b.ToString("X2"));
             //     }
 
-            //     using var file = FileEnv.Open_RspUcodeDumpFile(dmaAddress, hash.ToString()); 
+            //     using var file = FileEnv.Open_RspUcodeDumpFile(dmaAddress, hash.ToString());
             //     code.WriteTo(file);
             // };
 
@@ -181,6 +181,16 @@ namespace RunN64
             m_System.DeviceRcp.SetRdpDevice(new MadCatRdp());
             // m_System.DeviceRcp.SetRdpDevice(new DummyRdp());
             m_System.DeviceRcp.DeviceRdp.SetDLDebug(true);
+
+            // m_System.DeviceRcp.DeviceRdp.Load += (s, texinfo) => {
+            //     Log.Debug("Dumping RDP Texture: {0:X8} {1}", texinfo.RdramAddress, texinfo.Size);
+            //     using var file = FileEnv.Open_RdpTexDumpFile(texinfo.RdramAddress, texinfo.Index, texinfo.Size);
+            //     byte[] buffer = new byte[texinfo.Size];
+            //     m_System.DeviceRcp.DeviceRdp.ReadTexture(texinfo.RdramAddress, buffer, 0, buffer.Length);
+            //     file.Position = 0;
+            //     file.Write(buffer, 0, buffer.Length);
+            //     file.Flush();
+            // };
 
             Log.Info("Signal Processor Engine: {0}", m_System.DeviceRcp.DeviceRsp.Description);
             Log.Info("Rasterizer Engine: {0}", m_System.DeviceRcp.DeviceRdp.Description);

@@ -6,5 +6,4 @@ package-lock.json
 dist
 paket-files
 mono_crash.mem*
-plumber.z64
 .tmp/
