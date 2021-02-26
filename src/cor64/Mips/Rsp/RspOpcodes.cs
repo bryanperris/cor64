@@ -98,7 +98,7 @@ namespace cor64.Mips.Rsp
         public static readonly Opcode LBV = Define(VU, "lbv", VU_LOADSTORE, Data8);   // Load uint8 into vector[e]
         public static readonly Opcode LSV = Define(VU, "lsv", VU_LOADSTORE, Data16);  // Load uint16 into vector[e]
         public static readonly Opcode LLV = Define(VU, "llv", VU_LOADSTORE, Data32);  // Load uint32 into vector[e]
-        public static readonly Opcode LDV = Define(VU, "ldv", VU_LOADSTORE, DataD);   // Load double into vector[e]
+        public static readonly Opcode LDV = Define(VU, "ldv", VU_LOADSTORE, Data64);   // Load uint64 into vector[e]
         public static readonly Opcode LQV = Define(VU, "lqv", VU_LOADSTORE, Data128); // Load uint128 into vector
         public static readonly Opcode LRV = Define(VU, "lrv", VU_LOADSTORE, Rest); // Load rest uint128 into vector
         public static readonly Opcode LPV = Define(VU, "lpv", VU_LOADSTORE, Upper); // [Packed] Load 8 bytes into the upper region of each element
@@ -113,7 +113,7 @@ namespace cor64.Mips.Rsp
         public static readonly Opcode SBV = Define(VU, "sbv", VU_LOADSTORE, Data8);
         public static readonly Opcode SSV = Define(VU, "ssv", VU_LOADSTORE, Data16);
         public static readonly Opcode SLV = Define(VU, "slv", VU_LOADSTORE, Data32);
-        public static readonly Opcode SDV = Define(VU, "sdv", VU_LOADSTORE, DataD);
+        public static readonly Opcode SDV = Define(VU, "sdv", VU_LOADSTORE, Data64);
         public static readonly Opcode SQV = Define(VU, "sqv", VU_LOADSTORE, Data128);
         public static readonly Opcode SRV = Define(VU, "srv", VU_LOADSTORE, Rest);
         public static readonly Opcode SPV = Define(VU, "spv", VU_LOADSTORE, Upper);

@@ -211,12 +211,7 @@ namespace cor64.Mips.R4300I
 
             CurrentInst = DecodeNext();
 
-            if (CurrentInst.IsMipsNop) {
-                Cop0.MipsTimerTick(2);
-            }
-            else {
-                Cop0.MipsTimerTick(1);
-            }
+            Cop0.MipsTimerTick(1);
 
             // TODO: remove failed inst field
 
@@ -250,6 +245,8 @@ namespace cor64.Mips.R4300I
             #if DEBUG
             DebugInstruction(CurrentInst, PC, m_TakenException);
             #endif
+
+            DebugFpu(CurrentInst);
 
             /* --------------------------------- */
 
@@ -326,6 +323,16 @@ namespace cor64.Mips.R4300I
                         memNote ?? ""
                         );
                 }
+            }
+        }
+
+        [Conditional("FPU_DEBUG_INST")]
+        private void DebugFpu(DecodedInstruction inst) {
+            if (inst.Op.Family == OperationFamily.Fpu || inst.Op.Family == OperationFamily.LoadFpu || inst.Op.Family == OperationFamily.StoreFpu) {
+                Console.WriteLine("FPU {0:X8} {1}",
+                    PC,
+                    Disassembler.GetFullDisassembly(inst)
+                    );
             }
         }
 

@@ -1,6 +1,15 @@
 using System;
 using System.Runtime.InteropServices;
 
+/* RSP Vector Unit Accumulator
+   ---------------------------
+        HHHH HHHH HHHH HHHH HHHH HHHH HHHH HHHH
+        MMMM MMMM MMMM MMMM MMMM MMMM MMMM MMMM
+        LLLL LLLL LLLL LLLL LLLL LLLL LLLL LLLL
+
+Vector: 0000 1111 2222 3333 4444 5555 6666 7777
+*/
+
 namespace cor64.Mips.Rsp {
     public class Accumulator {
         private readonly ulong[] m_Accumulators = new ulong[8];
@@ -73,6 +82,14 @@ namespace cor64.Mips.Rsp {
             Lo(5, vector.PackedU16(5));
             Lo(6, vector.PackedU16(6));
             Lo(7, vector.PackedU16(7));
+        }
+
+        public void ReadAccIntoVector(int e, RspVector vector) {
+            vector.PackedU64(0, this[e] & 0x0000FFFFFFFFUL);
+        }
+
+        public void WriteVectorIntoAcc(int e, RspVector vector) {
+            this[e] = vector.PackedU64(0) & 0x0000FFFFFFFFUL;
         }
     }
 }

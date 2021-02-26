@@ -43,6 +43,7 @@
     <DefineConstants>$(DefineConstants);CPU_ALWAYS_64</DefineConstants>
     <!-- <DefineConstants>$(DefineConstants);DEBUG_OS</DefineConstants> -->
     <DefineConstants>$(DefineConstants);DISABLE_CPU_HOOKS</DefineConstants>
+    <!-- <DefineConstants>$(DefineConstants);FPU_DEBUG_INST</DefineConstants> -->
   </PropertyGroup>
   <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>

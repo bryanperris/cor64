@@ -451,11 +451,16 @@ namespace cor64.Mips.Analysis
             return traceLog;
         }
 
-        public void AddInstructionMemAccess(ulong address, bool isWrite, String val)
+        public void AddInstructionMemAccess(ulong address, bool isWrite, String val, bool appendMode, bool appendModeFirstOne)
         {
-            if ((Details & TraceDetails.MemoryAccess) == TraceDetails.MemoryAccess)
+            if ((Details & TraceDetails.MemoryAccess) == TraceDetails.MemoryAccess && m_CurrentInst != null)
             {
-                m_CurrentInst?.AppendMemoryAccess(new MemoryAccessMeta(address, isWrite, val));
+                var lastOne = m_CurrentInst.GetLastMemAccessMeta();
+
+                if (appendModeFirstOne || !appendMode || lastOne == null)
+                    m_CurrentInst.AppendMemoryAccess(new MemoryAccessMeta(address, isWrite, val));
+                else
+                    lastOne.AppendValue(val);
             }
         }
 

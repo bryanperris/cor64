@@ -123,7 +123,7 @@ namespace cor64.Rdp
         {
             StringBuilder sb = new StringBuilder();
 
-            for (int i = 0; i < m_Data.Length; i++)
+            for (int i = m_Data.Length - 1; i >= 0; i--)
             {
                 sb.Append(m_Data[i].ToString("X2"));
             }

@@ -8,11 +8,10 @@ namespace cor64.Mips.Rsp
     public unsafe class RspVector : IEquatable<RspVector>
     {
         private readonly UnmanagedBuffer m_MemSource;
-        private Elements* m_ElementsPtr;
+        private readonly Elements* m_ElementsPtr;
 
         public RspVector(UnmanagedBuffer pinnedBuffer, int index)
         {
-            int ptrOffset = index * 16;
             m_MemSource = new UnmanagedBuffer(pinnedBuffer, index * 16, 16);
             m_ElementsPtr = (Elements*)m_MemSource.GetPointer();
         }
@@ -164,16 +163,6 @@ namespace cor64.Mips.Rsp
             m_ElementsPtr->PACKED_U32[3 - element] = value;
         }
 
-        public double PackedDouble(int element)
-        {
-            return m_ElementsPtr->PACKED_DOUBLE[1 - element];
-        }
-
-        public void PackedDouble(int element, double value)
-        {
-            m_ElementsPtr->PACKED_DOUBLE[1 - element] = value;
-        }
-
         public ulong PackedU64(int element)
         {
             return m_ElementsPtr->PACKED_U64[1 - element];
@@ -274,7 +263,7 @@ namespace cor64.Mips.Rsp
         }
 
         [StructLayoutAttribute(LayoutKind.Explicit, Pack = 128)]
-        struct Elements
+        private struct Elements
         {
             [FieldOffset(0)]
             public fixed byte PACKED_U8[16];
@@ -289,10 +278,13 @@ namespace cor64.Mips.Rsp
             public fixed uint PACKED_U32[4];
 
             [FieldOffset(0)]
-            public fixed double PACKED_DOUBLE[2];
-
-            [FieldOffset(0)]
             public fixed ulong PACKED_U64[2];
+        }
+
+        public void Clear()
+        {
+            PackedU64(0, 0);
+            PackedU64(1, 0);
         }
     }
 }

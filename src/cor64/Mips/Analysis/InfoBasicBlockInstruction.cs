@@ -36,6 +36,13 @@ namespace cor64.Mips.Analysis
             m_MemAccessList.Add(memoryAccessMeta);
         }
 
+        public MemoryAccessMeta GetLastMemAccessMeta() {
+            if (m_MemAccessList.Count <= 0)
+                return null;
+
+            return m_MemAccessList[m_MemAccessList.Count - 1];
+        }
+
         public DecodedInstruction Inst { get; }
 
         public ulong Address { get; }

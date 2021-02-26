@@ -115,6 +115,8 @@ namespace cor64.RCP
         private bool m_UseRdp = false;
         private uint m_RdpAddress;
 
+        private int? m_RdpFramebufferWidth;
+
         private bool m_LastActiveState = false;
 
         private int m_Ticks;
@@ -228,6 +230,10 @@ namespace cor64.RCP
 
         private int ComputeHWidth()
         {
+            if (m_RdpFramebufferWidth != null) {
+                return m_RdpFramebufferWidth.Value;
+            }
+
             if (XScale == 0)
                 return 320;
 
@@ -380,6 +386,11 @@ namespace cor64.RCP
 
         public void ClearVideoInterrupt() {
             m_Interface.ClearInterrupt(MipsInterface.INT_VI);
+        }
+
+        internal void SetFBWidthFromRDP(int framebufferWidth)
+        {
+            m_RdpFramebufferWidth = framebufferWidth;
         }
 
         public void SetFBFromRDP(uint framebufferAddress)

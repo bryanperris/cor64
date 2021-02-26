@@ -335,7 +335,8 @@ namespace cor64.Rdp.LLE {
                     GraphicsState.FramebufferWidth = cmd.Width + 1;
                     GraphicsState.FramebufferAddress = framebufferAddress;
 
-                    VideoInterface.SetFBFromRDP(framebufferAddress);
+                    // VideoInterface.SetFBFromRDP(framebufferAddress);
+                    VideoInterface.SetFBWidthFromRDP(GraphicsState.FramebufferWidth);
 
                     //Log.Debug("RDP framebuffer config has been set");
 

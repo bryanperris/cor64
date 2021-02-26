@@ -48,6 +48,10 @@ namespace cor64.Debugging
             return m_StringBuilder.ToString();
         }
 
+        public void AppendValue(string value) {
+            m_Value += value;
+        }
+
         public override string ToString()
         {
             return m_RegionName;

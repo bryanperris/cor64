@@ -14,6 +14,127 @@ using cor64.HLE;
     * VCE = Vector Sign Extensions
 */
 
+/* KROM VU Test Roms
+    RSPCP2LTV
+    RSPCP2LWV
+    RSPCP2V056
+    RSPCP2V073
+    RSPCP2VABS
+    RSPCP2VACC
+    RSPCP2VADDB
+    RSPCP2VADD
+    RSPCP2VAND
+    RSPCP2VCL
+    RSPCP2VCR
+    RSPCP2VEQ
+    RSPCP2VEXTN
+    RSPCP2VEXTQ
+    RSPCP2VEXTT
+    RSPCP2VLT
+    RSPCP2VMACF
+    RSPCP2VMADL
+    RSPCP2VMADN
+    RSPCP2VMUDL
+    RSPCP2VMUDN
+    RSPCP2VMULF
+    RSPCP2VMULQ
+    RSPCP2VNOP
+    RSPCP2VOR
+    RSPCP2VRCPH
+    RSPCP2VRCPL
+    RSPCP2VRCP
+    RSPCP2VRNDP
+    RSPCP2VSAC
+    RSPCP2VSAR
+    RSPCP2VSUBB
+    RSPCP2VSUB
+    RSPCP2VSUT
+    RSPCP2VXOR
+*/
+
+/* Vector Unit Testing
+    VSUT: Unsupported
+    VADDB: Unsupported
+    VSUBB: Unsupported
+    VEXTT: Unsupported
+    VEXTQ: Unsupported
+    VEXTN: Unsupported
+    V073: Unsupported
+    VINST: Unsupported
+    VINSQ: Unsupported
+    VINSN: Unsupported
+    VNULL: Unsupported
+    V056: Unsupported
+    V057: Unsupported
+    VMULQ: Unsupported
+    VMACQ: Unsupported
+    VRNDP: Unsupported
+    VRNDN: Unsupported
+    LBV: Verified
+    LSV: Verified
+    LLV: Verified
+    LDV: Verified
+    LQV: Verified
+    LRV: Verified
+    LPV: Verified
+    LUV: Verified
+    LHV: Verified
+    LFV: Unverified
+    LWV: Unsupported
+    LTV: Verified
+    SBV: Verified
+    SSV: Verified
+    SLV: Verified
+    SDV: Verified
+    SQV: Verified
+    SRV: Verified
+    SPV: Verified
+    SUV: Verified
+    SHV: Verified
+    SFV: Unverified
+    SWV: Unsupported
+    STV: Verified
+    VADD: Verified
+    VADDC: Verified
+    VSUB: Verified
+    VSUBC: Verified
+    VMULF: Verified
+    VMULU: Verified
+    VMUDL: Verified
+    VMUDM: Verified
+    VMUDN: Verified
+    VMUDH: Verified
+    VMACF: Verified
+    VMACU: Verified
+    VMADL: Verified
+    VMADM: Verified
+    VMADN: Verified
+    VMADH: Verified
+    VSAR: Verified (except VSAW)
+    VABS: Verified
+    VAND: Verified
+    VNAND: Verified
+    VOR: Verified
+    VNOR: Verified
+    VXOR: Verified
+    VNXOR: Verified
+    VRCP: Verified
+    VRCPL: Verified
+    VRCPH: Verified
+    VRSQ: Verified
+    VRSQL: Verified
+    VRSQH: Verified
+    VEQ: Verified
+    VNE: Verified
+    VLT: Verified
+    VGE: Verified
+    VCL: Verified
+    VCH: Verified
+    VCR: Verified
+    VMR: Verified
+    VMOV: Verified
+*/
+
 namespace cor64.Mips.Rsp
 {
     public class RspInterpreter : InterpreterBaseRsp
@@ -866,6 +987,8 @@ namespace cor64.Mips.Rsp
             var offset = inst.Offset;
             long address;
 
+            SetMemTraceAppendMode(true);
+
             if (executeFlag != ExecutionFlags.None) {
                 switch (executeFlag) {
                     case ExecutionFlags.Data8: {
@@ -888,10 +1011,10 @@ namespace cor64.Mips.Rsp
                         break;
                     }
 
-                    case ExecutionFlags.DataD: {
+                    case ExecutionFlags.Data64: {
                         offset <<= 3;
                         address = VectorLoadStoreHelper.ComputeAlignedVectorAddress(baseAddress, offset);
-                        VectorLoadStoreHelper.LoadDoubleIntoVector(DMem, address, target, element);
+                        VectorLoadStoreHelper.LoadU64IntoVector(DMem, address, target, element);
                         break;
                     }
 
@@ -954,6 +1077,8 @@ namespace cor64.Mips.Rsp
                     default: throw new EmuException("Invalid RSP VectorLoad Vector Flag");
                 }
             }
+
+            SetMemTraceAppendMode(false);
         }
 
         public override void VectorStore(DecodedInstruction inst)
@@ -965,6 +1090,8 @@ namespace cor64.Mips.Rsp
             var baseAddress = ReadGPR(inst.Source);
             var offset = inst.Offset;
             long address;
+
+            SetMemTraceAppendMode(true);
 
             if (executeFlag != ExecutionFlags.None) {
                 switch (executeFlag) {
@@ -988,10 +1115,10 @@ namespace cor64.Mips.Rsp
                         break;
                     }
 
-                    case ExecutionFlags.DataD: {
+                    case ExecutionFlags.Data64: {
                         offset <<= 3;
                         address = VectorLoadStoreHelper.ComputeAlignedVectorAddress(baseAddress, offset);
-                        VectorLoadStoreHelper.StoreDoubleFromVector(DMem, address, target, element);
+                        VectorLoadStoreHelper.StoreU64FromVector(DMem, address, target, element);
                         break;
                     }
 
@@ -1054,6 +1181,8 @@ namespace cor64.Mips.Rsp
                     default: throw new EmuException("Invalid RSP VectorStore Vector Flag");
                 }
             }
+
+            SetMemTraceAppendMode(false);
         }
 
         public override void VectorAdd(DecodedInstruction inst) {
@@ -1194,21 +1323,45 @@ namespace cor64.Mips.Rsp
             }
         }
 
-        public override void VectorAccumulatorRead(DecodedInstruction inst) {
-            int e = inst.Element & 3;
+        public override void VectorAccumulatorReadWrite(DecodedInstruction inst) {
+            // This instruction acts as 2 opcodes known as VSAR and VSAW
+            // VSAR - Read the accumulator into dest vector
+            // VSAW - Write source vector unto the accumulator
+
+            // XXX: VT is unused in this instruction
+
+            // XXX: VSAW is not clearly explained.
+            //      The official doc says VSAW writes
+            //      vector source into the accumulator
+            //      howerver this breaks tests
+            //      VSAW only works in the case
+            //      that vector source is preset by the acc 
+
+            // Convert the range from 8:F to 0:7
+            int e = inst.Element ^ 8;
+
+            // VDest is cleared on invalid element values
+            // Do nothing else
+            if (e > 2) {
+                m_VecRegs[inst.VDest].Clear();
+                return;
+            }
 
             for (int i = 0; i < 8; i++) {
                 if (e == 0) {
+                    // m_VecRegs[inst.VSource].PackedU16(i, Acc.Hi(i));
                     m_VecRegs[inst.VDest].PackedU16(i, Acc.Hi(i));
-                    Acc.Hi(i, m_VecRegs[inst.VSource].PackedU16(i));
+                    //Acc.Hi(i, m_VecRegs[inst.VSource].PackedU16(i));
                 }
                 else if (e == 1) {
+                    // m_VecRegs[inst.VSource].PackedU16(i, Acc.Mi(i));
                     m_VecRegs[inst.VDest].PackedU16(i, Acc.Mi(i));
-                    Acc.Mi(i, m_VecRegs[inst.VSource].PackedU16(i));
+                    //Acc.Mi(i, m_VecRegs[inst.VSource].PackedU16(i));
                 }
                 else if (e == 2) {
+                    // m_VecRegs[inst.VSource].PackedU16(i, Acc.Lo(i));
                     m_VecRegs[inst.VDest].PackedU16(i, Acc.Lo(i));
-                    Acc.Lo(i, m_VecRegs[inst.VSource].PackedU16(i));
+                    //Acc.Lo(i, m_VecRegs[inst.VSource].PackedU16(i));
                 }
                 else {
                     Console.WriteLine("VSAR element = " + inst.Element.ToString() + " ?");

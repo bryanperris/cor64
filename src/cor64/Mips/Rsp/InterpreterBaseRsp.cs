@@ -40,7 +40,7 @@ namespace cor64.Mips.Rsp
             .Map(VectorAdd, VADD, VADDC)
             .Map(VectorSubtract, VSUB, VSUBC)
             .Map(VectorMultiply, VMULF, VMULU, VMUDL, VMUDM, VMUDN, VMUDH, VMACF, VMACU, VMADL, VMADM, VMADN, VMADH)
-            .Map(VectorAccumulatorRead, VSAR)
+            .Map(VectorAccumulatorReadWrite, VSAR)
             .Map(VectorBitwise, VABS, VAND, VNAND, VOR, VNOR, VXOR, VNXOR)
             .Map(VectorReciprocal, VRCP, VRCPL, VRCPH, VRSQ, VRSQL, VRSQH)
             .Map(VectorCompare, VEQ, VNE, VLT, VGE)
@@ -234,7 +234,7 @@ namespace cor64.Mips.Rsp
         public abstract void VectorAdd(DecodedInstruction inst);
         public abstract void VectorSubtract(DecodedInstruction inst);
         public abstract void VectorMultiply(DecodedInstruction inst);
-        public abstract void VectorAccumulatorRead(DecodedInstruction inst);
+        public abstract void VectorAccumulatorReadWrite(DecodedInstruction inst);
         public abstract void VectorBitwise(DecodedInstruction inst);
         public abstract void VectorReciprocal(DecodedInstruction inst);
         public abstract void VectorCompare(DecodedInstruction inst);

@@ -26,6 +26,9 @@ namespace cor64.Mips
         private ulong m_ProgramStart;
         protected Profiler m_Profiler = new Profiler();
 
+        private bool m_MemTraceAppendMode;
+        private bool m_MemTraceFirstOne;
+
         public event Action<DecodedInstruction> TraceStep;
 
         protected BaseInterpreter(BaseDisassembler disassembler)
@@ -85,6 +88,12 @@ namespace cor64.Mips
             {
                 Log.Debug("Execution trace logging has been enabled");
             }
+        }
+
+        [Conditional("DEBUG")]
+        protected void SetMemTraceAppendMode(bool doAppend) {
+            m_MemTraceAppendMode = doAppend;
+            m_MemTraceFirstOne = true;
         }
 
         protected void BeginInstructionProfile(DecodedInstruction inst)
@@ -153,12 +162,18 @@ namespace cor64.Mips
 
         protected void TraceMemoryHit(ulong address, bool isWrite, String val)
         {
+            // TODO: Trace append mode
             if (IsMemTraceActive)
-                TraceLog.AddInstructionMemAccess(address, isWrite, val);
+                TraceLog.AddInstructionMemAccess(address, isWrite, val, m_MemTraceAppendMode, m_MemTraceFirstOne);
 
             if (core_InstDebugMode != InstructionDebugMode.None) {
-                core_MemAccessNote = new MemoryAccessMeta(address, isWrite, val);
+                if (m_MemTraceFirstOne || !m_MemTraceAppendMode || core_MemAccessNote == null)
+                    core_MemAccessNote = new MemoryAccessMeta(address, isWrite, val);
+                else
+                    core_MemAccessNote.AppendValue(val);
             }
+
+            m_MemTraceFirstOne = false;
         }
 
         public virtual String GetGPRName(int i) {

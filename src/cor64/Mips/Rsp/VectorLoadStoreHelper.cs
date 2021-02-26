@@ -22,38 +22,67 @@ namespace cor64.Mips.Rsp {
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void LoadU16IntoVector(DataMemory dataMemory, long address, RspVector vector, int element) {
-            dataMemory.ReadData(address, 2);
-            vector.PackedU16(element, dataMemory.Data16);
+            LoadDataBytesIntoVector(dataMemory, address, vector, element, 2);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void StoreU16FromVector(DataMemory dataMemory, long address, RspVector vector, int element) {
-            dataMemory.Data16 = vector.PackedU16(element);
-            dataMemory.WriteData(address, 2);
+            StoreDataBytesFromVector(dataMemory, address, vector, element, 2);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void LoadU32IntoVector(DataMemory dataMemory, long address, RspVector vector, int element) {
-            dataMemory.ReadData(address, 4);
-            vector.PackedU32(element, dataMemory.Data32);
+            LoadDataBytesIntoVector(dataMemory, address, vector, element, 4);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void StoreU32FromVector(DataMemory dataMemory, long address, RspVector vector, int element) {
-            dataMemory.Data32 = vector.PackedU32(element);
-            dataMemory.WriteData(address, 4);
+            StoreDataBytesFromVector(dataMemory, address, vector, element, 4);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void LoadDoubleIntoVector(DataMemory dataMemory, long address, RspVector vector, int element) {
-            dataMemory.ReadData(address, 8);
-            vector.PackedU64(element,  dataMemory.Data64);
+        public static void LoadU64IntoVector(DataMemory dataMemory, long address, RspVector vector, int element) {
+            LoadDataBytesIntoVector(dataMemory, address, vector, element, 8);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void StoreDoubleFromVector(DataMemory dataMemory, long address, RspVector vector, int element) {
-            dataMemory.Data64 = vector.PackedU64(element);
-            dataMemory.WriteData(address, 8);
+        public static void StoreU64FromVector(DataMemory dataMemory, long address, RspVector vector, int element) {
+            StoreDataBytesFromVector(dataMemory, address, vector, element, 8);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void LoadDataBytesIntoVector(DataMemory dataMemory, long address, RspVector vector, int element, int dataLength) {
+            if (dataLength > 1) {
+                // Odd element specified, just return
+                if ((element & 1) != 0) {
+                    return;
+                }
+
+                for (int i = 0; i < dataLength; i++) {
+                    var addr = address++ & 0xFFF;
+                    dataMemory.ReadData(addr, 1);
+                    vector.PackedU8((element + i) & 0xF, dataMemory.Data8);
+                }
+            }
+            else {
+                dataMemory.ReadData(address & 0xFFF, 1);
+                vector.PackedU8(element & 0xF, dataMemory.Data8);
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void StoreDataBytesFromVector(DataMemory dataMemory, long address, RspVector vector, int element, int dataLength) {
+            if (dataLength > 1) {
+                for (int i = 0; i < dataLength; i++) {
+                    var addr = address++ & 0xFFF;
+                    dataMemory.Data8 = vector.PackedU8((element + i) & 0xF);
+                    dataMemory.WriteData(addr, 1);
+                }
+            }
+            else {
+                dataMemory.Data8 = vector.PackedU8(element & 0xF);
+                dataMemory.WriteData(address & 0xFFF, 1);
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -68,6 +97,7 @@ namespace cor64.Mips.Rsp {
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void LoadPacked_Forth(DataMemory dataMemory, long address, RspVector vector, int element) {
+            // TODO: Untested and likely broken and unused
             for (int i = 0; i < 4; i++) {
                 dataMemory.ReadData(address + (i * 4), 1);
                 vector.PackedU16(element + (i * 2), dataMemory.Data8);
@@ -76,6 +106,7 @@ namespace cor64.Mips.Rsp {
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void StorePacked_Forth(DataMemory dataMemory, long address, RspVector vector, int element) {
+            // TODO: Untested and likely broken and unused
             for (int i = 0; i < 4; i++) {
                 dataMemory.Data8 = (byte)vector.PackedU16(element + (i * 2));
                 dataMemory.WriteData(address + (i * 4), 1);
@@ -85,32 +116,32 @@ namespace cor64.Mips.Rsp {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void LoadPacked_Half(DataMemory dataMemory, long address, RspVector vector) {
             for (int i = 0; i < 8; i++) {
-                dataMemory.ReadData(address + (i * 2), 1);
-                vector.PackedU16(i * 2, dataMemory.Data8);
+                dataMemory.ReadData(address + i, 1);
+                vector.PackedU16(i, dataMemory.Data8);
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void StorePacked_Half(DataMemory dataMemory, long address, RspVector vector) {
             for (int i = 0; i < 8; i++) {
-                dataMemory.Data8 = (byte)vector.PackedU16(i * 2);
-                dataMemory.WriteData(address + (i * 2), 1);
+                dataMemory.Data8 = (byte)vector.PackedU16(i);
+                dataMemory.WriteData(address + i, 1);
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void LoadPacked_Unsigned(DataMemory dataMemory, long address, RspVector vector) {
             for (int i = 0; i < 8; i++) {
-                dataMemory.ReadData(address + i, 1);
-                vector.PackedU16(i * 2, dataMemory.Data8);
+                dataMemory.ReadData(address + i, 2);
+                vector.PackedU16(i, (byte)(dataMemory.Data16 << 7));
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void StorePacked_Unsigned(DataMemory dataMemory, long address, RspVector vector) {
             for (int i = 0; i < 8; i++) {
-                dataMemory.Data8 = (byte)vector.PackedU16(i * 2);
-               dataMemory.WriteData(address + i, 1);
+                dataMemory.Data8 = (byte)(vector.PackedU16(i) >> 7);
+                dataMemory.WriteData(address + i, 1);
             }
         }
 
@@ -118,16 +149,14 @@ namespace cor64.Mips.Rsp {
         public static void LoadPacked_Upper(DataMemory dataMemory, long address, RspVector vector) {
             for (int i = 0; i < 8; i++) {
                 dataMemory.ReadData(address + i, 1);
-                int value = dataMemory.Data8;
-                value <<= 8;
-                vector.PackedU16(i * 2, (ushort)value);
+                vector.PackedU16(i, (ushort)((short)dataMemory.Data8 << 8));
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void StorePacked_Upper(DataMemory dataMemory, long address, RspVector vector) {
             for (int i = 0; i < 8; i++) {
-                dataMemory.Data8 = (byte)(vector.PackedU16(i * 2) >> 8);
+                dataMemory.Data8 = (byte)(vector.PackedU16(i) >> 8);
                 dataMemory.WriteData(address + i, 1);
             }
         }

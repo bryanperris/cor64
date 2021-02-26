@@ -42,7 +42,7 @@ namespace cor64.Mips.Rsp
 
         void VectorMultiply(DecodedInstruction inst);
         
-        void VectorAccumulatorRead(DecodedInstruction inst);
+        void VectorAccumulatorReadWrite(DecodedInstruction inst);
 
         void VectorBitwise(DecodedInstruction inst);
 
