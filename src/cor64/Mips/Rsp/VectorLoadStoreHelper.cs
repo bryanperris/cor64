@@ -86,13 +86,13 @@ namespace cor64.Mips.Rsp {
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void LoadU128IntoVector(DataMemory dataMemory, long address, RspVector vector) {
-            vector.QWord = dataMemory.ReadData128(address);
+        public static void LoadU128IntoVector(DataMemory dataMemory, long address, RspVector vector, int element) {
+           LoadDataBytesIntoVector(dataMemory, address, vector, element, 16);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void StoreU128FromVector(DataMemory dataMemory, long address, RspVector vector) {
-            dataMemory.WriteData128(address, vector.QWord);
+        public static void StoreU128FromVector(DataMemory dataMemory, long address, RspVector vector, int element) {
+            StoreDataBytesFromVector(dataMemory, address, vector, element, 16);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

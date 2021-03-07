@@ -32,7 +32,7 @@
     <!-- <DefineConstants>$(DefineConstants);DEBUG_ADDRESS_CHECKING</DefineConstants> -->
     <!-- <DefineConstants>$(DefineConstants);DEBUG_DMA_HEX</DefineConstants> -->
     <!-- <DefineConstants>$(DefineConstants);DEBUG_DMA_CMDS</DefineConstants> -->
-    <!-- <DefineConstants>$(DefineConstants);DEBUG_RDP_COMMANDS</DefineConstants> -->
+    <DefineConstants>$(DefineConstants);DEBUG_RDP_COMMANDS</DefineConstants>
     <!-- <DefineConstants>$(DefineConstants);CHECK_ADDRESS_LEN</DefineConstants> -->
     <!-- <DefineConstants>$(DefineConstants);DEBUG_ERET</DefineConstants> -->
     <!-- <DefineConstants>$(DefineConstants);DEBUG_EPC</DefineConstants>  -->
@@ -44,6 +44,9 @@
     <!-- <DefineConstants>$(DefineConstants);DEBUG_OS</DefineConstants> -->
     <DefineConstants>$(DefineConstants);DISABLE_CPU_HOOKS</DefineConstants>
     <!-- <DefineConstants>$(DefineConstants);FPU_DEBUG_INST</DefineConstants> -->
+    <!-- <DefineConstants>$(DefineConstants);DISABLE_TLB_SUPPORT</DefineConstants> -->
+    <!-- <DefineConstants>$(DefineConstants);FORCE_FPU_32</DefineConstants> -->
+    <DefineConstants>$(DefineConstants);FASTER_VI</DefineConstants>
   </PropertyGroup>
   <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>

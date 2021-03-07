@@ -94,6 +94,14 @@ namespace RunN64.Graphics
                 Scan();
                 Render();
                 Thread.Sleep(17);
+
+                // Some krom tests wait for line 0x1E0
+
+                //m_VideoInterface.Line = 0;
+                for (uint i = 0; i < m_VideoInterface.Interrupt; i += 1 /* m_VideoInterface.Interrupt / 0x10*/) {
+                    m_VideoInterface.Line = i;
+                }
+                //m_VideoInterface.Line = m_VideoInterface.Interrupt;
             }
         }
 
@@ -171,12 +179,14 @@ namespace RunN64.Graphics
 
         private void Scan()
         {
-            if (m_VideoInterface.IsVideoActive && !m_RdpInterface.IsBusy) {
-                switch (m_VideoInterface.ControlReg.GetPixelMode())
-                {
-                    default: break;
-                    case VideoControlReg.PIXELMODE_16BPP: ReadRGB555(); break;
-                    case VideoControlReg.PIXELMODE_32BPP: ReadRGBA8888(); break;
+            if (m_VideoInterface.IsVideoActive) {
+                if (!m_RdpInterface.IsBusy) {
+                    switch (m_VideoInterface.ControlReg.GetPixelMode())
+                    {
+                        default: break;
+                        case VideoControlReg.PIXELMODE_16BPP: ReadRGB555(); break;
+                        case VideoControlReg.PIXELMODE_32BPP: ReadRGBA8888(); break;
+                    }
                 }
             }
             else {

@@ -213,7 +213,15 @@ namespace cor64.RCP {
             set => m_Status.ReadonlyRegisterValue = (uint)value;
         }
 
-        public bool IsBusy => (RFlags & ReadStatusFlags.CmdBusy) == ReadStatusFlags.CmdBusy;
+        public bool IsBusy {
+            get {
+                return
+                    (RFlags & ReadStatusFlags.CmdBusy) == ReadStatusFlags.CmdBusy ||
+                    (RFlags & ReadStatusFlags.DmaBusy) == ReadStatusFlags.DmaBusy ||
+                    (RFlags & ReadStatusFlags.PipeBusy) == ReadStatusFlags.PipeBusy ||
+                    (RFlags & ReadStatusFlags.TmemBusy) == ReadStatusFlags.TmemBusy;
+            }
+        }
 
         public bool UseXBus => (RFlags & ReadStatusFlags.XbusDmemDma) == ReadStatusFlags.XbusDmemDma;
     }

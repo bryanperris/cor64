@@ -151,6 +151,8 @@ namespace cor64.Mips.Rsp
         private bool m_lastDoublePrecision = false;
         private bool m_InterruptOnBroke = false;
         private bool m_SkipForcedWait = false;
+        
+        private readonly ExecutionState m_State = new ExecutionState();
 
         private TaskType m_SpTaskType;
 
@@ -542,6 +544,8 @@ namespace cor64.Mips.Rsp
                 m_CpuRspWait.WaitOne();
             }
         }
+
+        public override ExecutionState State => m_State;
 
         public override void AttachBootManager(BootManager bootManager)
         {
@@ -1021,7 +1025,7 @@ namespace cor64.Mips.Rsp
                     case ExecutionFlags.Data128: {
                         offset <<= 4;
                         address = VectorLoadStoreHelper.ComputeAlignedVectorAddress(baseAddress, offset);
-                        VectorLoadStoreHelper.LoadU128IntoVector(DMem, address, target);
+                        VectorLoadStoreHelper.LoadU128IntoVector(DMem, address, target, element);
                         break;
                     }
 
@@ -1048,7 +1052,7 @@ namespace cor64.Mips.Rsp
                     case VectorOpFlags.Half: {
                         offset <<= 4;
                         address = VectorLoadStoreHelper.ComputeAlignedVectorAddress(baseAddress, offset);
-                        VectorLoadStoreHelper.LoadPacked_Half(DMem, address, target); 
+                        VectorLoadStoreHelper.LoadPacked_Half(DMem, address, target);
                         break;
                     }
 
@@ -1125,7 +1129,7 @@ namespace cor64.Mips.Rsp
                     case ExecutionFlags.Data128: {
                         offset <<= 4;
                         address = VectorLoadStoreHelper.ComputeAlignedVectorAddress(baseAddress, offset);
-                        VectorLoadStoreHelper.StoreU128FromVector(DMem, address, target);
+                        VectorLoadStoreHelper.StoreU128FromVector(DMem, address, target, element);
                         break;
                     }
 
@@ -1520,7 +1524,7 @@ namespace cor64.Mips.Rsp
 
         public override void VectorCompare(DecodedInstruction inst) {
             var source = m_VecRegs[inst.VSource];
-            var target = m_VecRegs[inst.VTarget];
+            var target = m_VecRegs[inst.VTarget].Resolve(inst.Element);
             var dest   = m_VecRegs[inst.VDest];
 
             /* Discard the previous data */
@@ -1573,7 +1577,7 @@ namespace cor64.Mips.Rsp
         }
 
         public override void VectorClip(DecodedInstruction inst) {
-            var source = m_VecRegs[inst.VSource].Resolve(inst.Element);
+            var source = m_VecRegs[inst.VSource];
             var target = m_VecRegs[inst.VTarget].Resolve(inst.Element);
             var dest   = m_VecRegs[inst.VDest];
 
@@ -1605,7 +1609,7 @@ namespace cor64.Mips.Rsp
                             target_slice ^= 0xFFFF;
                             target_slice++;
                         }
-                        
+
                         var sign = ((source_u16 + (target.PackedU16(i) - 65535)) >> 31) == 1;
                         var match = (source_u16 - target_slice) == 0;
 
@@ -1639,7 +1643,7 @@ namespace cor64.Mips.Rsp
 
                             is_equal = source_u16 == target_slice;
                             m_Vce.SetBool(i, is_equal);
-                            
+
                             if (!cch) {
                                 target_slice++;
                                 is_equal |= source_u16 == target_slice;
@@ -1660,7 +1664,7 @@ namespace cor64.Mips.Rsp
 
                         flag_compare = target.PackedS16(i) < 0;
                         flag_compare = Merge(is_signed, is_diff, flag_compare);
-                        
+
                         compare = Merge(is_signed, flag_compare, flag_clip);
 
                         pass = (short) target_slice;

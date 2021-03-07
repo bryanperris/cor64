@@ -31,6 +31,8 @@ namespace Tests
             AttachIStream(tester.GetProgram());
 			AttachDStream(m_TestDataMemory);
 
+            Cop0.REGS.Status.SetFRMode(tester.UseFPUHalfMode);
+
             /* Inject zeros into data memory */
             for (int i = 0; i < 16; i++)
             {

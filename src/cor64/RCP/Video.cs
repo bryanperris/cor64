@@ -170,6 +170,7 @@ namespace cor64.RCP
 
             // m_Interrupt.Write += () => Log.Debug("Framebuffer interrupt set to " + m_Interrupt.RegisterValue.ToString("X8"));
 
+
             m_Memory = controller;
 
             m_XScale.RegisterValue = 0x100U * (640U / 160U);
@@ -181,15 +182,14 @@ namespace cor64.RCP
         }
 
         public void Tick() {
-            // m_Ticks++;
+            m_Ticks++;
 
+            #if FASTER_VI
             m_Ticks += 10;
-
-            Line = 0;
+            #endif
 
             if (m_Ticks >= (93750000 / 60)) {
                 if (IsVideoActive) {
-                    Line = Interrupt;
                     SetVideoInterrupt();
                 }
                 m_Ticks = 0;

@@ -44,7 +44,7 @@ namespace cor64.Mips.R4300I.TLB
                 m_VPN2 = vpn2 & 0x7FFFFFF;
                 m_ASID = asid;
                 m_Mask = mask;
-                m_Global = global ? 1 : 0;
+                m_Global = (byte)(global ? 1 : 0);
             }
 
             public static long MakeKey(EntryKey key)

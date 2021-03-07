@@ -141,5 +141,30 @@ namespace Tests
                     FPUTest(-1.0f).Expect(1.0f).Run();
 			        FPUTest(1234.6789f).Expect(F(0xC49A55BA)).Run();
         }
+
+        [Test]
+        public void FPUStateTests() {
+            StatusRegister sr = new StatusRegister();
+            var state = new FpuState(sr);
+
+            // Full mode 64bit write
+            state.WriteScalarDword(0, 0xDEADBEEFDEAFBABEU);
+            Assert.AreEqual("DEAFBABE", state.DebugRead32(0).ToString("X8"));
+            Assert.AreEqual("DEADBEEF", state.DebugRead32(1).ToString("X8"));
+
+            // Half mode 64bit write
+            sr.SetFRMode(false);
+            state = new FpuState(sr);
+            state.WriteScalarDword(0, 0xDEADBEEFDEAFBABEU);
+            Assert.AreEqual("DEAFBABE", state.DebugRead32(0).ToString("X8"));
+            Assert.AreEqual("DEADBEEF", state.DebugRead32(1).ToString("X8"));
+
+            // Half mode 64bit read
+            sr.SetFRMode(false);
+            state = new FpuState(sr);
+            state.DebugWrite32(0, 0xDEAFBABE);
+            state.DebugWrite32(1, 0xDEADBEEF);
+            Assert.AreEqual("DEADBEEFDEAFBABE", state.ReadScalarDword(0).ToString("X16"));
+        }
     }
 }

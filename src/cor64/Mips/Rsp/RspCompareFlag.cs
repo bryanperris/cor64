@@ -17,7 +17,7 @@ namespace cor64.Mips.Rsp {
                 SetBoolBit(offset, b);
             }
         }
-        
+
         private void SetBoolBit(int offset, byte value) {
             Value &= (byte)~(1 << offset);
             Value |= (byte)((value & 1) << offset);

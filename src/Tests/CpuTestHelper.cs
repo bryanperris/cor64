@@ -32,7 +32,7 @@ namespace Tests
             s_InterpreterList = new List<RuntimeTypeHandle>()
             {
                 typeof(TestableInterpreter).TypeHandle,
-                typeof(TestableILRecompiler).TypeHandle
+                // typeof(TestableILRecompiler).TypeHandle
             };
 
             if (TestablePJ6.Ping())

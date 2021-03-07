@@ -30,6 +30,7 @@ namespace cor64.Mips.R4300I
         private readonly CoreDebugger m_CoreDebugger = new CoreDebugger();
         private readonly BranchUnit m_BranchUnit = new BranchUnit();
         private readonly TLBCache m_TLBCache;
+        private readonly ExecutionStateR4300I m_State;
 
 
         /* TODO: When we do have a cache system, 
@@ -41,17 +42,17 @@ namespace cor64.Mips.R4300I
 
         protected InterpreterBaseR4300I(BaseDisassembler disassembler) : base(disassembler)
         {
-            // Attach core debugger
-            State.SetCoreDebugger(m_CoreDebugger);
-            
-
             m_CoreClock = new Clock(10, 2);
             m_TLBCache = new TLBCache();
             m_Cop0Regs = new ControlRegisters(m_TLBCache);
             m_Coprocessor0 = new SystemController(m_Cop0Regs, State);
+            m_State = new ExecutionStateR4300I(m_Cop0Regs);
 
             m_TLBCache.AttachCoprocessor0(m_Coprocessor0);
             m_TLBCache.Initialize();
+
+            // Attach core debugger
+            State.SetCoreDebugger(m_CoreDebugger);
 
             CallTable
             .Map(Add32, ADD, ADDU, ADDI, ADDIU)
@@ -201,6 +202,8 @@ namespace cor64.Mips.R4300I
 
         public TLBCache TLB => m_TLBCache;
 
+        public ExecutionStateR4300I StateR4000I => m_State;
+
         public ExceptionType Exceptions => m_Cop0Regs.Cause.Exception;
 
         public bool IsAddress64 => m_Cop0Regs.Status.IsAddress64;
@@ -222,6 +225,8 @@ namespace cor64.Mips.R4300I
         public Clock CoreClock => m_CoreClock;
 
         public DataMemory DataMem => m_DataMemory;
+
+        public sealed override ExecutionState State => m_State;
 
 
         /********************************************************
@@ -313,76 +318,29 @@ namespace cor64.Mips.R4300I
             State.SetGpr32(select, value);
         }
 
-        protected float ReadFPR_S(int select)
-        {
-            return State.GetFprS(select);
-        }
+        /* --------- FPR Accessors */
 
-        protected double ReadFPR_D(int select)
-        {
-            return State.GetFprD(select);
-        }
+        protected float ReadFPR_S(int select) => StateR4000I.FPR.ReadFloatSingle(select);
 
-        protected uint ReadFPR_W(int select)
-        {
-            return State.GetFprW(select);
-        }
+        protected void WriteFPR_S(int select, float value) => StateR4000I.FPR.WriteFloatSingle(select, RoundHelper.Round(value, State.FCR.RoundMode));
 
-        protected ulong ReadFPR_DW(int select) {
-            return State.GetFprDW(select);
-        }
+        protected void WriteFPR_SNR(int select, float value) => StateR4000I.FPR.WriteFloatSingle(select, value); // No rounding
 
-        protected void WriteFPR_DW(int select, ulong value)
-        {
-            if (!Cop0State.Status.FRMode)
-            {
-                if ((select % 2) != 0) {
-                    State.SetFprDW(select - 1, value);
-                    State.SetFprDW(select - 0, value);
-                }
-            }
-            else
-            {
-                State.SetFprDW(select, value);
-            }
-        }
+        protected double ReadFPR_D(int select) => StateR4000I.FPR.ReadFloatDouble(select);
 
-        protected void WriteFPR_W(int select, uint value)
-        {
-           if (!Cop0State.Status.FRMode) {
-               var newSelect = select & 2;
+        protected void WriteFPR_D(int select, double value) => StateR4000I.FPR.WriteFloatDouble(select, RoundHelper.Round(value, State.FCR.RoundMode));
 
-               if ((select % 2) != 0) {
-                   State.SetFprDW(newSelect, ((ulong)value << 32) | (uint)State.GetFprDW(newSelect));
-               }
-               else {
-                   State.SetFprW(newSelect, value);
-               }
-           }
-           else {
-               State.SetFprW(select, value);
-           }
-        }
+        protected void WriteFPR_DNR(int select, double value) => StateR4000I.FPR.WriteFloatDouble(select, value); // No rounding
 
-        protected void WriteFPR_D(int select, double value)
-        {
-            State.SetFprD(select, RoundHelper.Round(value, State.FCR.RoundMode));
-        }
+        protected uint ReadFPR_W(int select) => StateR4000I.FPR.ReadScalarWord(select);
 
-        protected void WriteFPR_S(int select, float value)
-        {
-            State.SetFprS(select, RoundHelper.Round(value, State.FCR.RoundMode));
-        }
+        protected void WriteFPR_W(int select, uint value) => StateR4000I.FPR.WriteScalarWord(select, value);
 
-        protected void WriteFPR_DNR(int select, double value)
-        {
-            State.SetFprD(select, value);
-        }
+        protected ulong ReadFPR_DW(int select) => StateR4000I.FPR.ReadScalarDword(select);
 
-        protected void WriteFPR_SNR(int select, float value)
-        {
-            State.SetFprS(select, value);
-        }
+        protected void WriteFPR_DW(int select, ulong value) => StateR4000I.FPR.WriteScalarDword(select, value);
+
+        /* --------- */
 
         protected ulong ReadHi() => State.GetHi();
 
@@ -453,10 +411,9 @@ namespace cor64.Mips.R4300I
 
         private long TLBTranslate(long vaddress, bool isStore)
         {
-            // if (!TLB.TLBWritten) {
-            //     // Nothing has setup entries, throw an error
-            //     throw new EmuException("TLB was requested but nothing has been mapped");
-            // }
+            #if DISABLE_TLB_SUPPORT
+            throw new EmuException("TLB not supported");
+            #endif
 
             var result =  TLB.TranslateVirtualAddress(vaddress, isStore);
 

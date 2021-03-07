@@ -24,6 +24,7 @@ namespace Tests
         private int m_TestDataOffset;
         private bool m_InjectDMem;
         private bool m_IsFPU;
+        private bool m_IsFPUHalfMode;
 
         [Flags]
         public enum Expectations : ushort
@@ -280,6 +281,11 @@ namespace Tests
             return this;
         }
 
+        public TestCase FPUHalfMode(bool enable) {
+            m_IsFPUHalfMode = enable;
+            return this;
+        }
+
         public String Opcode { get; private set; }
 
         public ExceptionType ExpectedExceptions => m_ExpectedExceptions;
@@ -345,6 +351,8 @@ namespace Tests
         public FpuValueType ExpectedFpuType { get; set; }
 
         public Type CoreTypeOverride { get; private set; }
+
+        public bool UseFPUHalfMode => m_IsFPUHalfMode;
 
         internal void SetProgram(Stream rom)
         {

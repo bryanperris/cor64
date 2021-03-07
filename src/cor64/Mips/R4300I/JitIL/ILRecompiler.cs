@@ -89,7 +89,12 @@ namespace cor64.Mips.R4300I.JitIL
             //interpreter.SetInstructionDebugMode(DebugInstMode.Full);
             interpreter.OverrideIStream(IMemoryStream);
             interpreter.OverrideDStream(DMemoryStream);
-            interpreter.OverrideCoreState(State);
+
+            // interpreter.OverrideCoreState(State);
+            // TODO: Instead of replaceing the state object by referecen, the state object
+            //       itself should handle it.
+            throw new NotImplementedException("TODO: Implement a new way to override state in a better way");
+
             interpreter.OverrideCop0(Cop0);
             interpreter.BypassMMU = BypassMMU;
         }
@@ -682,12 +687,12 @@ namespace cor64.Mips.R4300I.JitIL
 
         double IDynamicMips.ReadFPRDouble(int select)
         {
-            return State.GetFprD(select);
+            return StateR4000I.FPR.ReadFloatDouble(select);
         }
 
         void IDynamicMips.WriteFPRDouble(int select, double value)
         {
-            State.SetFprD(select, value);
+            StateR4000I.FPR.WriteFloatDouble(select, value);
         }
 
         void IDynamicMips.SetFpuExceptionState(FpuExceptionFlags flags)
@@ -697,12 +702,12 @@ namespace cor64.Mips.R4300I.JitIL
 
         float IDynamicMips.ReadFPRFloat(int select)
         {
-            return State.GetFprS(select);
+            return StateR4000I.FPR.ReadFloatSingle(select);
         }
 
         void IDynamicMips.WriteFPRFloat(int select, float value)
         {
-            State.SetFprS(select, value);
+            StateR4000I.FPR.WriteFloatSingle(select, value);
         }
 
         void IDynamicMips.SetFpuCondition(bool condition)

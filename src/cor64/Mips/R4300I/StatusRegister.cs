@@ -216,8 +216,6 @@ namespace cor64.Mips.R4300I
 
         public bool FRMode => TestFlags(StatusFlags.AdditonalFPU);
 
-        // public bool FRMode => true; // Just hardcode it on, AFAIK, it shouldn't affect FPU math
-
         public int ModeBits
         {
             get => (int)m_Fiddler.X(F_KSU, ref m_Value);
@@ -279,6 +277,15 @@ namespace cor64.Mips.R4300I
         {
             uint val = m_Fiddler.X(F_IM, ref m_Value);
             return m_IntFiddler.X(index, ref val) != 0;
+        }
+
+        public void SetFRMode(bool enabled) {
+            if (!enabled) {
+                Write(Read() & ~0x4000000U);
+            }
+            else {
+                Write(Read() | 0x4000000);
+            }
         }
     }
 }

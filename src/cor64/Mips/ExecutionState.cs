@@ -11,7 +11,6 @@ namespace cor64.Mips
     public unsafe class ExecutionState
     {
         const int SIZE_GPR = 64 * 32;
-        const int SIZE_FPR = 32 * 2 * 4;
         const int SIZE_HILO = 62 * 2;
         const int SIZE_LLBIT = 1;
         const int STACK_POINTER = 29;
@@ -21,10 +20,6 @@ namespace cor64.Mips
         private readonly UnmanagedBuffer m_RegMem;
         private ulong* m_GprRegs64;
         private uint* m_GprRegs32;
-        private double* m_FprRegsDouble;
-        private float* m_FprRegsSingle;
-        private ulong* m_FprRegsDword;
-        private uint* m_FprRegsWord;
         private ulong* m_Hi;
         private ulong* m_Lo;
         private bool* m_LLbit;
@@ -34,7 +29,7 @@ namespace cor64.Mips
 
         public ExecutionState()
         {
-            m_RegMem = new UnmanagedBuffer(SIZE_GPR + SIZE_FPR + SIZE_HILO);
+            m_RegMem = new UnmanagedBuffer(SIZE_GPR + SIZE_HILO);
             m_RegMem.Clear();
 
             IntPtr ptr = m_RegMem.GetPointer();
@@ -43,13 +38,6 @@ namespace cor64.Mips
             m_GprRegs32 = (uint*)ptr;
 
             ptr += SIZE_GPR;
-
-            m_FprRegsDouble = (double*)ptr;
-            m_FprRegsSingle = (float*)ptr;
-            m_FprRegsWord = (uint*)ptr;
-            m_FprRegsDword = (ulong*)ptr;
-
-            ptr += SIZE_FPR;
 
             m_Hi = (ulong*)ptr;
             ptr += 8;
@@ -176,71 +164,7 @@ namespace cor64.Mips
         {
             m_Lo[0] = value;
         }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public double GetFprD(int i)
-        {
-            Check(i);
-
-            return m_FprRegsDouble[i];
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void SetFprD(int i, double value)
-        {
-            Check(i);
-
-            m_FprRegsDouble[i] = value;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ulong GetFprDW(int i)
-        {
-            Check(i);
-
-            return m_FprRegsDword[i];
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void SetFprDW(int i, ulong value)
-        {
-            Check(i);
-
-            m_FprRegsDword[i] = value;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public float GetFprS(int i)
-        {
-            Check(i);
-
-            return m_FprRegsSingle[i << 1];
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void SetFprS(int i, float value)
-        {
-            Check(i);
-
-            m_FprRegsSingle[i << 1] = value;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public uint GetFprW(int i)
-        {
-            Check(i);
-
-            return m_FprRegsWord[i << 1];
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void SetFprW(int i, uint value)
-        {
-            Check(i);
-
-            m_FprRegsWord[i << 1] = value;
-        }
-
+        
         public bool LLBit
         {
             get => m_LLbit[0];

@@ -33,7 +33,6 @@ namespace cor64.Mips
 
         protected BaseInterpreter(BaseDisassembler disassembler)
         {
-            State = new ExecutionState();
             Disassembler = disassembler;
             
             TraceLog = new ProgramTrace(disassembler)
@@ -70,10 +69,7 @@ namespace cor64.Mips
             m_ProgramStart = address;
         }
 
-        public void OverrideCoreState(ExecutionState state)
-        {
-            State = state;
-        }
+        // public abstract void OverrideCoreState(ExecutionState state);
 
         public void SetDebuggingMode(bool mode)
         {
@@ -326,7 +322,7 @@ namespace cor64.Mips
 
         public ProgramTrace TraceLog { get; }
 
-        public ExecutionState State { get; private set; }
+        public abstract ExecutionState State { get; }
 
 
         public bool DebugMode { get; private set; }
