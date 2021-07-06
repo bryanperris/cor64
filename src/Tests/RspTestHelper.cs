@@ -50,7 +50,7 @@ namespace Tests
             var rsp = new TestableRsp();
 
             /* Assmemble and check ucode */
-            var ucodeData = s_GenerateUCode ? Asm.GenTestRspUCode(s_RspTestType, m_UcodeName) : Asm.AssembleRspUCode(m_UcodeName);
+            var ucodeData = s_GenerateUCode ? Asm.GenTestRspUCode(s_RspTestType, m_UcodeName, testCase.TargetElementSelect??0, testCase.DestElementSelect??0) : Asm.AssembleRspUCode(m_UcodeName);
 
             if (s_ExpectedUCodeSize > 0) {
                 Assert.AreEqual(s_ExpectedUCodeSize, ucodeData.Length);
@@ -94,6 +94,22 @@ namespace Tests
 
         public static RspTestCase InjectVcc(this RspTestCase testCase, ushort vcc) {
             testCase.InjectedVcc = vcc;
+            return testCase;
+        }
+
+        public static RspTestCase InjectVc0(this RspTestCase testCase, ushort vc0) {
+            testCase.InjectedVc0 = vc0;
+            return testCase;
+        }
+
+
+        public static RspTestCase SetTargetE(this RspTestCase testCase, int e) {
+            testCase.TargetElementSelect = e;
+            return testCase;
+        }
+
+        public static RspTestCase SetDestE(this RspTestCase testCase, int e) {
+            testCase.DestElementSelect = e;
             return testCase;
         }
     }

@@ -12,9 +12,9 @@ namespace cor64.IO
     public class CartridgeBlock : BlockDevice
     {
         //private Stream m_SourceStream;
-        private UnmanagedBuffer m_RomBuffer;
-        private UnmanagedBuffer m_DummyRead = new UnmanagedBuffer(4);
-        private int m_RealSize;
+        private readonly UnmanagedBuffer m_RomBuffer;
+        private readonly UnmanagedBuffer m_DummyRead = new UnmanagedBuffer(4);
+        private readonly int m_RealSize;
 
         //public CartridgeBlock(Stream streamSource)
         //{
@@ -47,14 +47,6 @@ namespace cor64.IO
             //         }
 
             Marshal.Copy(IntPtr.Add(m_RomBuffer.GetPointer(), (int)position), buffer, offset, count);
-
-            if (CoreConfig.Current.ByteSwap)
-            {
-                if (count == 1)
-                {
-                    Console.WriteLine("Warning: Cartridge byte read");
-                }
-            }
         }
 
         public sealed override void Write(long position, byte[] buffer, int offset, int count)

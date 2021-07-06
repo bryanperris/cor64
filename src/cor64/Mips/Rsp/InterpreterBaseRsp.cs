@@ -13,12 +13,14 @@ namespace cor64.Mips.Rsp
     {
         public DataMemory DMem { get; private set; }
         protected readonly RspOpcodes.CallTable CallTable = RspOpcodes.CreateCallTable();
-        protected SPInterface Interface { get; private set; }
+        public SPInterface Interface { get; private set; }
         protected DPCInterface RdpInterface {get; private set; }
         protected MipsInterface RcpInterface { get; private set; }
         protected SPStatusRegister Status { get; private set; }
-        public bool IsHalted { get; protected set; } = true;
+        public virtual bool IsHalted { get; protected set; } = true;
         public DecodedInstruction LastReadInst { get; protected set; }
+
+        private readonly MipsDebugger m_Debugger = new MipsDebugger();
 
         protected InterpreterBaseRsp(BaseDisassembler disassembler) : base(disassembler)
         {
@@ -47,6 +49,10 @@ namespace cor64.Mips.Rsp
             .Map(VectorClip, VCL, VCH, VCR, VMRG)
             .Map(VectorMove, VMOV)
             .Finish();
+
+            if (CoreConfig.Current.WorkbenchMode) {
+                Debugger.ActivateDebugger();
+            }
         }
 
         private void NothingOp(DecodedInstruction inst) {
@@ -55,9 +61,13 @@ namespace cor64.Mips.Rsp
 
         public abstract void WriteVCC(ushort vcc);
 
+        public abstract void WriteVC0(ushort vc0);
+
         public override void AttachDStream(Stream memoryStream) {
             DMem = new DataMemory(new DataStreamWrapper(this, memoryStream));
         }
+
+        public override MipsDebugger Debugger => m_Debugger;
 
         private sealed class DataStreamWrapper : Stream
         {

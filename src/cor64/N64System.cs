@@ -13,6 +13,7 @@ using cor64.RCP;
 using cor64.Rdp.LLE;
 using cor64.HLE;
 using cor64.HLE.OS;
+using cor64.PIF;
 
 namespace cor64
 {
@@ -21,6 +22,8 @@ namespace cor64
         private readonly static Logger Log = LogManager.GetCurrentClassLogger();
         private readonly BootManager m_BootManager;
         private Cartridge m_Cartridge;
+
+        private readonly JoyController[] m_JoyControllers = new JoyController[4];
 
         public N64System()
         {
@@ -31,7 +34,9 @@ namespace cor64
             m_BootManager = new BootManager();
             m_BootManager.MMIOWrite += MMIORegWrite;
 
-            Dbg = new Debugger(this);
+            Dbg = new EmuDebugger(this);
+
+            m_JoyControllers[0] = new JoyController(0);
         }
 
         private void MMIORegWrite(BootManager.MMIORegWriteKind kind, uint v)
@@ -61,14 +66,20 @@ namespace cor64
             DeviceMemory.MountCartridge(cartridge);
             DeviceCPU.SetProgramEntryPoint(cartridge.EntryPoint);
 
+            /* Initlaize core memory */
+            DeviceMemory.Init();
+
             /* Attach RCP to memory */
             DeviceRcp.AttachToMemory(DeviceMemory);
 
-            /* Initialize system memory */
-            DeviceMemory.Init();
+            /* Generate the mem map */
+            DeviceMemory.BuildMemMap();
 
             /* Init the RDP */
             DeviceRcp.DeviceRdp.Init();
+
+            /* Init the RSP */
+            DeviceRcp.DeviceRsp.Init();
 
             /* Init the serial controller */
             DeviceRcp.SerialDevice.Init();
@@ -79,6 +90,9 @@ namespace cor64
 
             /* Attach RCP to CPU */
             DeviceCPU.AttachRcp(DeviceRcp);
+
+            /* Hook into Pif DMA (RDRAM -> PIF RAM) */
+            DeviceRcp.SerialDevice.PifRamWrite += CheckPifEvents;
 
             /* Perform system boot intialization (Motherboard IPl) */
             m_BootManager.BootCartridge(cartridge, true);
@@ -113,12 +127,13 @@ namespace cor64
             Dbg.EnterExecution();
             DeviceCPU.Step();
             Dbg.LeaveExecution();
-            DeviceCPU.CoreDbg.SkipBreakpoint = false;
 
             VI.Tick();
         }
 
         public Video VI => DeviceRcp.VideoInterface;
+
+        public PIFMemory PIF => (PIFMemory) DeviceMemory.Model.PIF;
 
         /// <summary>
         /// If an exception is thrown during a tick, call this to cleanup anything aftwards
@@ -157,7 +172,13 @@ namespace cor64
             }
         }
 
-        public Debugger Dbg { get; }
+        private void CheckPifEvents() {
+             if (m_JoyControllers[0].CheckPending()) {
+                PIF.JoyWriteButtons(0, m_JoyControllers[0].ReadPending());
+            }
+        }
+
+        public EmuDebugger Dbg { get; }
 
         public InterpreterBaseR4300I DeviceCPU { get; private set; }
 
@@ -166,5 +187,7 @@ namespace cor64
         public RcpCore DeviceRcp { get; } = new RcpCore();
 
         public Cartridge AttachedCartridge => m_Cartridge;
+
+        public JoyController[] Joys => m_JoyControllers;
     }
 }

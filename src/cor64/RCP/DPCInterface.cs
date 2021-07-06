@@ -70,7 +70,7 @@ namespace cor64.RCP {
             TmemBusy= 0b10000,
             PipeBusy= 0b100000,
             CmdBusy = 0b1000000,
-            ColorBufferReady = 0b10000000,
+            CommandBufferReady = 0b10000000,
             DmaBusy = 0b100000000,
             EndValid=  0b1000000000,
             StartValid=0b10000000000
@@ -91,6 +91,8 @@ namespace cor64.RCP {
 
         public event EventHandler<DisplayList> DisplayListReady;
 
+        public event Action OnStatusWrite;
+
         public struct DisplayList {
             internal DisplayList(uint start, uint end) {
                 Start = start;
@@ -101,6 +103,28 @@ namespace cor64.RCP {
             public uint End { get; }
         }
 
+        public class MemExports {
+            public IntPtr StartPtr { get; }
+            public IntPtr EndPtr { get; }
+            public IntPtr CurrentPtr { get; }
+            public IntPtr StatusPtr { get; }
+            public IntPtr ClockPtr { get; }
+            public IntPtr BufferBusyCounterPtr { get; }
+            public IntPtr PipeBusyCounterPtr { get; }
+            public IntPtr TmemLoadCounterPtr { get; }
+
+            public MemExports(DPCInterface iface) {
+                StartPtr = iface.m_Start.ReadPtr;
+                EndPtr = iface.m_End.ReadPtr;
+                CurrentPtr = iface.m_Current.ReadPtr;
+                StatusPtr = iface.m_Status.ReadPtr;
+                ClockPtr = iface.m_Clock.ReadPtr;
+                BufferBusyCounterPtr = iface.m_BufferBusyCounter.ReadPtr;
+                PipeBusyCounterPtr = iface.m_PipeBusyCounter.ReadPtr;
+                TmemLoadCounterPtr = iface.m_TmemLoadCounter.ReadPtr;
+            }
+        }
+
         public DPCInterface(N64MemoryController controller) : base (controller, 0x100000) {
             Map(m_Start, m_End, m_Current);
             Map(m_Status);
@@ -108,7 +132,7 @@ namespace cor64.RCP {
 
             m_Start.Write += DisplayListStart;
             m_End.Write += DisplayListEnd;
-            m_Start.Write += StatusWrite;
+            m_Status.Write += StatusWrite;
 
             m_RegSelects = new MemMappedBuffer[] {
                 m_Start,              // $c8
@@ -204,6 +228,8 @@ namespace cor64.RCP {
             }
 
             m_Status.RegisterValue = 0;
+
+            OnStatusWrite?.Invoke();
         }
 
         public WriteStatusFlags WFlags => (WriteStatusFlags)m_Status.RegisterValue;
@@ -224,6 +250,12 @@ namespace cor64.RCP {
         }
 
         public bool UseXBus => (RFlags & ReadStatusFlags.XbusDmemDma) == ReadStatusFlags.XbusDmemDma;
+
+        public MemExports ExportPointers() => new MemExports(this);
+
+        public void ReflectStatus() {
+            m_Status.ReadonlyRegisterValue = m_Status.RegisterValue;
+        }
     }
 
 }

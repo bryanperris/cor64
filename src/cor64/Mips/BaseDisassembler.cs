@@ -1,4 +1,5 @@
-﻿using System;
+﻿using System.Threading;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -15,43 +16,34 @@ namespace cor64.Mips
     /// </summary>
     public abstract class BaseDisassembler
     {
-        private Stream m_BinaryStream;
+        private Stream m_InstStream;
         private ISymbolProvider m_SymbolProvider;
         private readonly byte[] m_InstBuffer = new Byte[4];
-        private Swap32Stream m_SwapStream;
-        private readonly Func<uint> m_ReadInstFunc;
 
+        private BinaryReader m_InstBinaryReader;
         private static readonly String[] Cop1ConditionalTable = {
             "f", "un", "eq", "olt", "ult", "ole", "ule", "sf",
             "ngle", "sqe", "ngl", "lt", "nge", "le", "ngt"
         };
-
+        
         protected BaseDisassembler(String abi)
         {
             ABI = abi;
-
-            if (CoreConfig.Current.ByteSwap)
-            {
-                m_ReadInstFunc = () =>
-                {
-                    m_SwapStream.Read(m_InstBuffer, 0, 4);
-                    return m_InstBuffer.ToUInt32();
-                };
-            }
-            else
-            {
-                m_ReadInstFunc = () =>
-                {
-                    m_BinaryStream.Read(m_InstBuffer, 0, 4);
-                    return m_InstBuffer.ToUInt32();
-                };
-            }
         }
 
+        /// <summary>
+        /// An instruction stream in big endian ordering
+        /// </summary>
+        /// <param name="stream"></param>
         public virtual void SetStreamSource(Stream stream)
         {
-            m_BinaryStream = stream;
-            m_SwapStream = new Swap32Stream(stream);
+            #if LITTLE_ENDIAN
+            m_InstStream = stream;
+            #else
+            m_InstStream = new Swap32Stream(stream);
+            #endif
+
+            m_InstBinaryReader = new BinaryReader(m_InstStream);
         }
 
         public String ABI { get; }
@@ -171,21 +163,26 @@ namespace cor64.Mips
 
         private DecodedInstruction DecodeBinaryInst(long address)
         {
-            m_BinaryStream.Position = address;
-            BinaryInstruction inst = new(m_ReadInstFunc());
+            m_InstStream.Position = address;
+            var read = m_InstBinaryReader.ReadUInt32();
+            return Decode((ulong)m_InstStream.Position, (ulong)m_InstStream.Length, read);
+        }
+
+        public DecodedInstruction Decode(ulong address, ulong bound, uint inst) {
+            BinaryInstruction binst = new(inst);
 
             return new DecodedInstruction(
-                (ulong)address,
-                DecodeOpcode(inst),
-                inst,
+                address,
+                DecodeOpcode(binst),
+                binst,
                 false,
-                m_BinaryStream.Position + 4 >= m_BinaryStream.Length);
+                address + 4 >= bound);
         }
 
         public DecodedInstruction Disassemble(ulong address)
         {
             // If the stream position goes out of range, return internal null opcode
-            if (address >= (ulong)m_BinaryStream.Length)
+            if (address >= (ulong)m_InstStream.Length)
                 return new DecodedInstruction(0, new Opcode(), new BinaryInstruction(), true, false);
 
             // Do the normal opcode decoding

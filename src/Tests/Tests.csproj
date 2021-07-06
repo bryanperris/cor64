@@ -11,6 +11,10 @@
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <OutputPath>../../bin</OutputPath>
   </PropertyGroup>
+  <!-- Emulator debugging compiler flags -->
+  <PropertyGroup>
+    <!-- <DefineConstants>$(DefineConstants);LITTLE_ENDIAN</DefineConstants> -->
+  </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="**\*.asm" />
   </ItemGroup>

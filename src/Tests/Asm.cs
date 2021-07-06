@@ -168,7 +168,7 @@ namespace Tests
             VectTargetDest
         }
 
-        private static void GenTestRspUCode_VecSTD (String opcode, AssemblyTextSource assembly) {
+        private static void GenTestRspUCode_VecSTD (String opcode, AssemblyTextSource assembly, int e = 0) {
             assembly += "endian msb";
             assembly += "arch n64.rsp";
             assembly += "include \"LIB/N64.INC\"";
@@ -178,7 +178,7 @@ namespace Tests
             assembly += "base $0000";
             assembly += "lqv v0[e0],$00(r0)";
             assembly += "lqv v1[e0],$10(r0)";
-            assembly += opcode.ToLower() + " v0,v1[e0]";
+            assembly += opcode.ToLower() + " v0,v1[e" + e.ToString() + "]";
             assembly += "sqv v0[e0],$00(r0)";
             assembly += "vsar v0,v0[e8]";
             assembly += "sqv v0[e0],$10(r0)";
@@ -195,7 +195,7 @@ namespace Tests
             assembly += "break";
         }
 
-        private static void GenTestRspUCode_VecTD (String opcode, AssemblyTextSource assembly) {
+        private static void GenTestRspUCode_VecTD (String opcode, AssemblyTextSource assembly, int te, int de) {
             assembly += "endian msb";
             assembly += "arch n64.rsp";
             assembly += "include \"LIB/N64.INC\"";
@@ -205,7 +205,7 @@ namespace Tests
             assembly += "base $0000";
             assembly += "lqv v0[e0],$00(r0)";
             assembly += "lqv v1[e0],$10(r0)";
-            assembly += opcode.ToLower() + " v0[e0],v1[e0]";
+            assembly += opcode.ToLower() + " v0[e"+de.ToString()+"],v1[e" + te.ToString() + "]";
             assembly += "sqv v0[e0],$00(r0)";
             assembly += "vsar v0,v0[e8]";
             assembly += "sqv v0[e0],$10(r0)";
@@ -222,22 +222,19 @@ namespace Tests
             assembly += "break";
         }
 
-        public static Byte[] GenTestRspUCode(RspUCodeTestType testType, String opcode, bool littleEndian=false) {
+        public static Byte[] GenTestRspUCode(RspUCodeTestType testType, String opcode, int te, int de) {
             var assembly = new AssemblyTextSource("rsp_main");
 
             switch (testType) {
                 default: throw new ArgumentException("invalid test type provided: " + testType.ToString());
-                case RspUCodeTestType.VecSourceTargetDest: GenTestRspUCode_VecSTD(opcode, assembly); break;
-                case RspUCodeTestType.VectTargetDest: GenTestRspUCode_VecTD(opcode, assembly); break;
+                case RspUCodeTestType.VecSourceTargetDest: GenTestRspUCode_VecSTD(opcode, assembly, te); break;
+                case RspUCodeTestType.VectTargetDest: GenTestRspUCode_VecTD(opcode, assembly, te, de); break;
             }
 
             var assembler = new N64BareMetalRspAssembler();
             assembler.AddAssemblySource(assembly);
 
-            if (!littleEndian)
-                assembler.AssembleCode(true);
-            else
-                assembler.AssembleCodeAndSwap(true);
+            assembler.AssembleCode(true);
 
             return assembler.ToBytes();
         }

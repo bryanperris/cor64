@@ -193,9 +193,6 @@ namespace Tests
                     }
                 }
 
-                /* Configure the machine env first */
-                CoreConfig.Current.ByteSwap = true;
-
                 /* Test in 64-bit Kernel Mode */
                 if (testCase.Test64)
                 {

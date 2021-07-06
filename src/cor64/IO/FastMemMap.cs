@@ -63,6 +63,7 @@ namespace cor64.IO
         public void Read(uint address, byte[] buffer, int offset, int count)
         {
             var blkPtr = m_ReadMap.GetDevice(address);
+            var blkDevice = m_MainMap.GetDevice(address);
 
             #if DEBUG_ADDRESS_CHECKING
             if (blkPtr == null) {
@@ -73,6 +74,8 @@ namespace cor64.IO
             var blkOffset = m_ReadMap.GetDeviceOffset(address);
             var ptr = blkPtr[blkOffset / 4];
             var off = (int)(address % 4);
+
+            blkDevice.ReadNotify(blkOffset / 4);
 
             Marshal.Copy(ptr.Offset(off), buffer, offset, count);
         }

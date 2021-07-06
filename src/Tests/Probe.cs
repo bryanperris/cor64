@@ -4,12 +4,11 @@ namespace cor64 {
             byte[] buffer = new byte[4];
             system.DeviceMemory.Read(address, buffer, 0, buffer.Length);
             
-            if (CoreConfig.Current.ByteSwap) {
-                return buffer.ToUInt32().ByteSwapped();
-            }
-            else {
-                return buffer.ToUInt32();
-            }
+            #if LITTLE_ENDIAN
+            return buffer.ToUInt32();
+            #else
+            return buffer.ToUInt32().ByteSwapped();
+            #endif
         }
     }
 }

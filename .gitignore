@@ -1,4 +1,3 @@
-.vs
 bin
 obj
 packages
@@ -6,4 +5,5 @@ package-lock.json
 dist
 paket-files
 mono_crash.mem*
+build
 .tmp/

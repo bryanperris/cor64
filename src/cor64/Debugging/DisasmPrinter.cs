@@ -15,7 +15,7 @@ namespace cor64.Debugging {
 
             foreach (var inst in RspDisassembler.Disassemble(address, size)) {
                 if (inst.CanFullyDisassemble) {
-                    writer.WriteLine("{0:X8} {1}", inst.Address, RspDisassembler.GetFullDisassembly(inst));
+                    writer.WriteLine("{0:X8} {1:X8} {2}", inst.Address, inst.Inst.inst, RspDisassembler.GetFullDisassembly(inst));
                 }
                 else {
                     writer.WriteLine("{0:X8} {1:X8} ???", inst.Address, inst.Inst.inst);

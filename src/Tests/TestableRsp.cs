@@ -44,6 +44,10 @@ namespace Tests
             if (m_TestCase.InjectedVcc != null) {
                 m_Rsp.WriteVCC(m_TestCase.InjectedVcc.Value);
             }
+
+            if (m_TestCase.InjectedVc0 != null) {
+                m_Rsp.WriteVC0(m_TestCase.InjectedVc0.Value);
+            }
         }
 
         /// <summary>

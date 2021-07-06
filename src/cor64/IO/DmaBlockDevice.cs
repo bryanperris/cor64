@@ -31,5 +31,7 @@ namespace cor64.IO
         protected int TransferBytesUnaligned(int length) {
             return m_Controller.MemoryCopyUnaligned(SourceAddress, DestAddress, length);
         }
+        
+        protected N64MemoryController ParentController => m_Controller;
     }
 }

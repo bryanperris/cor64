@@ -1,6 +1,10 @@
 NLog
 Newtonsoft.Json
 ELFSharp
-SkiaSharp.NativeAssets.Linux
 glfw-net
 CommandLineParser
+ImGui.NET
+Veldrid
+OpenTK
+Veldrid.ImGui
+CppSharp

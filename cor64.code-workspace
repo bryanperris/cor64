@@ -1,0 +1,51 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+    ],
+    "settings": {
+        "files.associations": {
+            "*.tcc": "c",
+            "istream": "c",
+            "typeinfo": "c",
+            "array": "c",
+            "atomic": "c",
+            "deque": "c",
+            "string": "c",
+            "vector": "c",
+            "algorithm": "c",
+            "memory_resource": "c",
+            "string_view": "c",
+            "memory": "c",
+            "random": "c",
+            "fstream": "c",
+            "initializer_list": "c",
+            "sstream": "c",
+            "stdexcept": "c",
+            "tuple": "c",
+            "type_traits": "c",
+            "utility": "c",
+            "bit": "c",
+            "new": "c",
+            "ranges": "cpp",
+            "module.h": "c",
+            "*.inc": "c"
+        },
+        "dotnet-test-explorer.testProjectPath": "src/Tests/*.csproj",
+    },
+    "extensions": {
+        "recommendations": [
+            "formulahendry.dotnet-test-explorer",
+            "fudge.auto-using",
+            "josefpihrt-vscode.roslynator",
+            "ms-vscode.cpptools",
+            "ms-vscode.cpptools-extension-pack",
+            "ms-vscode.cpptools-themes",
+            "nuke.support",
+            "ms-vscode.cmake-tools",
+            "jeff-hykin.better-cpp-syntax",
+            "ms-dotnettools.csharp"
+        ]
+    }
+}

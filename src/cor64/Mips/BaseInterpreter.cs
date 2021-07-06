@@ -121,6 +121,8 @@ namespace cor64.Mips
 
         public abstract void AttachBootManager(BootManager bootManager);
 
+        public abstract MipsDebugger Debugger { get; }
+
         protected virtual void EntryPointHit()
         {
             InBootMode = false;
@@ -296,9 +298,9 @@ namespace cor64.Mips
                     case OperandType.Cop0_TC:
                     case OperandType.Cop1_CT:
                     case OperandType.Cop1_TC:
-                    //case OperandType.VU_CT:
+                    case OperandType.VU_CT: // RSP V[e] -> GPR
+                    case OperandType.VU_TC: // GPR -> RSP V[e]
                     case OperandType.VU_FromCtrl:
-                    //case OperandType.VU_TC:
                     case OperandType.VU_ToCtrl:
                     case OperandType.Cop1_FromCtrl:
                     case OperandType.Cop1_ToCtrl:

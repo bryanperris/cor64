@@ -28,6 +28,8 @@ namespace cor64.Mips.Rsp {
         public byte GetCarryBit(int offset) {
             var value = (byte)RegValue;
             value &= BITS[offset];
+            value >>= offset;
+            value &= 1;
             return value;
         }
         
@@ -53,6 +55,8 @@ namespace cor64.Mips.Rsp {
         public byte GetNotEqualBit(int offset) {
             var value = (byte)(RegValue >> 8);
             value &= BITS[offset];
+            value >>= offset;
+            value &= 1;
             return value;
         }
 

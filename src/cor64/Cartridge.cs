@@ -43,6 +43,14 @@ namespace cor64
             Middle  /* Middle */
         }
 
+        private static Stream GetGameReadableSource(RomEndianess endianess, Stream source) {
+            #if LITTLE_ENDIAN
+            return GetSwappedStreamLE(endianess, source);
+            #else
+            return GetSwappedStreamBE(endianess, source);
+            #endif
+        }
+
         public Cartridge(Stream source)
         {
             /* Try to determine the endianess based on the first 4 bytes (Big-Endian) */
@@ -88,7 +96,7 @@ namespace cor64
             {
                 case RomEndianess.Little:
                     {
-                        gameSource = GetSwappedStreamBE(endianess, source);
+                        gameSource = GetGameReadableSource(endianess, source);
                         nativeSource = GetSwappedStreamLE(endianess, source);
                         Log.Info("Little-Endian Rom");
                         break;
@@ -96,7 +104,7 @@ namespace cor64
 
                 case RomEndianess.Big:
                     {
-                        gameSource = GetSwappedStreamBE(endianess, source);
+                        gameSource = GetGameReadableSource(endianess, source);
                         nativeSource = GetSwappedStreamLE(endianess, source);
                         Log.Info("Big-Endian Rom");
                         break;
@@ -104,7 +112,7 @@ namespace cor64
 
                 case RomEndianess.Middle:
                     {
-                        gameSource = GetSwappedStreamBE(endianess, source);
+                        gameSource = GetGameReadableSource(endianess, source);
                         nativeSource = GetSwappedStreamLE(endianess, source);
                         Log.Info("Middle-Endian Rom");
                         break;
@@ -123,14 +131,15 @@ namespace cor64
             /* Detect the CIC type (Input must be in big endian) */
             if (IPL == null)
             {
-                IPL = GetIPLType(gameSource);
+                var bigEndianSource = GetSwappedStreamBE(endianess, source);
+                IPL = GetIPLType(bigEndianSource);
             }
 
             ReadHeader(nativeSource);
 
             /* Now Copy the rom into memory */
             RomStream = new MemoryStream();
-            BinaryReader reader = new BinaryReader(CoreConfig.Current.ByteSwap ? gameSource : nativeSource);
+            BinaryReader reader = new BinaryReader(gameSource);
             BinaryWriter writer = new BinaryWriter(RomStream);
 
             nativeSource.Position = 0;
@@ -150,17 +159,6 @@ namespace cor64
             m_CartridgeBlock = new CartridgeBlock(m_RomBuffer, buffer.Length);
 
             // XXX: For now we have a memory copy of the ROM in memory twice
-        }
-
-        private static Stream GetSwappedStream(RomEndianess endianess, Stream source)
-        {
-            /* We assume the host is little endian for now but the swap flag will control
-               how to read in the rom source. If we are byteswapping, then we force the stream
-               to be big endian else it will be forced to be little endian */
-
-            var stream = source;
-            stream = CoreConfig.Current.ByteSwap ? GetSwappedStreamBE(endianess, stream) : GetSwappedStreamLE(endianess, stream);
-            return stream;
         }
 
         /// <summary>
@@ -231,13 +229,13 @@ namespace cor64
                 return 50;
         }
 
-        private static String ConvertFromBytes(byte[] buffer, int index, int count)
+        private static String StringFromRomBytes(byte[] buffer, int index, int count)
         {
             StringBuilder sb = new StringBuilder();
 
             for (int i = 0; i < count; i++)
             {
-                char c = (char)buffer[index + i];
+                char c = (char)buffer[(index + i) ^ 3];
                 sb.Append(c);
             }
 
@@ -281,7 +279,8 @@ namespace cor64
             /* Read the data in big endian */
             source.Position = 0;
             source.Read(header, 0, header.Length);
-            m_Name = ConvertFromBytes(header, 20 + 8, TitleSize);
+
+            m_Name = StringFromRomBytes(header, 20 + 8, TitleSize);
         }
 
         /* Copies the boot section out of the rom */

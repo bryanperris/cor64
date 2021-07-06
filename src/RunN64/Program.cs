@@ -15,7 +15,8 @@ namespace RunN64
 
         public class Options
         {
-            
+            [Option('w', "workbench", Required = false, HelpText = "Start the emulator in workbench mode.", Default = false)]
+            public bool WorkbenchMode { get; set; }
         }
 
 
@@ -30,7 +31,11 @@ namespace RunN64
         {
             var parsedArgs = Parser.Default.ParseArguments<Options>(args).WithParsed((options) =>
             {
+                // Sync up the workbench mode, very important
+                cor64.CoreConfig.Current.WorkbenchMode = options.WorkbenchMode;
+
                 s_Emulator = new Emulator();
+                s_Emulator.WorkbenchMode = options.WorkbenchMode;
                 s_Emulator.Configuration = JsonConvert.DeserializeObject<Config>(File.ReadAllText("config.json"));
                 s_Emulator.SetupLogging();
 
@@ -62,7 +67,7 @@ namespace RunN64
 
         private static void CommandLoop()
         {
-            while (true)
+            do
             {
                 if (Console.KeyAvailable)
                 {
@@ -107,28 +112,22 @@ namespace RunN64
                         s_Emulator.ForceVideoInterrupt();
                     }
 
-                    if (key.Key == ConsoleKey.T) {
+                    if (key.Key == ConsoleKey.T)
+                    {
                         Log.Info("Force Mips Timer");
                         var count = s_Emulator.CPU.Cop0.TimerCount;
                         count += 10000000;
                         s_Emulator.CPU.Cop0.CpuRegisterWrite(CTS.CP0_REG_COMPARE, count);
                     }
 
-                    if (key.Key == ConsoleKey.D) {
+                    if (key.Key == ConsoleKey.D)
+                    {
                         s_Emulator.CPU.SetInstructionDebugMode(InstructionDebugMode.Full);
                     }
                 }
 
                 if (s_Emulator.Host.ThrownException != null)
                 {
-                    if (s_Emulator.Host.ThrownException.GetType() == typeof(VirtualBreakpointException))
-                    {
-                        s_Emulator.System.DeviceCPU.CoreDbg.SkipBreakpoint = true;
-                        s_Emulator.System.Dbg.Break();
-                        s_Emulator.Host.Resume();
-                        continue;
-                    }
-
                     Console.ForegroundColor = ConsoleColor.Red;
                     Log.Error("\n--- An emulator error occured! ---");
                     Log.Error("Exception: {0}", s_Emulator.Host.ThrownException.Message);
@@ -142,7 +141,7 @@ namespace RunN64
                     {
                         Log.Error("\n--- A dump stack trace error occured! ---");
                         Log.Error("Exception: {0}", e.Message);
-                        Log.Error("Stack Trace: {0}", e.StackTrace.ToString());
+                        Log.Error("Stack Trace: {0}", e.StackTrace);
                     }
 
 
@@ -153,12 +152,9 @@ namespace RunN64
                     Finish();
                     break;
                 }
-
-                if (!s_Emulator.Host.IsRunning)
-                {
-                    break;
-                }
             }
+
+            while (s_Emulator.Host.IsRunning);
         }
     }
 }

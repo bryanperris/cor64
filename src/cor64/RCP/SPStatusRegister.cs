@@ -139,5 +139,11 @@ namespace cor64.RCP
             }
 
             public bool IsCmdEmpty => Cmd == 0;
+
+            public bool IsHaltSet => TestStatusFlags(StatusFlags.Halt);
+
+            public bool IsBrokeSet => TestStatusFlags(StatusFlags.Broke);
+
+            public uint RawReadValue => m_Register.ReadonlyRegisterValue;
     }
 }

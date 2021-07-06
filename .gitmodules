@@ -1,0 +1,3 @@
+[submodule "src/externals/rsp"]
+	path = src/externals/rsp
+	url = https://github.com/bryanperris/cor64-cxd4-rsp.git

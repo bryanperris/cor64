@@ -24,6 +24,25 @@
             "suppressJITOptimizations": true,
         },
         {
+            "name": "RunN64 Workbench",
+            "type": "coreclr",
+            "request": "launch",
+            "requireExactSource": true,
+            "windows": {
+                "program": "${workspaceFolder}/bin/RunN64.exe",
+            },
+            "linux": {
+                "program": "${workspaceFolder}/bin/RunN64"
+            },
+            "preLaunchTask": "${defaultBuildTask}",
+            "args": ["--workbench"],
+            "cwd": "${workspaceFolder}/bin",
+            // For more information about the 'console' field, see https://aka.ms/VSCode-CS-LaunchJson-Console
+            "console": "integratedTerminal",
+            "stopAtEntry": false,
+            "suppressJITOptimizations": true,
+        },
+        {
             "name": "RunN64 (Attach)",
             "type": "coreclr",
             "request": "attach",

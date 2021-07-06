@@ -24,13 +24,11 @@ namespace cor64.Rdp.LLE {
 
             m_BaseStream = rdramStream;
 
-            if (CoreConfig.Current.ByteSwap && !CoreConfig.Current.IsNativeBigEndian) {
-                m_MemoryStream = new SwapAutoStream(rdramStream);
-            }
-            else {
-                m_MemoryStream = rdramStream;
-            }
-
+            #if LITTLE_ENDIAN
+            m_MemoryStream = rdramStream;
+            #else
+            m_MemoryStream = new SwapAutoStream(rdramStream);
+            #endif
 
             m_Reader = new BinaryReader(m_MemoryStream);
             m_Writer = new BinaryWriter(m_MemoryStream);
@@ -96,7 +94,11 @@ namespace cor64.Rdp.LLE {
         }
 
         public byte ReadIdx8Fast(uint address) {
+            #if LITTLE_ENDIAN
+            return ReadRdram8(address);
+            #else
             return ReadRdram8(address ^ 3);
+            #endif
         }
 
         public void WriteIdx8(uint address, byte value) {

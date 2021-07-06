@@ -35,6 +35,7 @@ namespace cor64.IO
             Fill(m_ReadMap, m_ReadTemp.GetPointer());
             Fill(m_WriteMap, m_WriteTemp.GetPointer());
             Fill(m_WriteFunc, EmptyWriteHandler);
+            Fill(m_ReadFunc, EmptyWriteHandler);
         }
 
         private void EmptyWriteHandler()
@@ -130,6 +131,11 @@ namespace cor64.IO
         public override void WriteNotify(uint position)
         {
             m_WriteFunc[position].Invoke();
+        }
+
+        public override void ReadNotify(uint position)
+        {
+            m_ReadFunc[position].Invoke();
         }
 
         public override IntPtr[] GetReadPointerMap()

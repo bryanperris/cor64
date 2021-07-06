@@ -5,6 +5,9 @@ nuget nunit
 nuget NUnit3TestAdapter
 nuget OpenTK
 nuget NLog
-nuget SkiaSharp.NativeAssets.Linux
 nuget glfw-net
 nuget CommandLineParser
+nuget ImGui.NET
+nuget Veldrid
+nuget Veldrid.ImGui
+nuget CppSharp

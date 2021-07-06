@@ -46,6 +46,8 @@ namespace cor64.RCP {
         private const uint SIZE = 64;
         private const uint ADDR = 0x1FC007C0;
 
+        public event Action PifRamWrite;
+
         public SerialController(N64MemoryController controller) : base(controller, 0x100000)
         {
             Map(m_DramAddressReg, m_PifRead64Reg);
@@ -92,7 +94,7 @@ namespace cor64.RCP {
             DestAddress = m_DramAddressReg.RegisterValue;
 
             TransferBytes((int)SIZE);
-            Debugger.Current.ReportDmaFinish("PIF", false, SourceAddress, DestAddress, (int)SIZE);
+            EmuDebugger.Current.ReportDmaFinish("PIF", false, SourceAddress, DestAddress, (int)SIZE);
 
             m_DramAddressReg.RegisterValue += SIZE;
             m_RcpInterface.SetInterrupt(MipsInterface.INT_SI, true);
@@ -105,11 +107,13 @@ namespace cor64.RCP {
             DestAddress = ADDR;
 
             TransferBytes((int)SIZE);
-            Debugger.Current.ReportDmaFinish("PIF", true, SourceAddress, DestAddress, (int)SIZE);
+            EmuDebugger.Current.ReportDmaFinish("PIF", true, SourceAddress, DestAddress, (int)SIZE);
 
             m_DramAddressReg.RegisterValue += SIZE;
             m_RcpInterface.SetInterrupt(MipsInterface.INT_SI, true);
             m_StatusReg.ReadonlyRegisterValue |= 0x1000;
+
+            PifRamWrite?.Invoke();
         }
     }
 }

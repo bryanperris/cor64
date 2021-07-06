@@ -26,5 +26,11 @@ namespace Tests {
         public RspVector[] InjectedAcc { get; set; } = null;
 
         public ushort? InjectedVcc { get; set; } = null;
+
+        public ushort? InjectedVc0 { get; set; } = null;
+
+        public int? TargetElementSelect { get; set; } = null;
+
+        public int? DestElementSelect {get; set; }
     }
 }

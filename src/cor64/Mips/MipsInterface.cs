@@ -1,4 +1,5 @@
-﻿using cor64.IO;
+﻿using System;
+using cor64.IO;
 using NLog;
 
 /* The Mips Interface (MI)
@@ -261,5 +262,7 @@ namespace cor64.Mips
         public bool IntMaskPI => ReadMaskBool(INT_PI);
 
         public bool IntMaskDP => ReadMaskBool(INT_DP);
+
+        public IntPtr ExportInterruptPtr() => m_Interrupt.ReadPtr;
     }
 }

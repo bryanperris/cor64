@@ -8,12 +8,16 @@ namespace cor64.Mips.Rsp
     public unsafe class RspVector : IEquatable<RspVector>
     {
         private readonly UnmanagedBuffer m_MemSource;
-        private readonly Elements* m_ElementsPtr;
+        protected readonly Elements* m_ElementsPtr;
 
         public RspVector(UnmanagedBuffer pinnedBuffer, int index)
         {
             m_MemSource = new UnmanagedBuffer(pinnedBuffer, index * 16, 16);
             m_ElementsPtr = (Elements*)m_MemSource.GetPointer();
+        }
+
+        public RspVector(IntPtr ptr, int index) {
+            m_ElementsPtr = (Elements*)ptr.Offset(index * 16);
         }
 
         public RspVector()
@@ -63,6 +67,14 @@ namespace cor64.Mips.Rsp
             m_ElementsPtr->PACKED_U8[13] = vecBytes[13];
             m_ElementsPtr->PACKED_U8[14] = vecBytes[14];
             m_ElementsPtr->PACKED_U8[15] = vecBytes[15];
+        }
+
+        public void ReverseElements() {
+            for (int i = 0; i < 16; i++) {
+                byte temp = m_ElementsPtr->PACKED_U8[15 - i];
+                m_ElementsPtr->PACKED_U8[15 - i] = m_ElementsPtr->PACKED_U8[i];
+                m_ElementsPtr->PACKED_U8[i] = temp;
+            }
         }
 
         public void SetBytesSwapped(byte[] vecBytes)
@@ -127,48 +139,48 @@ namespace cor64.Mips.Rsp
             return buffer;
         }
 
-        public void PackedU8(int element, byte value) {
+        public virtual void PackedU8(int element, byte value) {
             m_ElementsPtr->PACKED_U8[15 - element] = value;
         }
 
-        public byte PackedU8(int element) {
+        public virtual byte PackedU8(int element) {
             return m_ElementsPtr->PACKED_U8[15 - element];
         }
 
-        public ushort PackedU16(int element)
+        public virtual ushort PackedU16(int element)
         {
             return m_ElementsPtr->PACKED_U16[7 - element];
         }
 
-        public short PackedS16(int element) {
+        public virtual short PackedS16(int element) {
             return m_ElementsPtr->PACKED_S16[7 - element];
         }
 
-        public void PackedS16(int element, short value) {
+        public virtual void PackedS16(int element, short value) {
             m_ElementsPtr->PACKED_S16[7 - element] = value;
         }
 
-        public void PackedU16(int element, ushort value)
+        public virtual void PackedU16(int element, ushort value)
         {
             m_ElementsPtr->PACKED_U16[7 - element] = value;
         }
 
-        public uint PackedU32(int element)
+        public virtual uint PackedU32(int element)
         {
             return m_ElementsPtr->PACKED_U32[3 - element];
         }
 
-        public void PackedU32(int element, uint value)
+        public virtual void PackedU32(int element, uint value)
         {
             m_ElementsPtr->PACKED_U32[3 - element] = value;
         }
 
-        public ulong PackedU64(int element)
+        public virtual ulong PackedU64(int element)
         {
             return m_ElementsPtr->PACKED_U64[1 - element];
         }
 
-        public void PackedU64(int element, ulong value)
+        public virtual void PackedU64(int element, ulong value)
         {
             m_ElementsPtr->PACKED_U64[1 - element] = value;
         }
@@ -238,6 +250,17 @@ namespace cor64.Mips.Rsp
             arrayVector[7] = PackedU16(7);
         }
 
+        public void CopyTo(RspVector vector) {
+            vector.PackedU16(0, PackedU16(0));
+            vector.PackedU16(1, PackedU16(1));
+            vector.PackedU16(2, PackedU16(2));
+            vector.PackedU16(3, PackedU16(3));
+            vector.PackedU16(4, PackedU16(4));
+            vector.PackedU16(5, PackedU16(5));
+            vector.PackedU16(6, PackedU16(6));
+            vector.PackedU16(7, PackedU16(7));
+        }
+
         public static implicit operator RspVector(String valueBigEndian) {
             var newVec = new RspVector();
             newVec.SetFromString(valueBigEndian);
@@ -263,7 +286,7 @@ namespace cor64.Mips.Rsp
         }
 
         [StructLayoutAttribute(LayoutKind.Explicit, Pack = 128)]
-        private struct Elements
+        protected struct Elements
         {
             [FieldOffset(0)]
             public fixed byte PACKED_U8[16];

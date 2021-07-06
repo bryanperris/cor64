@@ -170,6 +170,13 @@ namespace cor64.RCP
 
             // m_Interrupt.Write += () => Log.Debug("Framebuffer interrupt set to " + m_Interrupt.RegisterValue.ToString("X8"));
 
+            m_CurrentLine.Read += () => {
+                if (!IsVideoActive || Interrupt == 0) return;
+
+                Line++;
+
+                if (Line > Interrupt) Line = 0;
+            };
 
             m_Memory = controller;
 
@@ -188,10 +195,9 @@ namespace cor64.RCP
             m_Ticks += 10;
             #endif
 
+            // CPU frequency divided by 60 Hz
             if (m_Ticks >= (93750000 / 60)) {
-                if (IsVideoActive) {
-                    SetVideoInterrupt();
-                }
+                if (IsVideoActive) SetVideoInterrupt();
                 m_Ticks = 0;
             }
         }
@@ -276,93 +282,84 @@ namespace cor64.RCP
 
         public bool IsVideoActive => (m_ControlReg.RegisterValue & 3) != 0 && m_Interrupt.RegisterValue > 0;
 
-        // public IntPtr FramebufferPtr => m_Memory.RDRAM.GetRamPointer(FramebufferOffset);
+        public IntPtr FramebufferPtr => m_Memory.RDRAM.GetRamPointer(ReadFramebufferAddressSafe());
 
-        public unsafe void CopyFramebufferRGB5551_16(UnmanagedBuffer buffer)
-        {
-            if (!IsVideoActive) return;
+        // public unsafe void CopyFramebufferRGB5551_16(UnmanagedBuffer buffer)
+        // {
+        //     if (!IsVideoActive) return;
 
-            // Converts RGB5551 to RGB565
+        //     // Converts RGB5551 to RGB565
 
-            ushort* srcPixel = (ushort*)m_Memory.RDRAM.GetRamPointer(ReadFramebufferAddressSafe());
-            ushort* dstPixel = (ushort*)buffer.GetPointer();
+        //     ushort* srcPixel = (ushort*)m_Memory.RDRAM.GetRamPointer(ReadFramebufferAddressSafe());
+        //     ushort* dstPixel = (ushort*)buffer.GetPointer();
 
-            for (int i = 0; i < buffer.Size / 2; i++)
-            {
-                ushort read = *srcPixel++;
-                int pixel = 0;
+        //     for (int i = 0; i < buffer.Size / 2; i++)
+        //     {
+        //         ushort read = *srcPixel++;
+        //         int pixel = 0;
 
-                if (CoreConfig.Current.ByteSwap)
-                {
-                    pixel = read.ByteSwapped();
-                }
+        //        pixel = read.ByteSwapped();
 
-                int r = (pixel >> 11) & 0x1F;
-                int g = (pixel >> 6)  & 0x1F;
-                int b = (pixel >> 1)  & 0x1F;
+        //         int r = (pixel >> 11) & 0x1F;
+        //         int g = (pixel >> 6)  & 0x1F;
+        //         int b = (pixel >> 1)  & 0x1F;
 
-                // Sign extend the green field to the 6th bit
-                g |= (g & 0x10) << 1;
+        //         // Sign extend the green field to the 6th bit
+        //         g |= (g & 0x10) << 1;
 
-                *dstPixel++ = (ushort)((r << 11) | (g << 6) | b);
-            }
-        }
+        //         *dstPixel++ = (ushort)((r << 11) | (g << 6) | b);
+        //     }
+        // }
 
-        public unsafe void CopyFramebufferRGB5551_32(UnmanagedBuffer buffer)
-        {
-            if (!IsVideoActive) return;
+        // public unsafe void CopyFramebufferRGB5551_32(UnmanagedBuffer buffer)
+        // {
+        //     if (!IsVideoActive) return;
 
-            ushort* srcPixel = (ushort*)m_Memory.RDRAM.GetRamPointer(ReadFramebufferAddressSafe());
-            uint* dstPixel = (uint*)buffer.GetPointer();
+        //     ushort* srcPixel = (ushort*)m_Memory.RDRAM.GetRamPointer(ReadFramebufferAddressSafe());
+        //     uint* dstPixel = (uint*)buffer.GetPointer();
 
-            for (int i = 0; i < buffer.Size / 2; i++)
-            {
-                ushort read = *srcPixel++;
-               int pixel = 0;
+        //     for (int i = 0; i < buffer.Size / 2; i++)
+        //     {
+        //         ushort read = *srcPixel++;
+        //         int pixel = read;
 
-                if (CoreConfig.Current.ByteSwap)
-                {
-                    pixel = read.ByteSwapped();
-                }
+        //         //pixel = read.ByteSwapped();
 
-                // Transparancy Toggle
-                // XXX: This prevents SkiaSharp from crashing
-                // XXX: This breaks some rendering
-                // XXX: Forcing alpha to 1 won't help either
-                // if ((pixel & 1) == 0) {
-                //     *dstPixel++ = 0;
-                //     return;
-                // }
+        //         // Transparancy Toggle
+        //         // XXX: This prevents SkiaSharp from crashing
+        //         // XXX: This breaks some rendering
+        //         // XXX: Forcing alpha to 1 won't help either
+        //         // if ((pixel & 1) == 0) {
+        //         //     *dstPixel++ = 0;
+        //         //     return;
+        //         // }
 
-                int r = (pixel >> 8) & 0xF8;
-                int g = (pixel & 0x7C0) >> 3;
-                int b = (pixel & 0x3E) << 2;
+        //         int r = (pixel >> 8) & 0xF8;
+        //         int g = (pixel & 0x7C0) >> 3;
+        //         int b = (pixel & 0x3E) << 2;
 
-                int color = (b << 16) | (g << 8) | r;
+        //         int color = (b << 16) | (g << 8) | r;
 
-                *dstPixel++ = (uint)color;
-            }
-        }
+        //         *dstPixel++ = (uint)color;
+        //     }
+        // }
 
-        public unsafe void CopyFramebufferRGBA8888(UnmanagedBuffer buffer)
-        {
-            if (!IsVideoActive) return;
+        // public unsafe void CopyFramebufferRGBA8888(UnmanagedBuffer buffer)
+        // {
+        //     if (!IsVideoActive) return;
 
-            uint* srcPixel = (uint*)m_Memory.RDRAM.GetRamPointer(ReadFramebufferAddressSafe());
-            uint* dstPixel = (uint*)buffer.GetPointer();
+        //     uint* srcPixel = (uint*)m_Memory.RDRAM.GetRamPointer(ReadFramebufferAddressSafe());
+        //     uint* dstPixel = (uint*)buffer.GetPointer();
 
-            for (int i = 0; i < buffer.Size / 4; i++)
-            {
-                uint pixel = *srcPixel++;
+        //     for (int i = 0; i < buffer.Size / 4; i++)
+        //     {
+        //         uint pixel = *srcPixel++;
 
-                if (!CoreConfig.Current.ByteSwap)
-                {
-                    pixel = pixel.ByteSwapped();
-                }
+        //        // pixel = pixel.ByteSwapped();
 
-                *dstPixel++ = pixel;
-            }
-        }
+        //         *dstPixel++ = pixel;
+        //     }
+        // }
 
         // public void ScanlineStart() {
         //     m_CurrentLine.RegisterValue = 0;

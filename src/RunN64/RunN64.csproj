@@ -8,8 +8,11 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ServerGarbageCollection>false</ServerGarbageCollection>
   </PropertyGroup>
+  <!-- Emulator debugging compiler flags -->
+  <PropertyGroup>
+    <!-- <DefineConstants>$(DefineConstants);LITTLE_ENDIAN</DefineConstants> -->
+  </PropertyGroup>
   <ItemGroup>
-    <EmbeddedResource Include="Graphics\*.ttf" />
     <None Update="config.json">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>

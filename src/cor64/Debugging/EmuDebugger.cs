@@ -9,14 +9,16 @@ using System.Threading;
 
 namespace cor64.Debugging
 {
-    public class Debugger
+    public class EmuDebugger
     {
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
-        public static Debugger Current { get; private set; }
+        public static EmuDebugger Current { get; private set; }
         private readonly N64System m_Target;
         private long m_TheadCount;
 
         public event Action<DmaEvent> SpDmaWrite;
+        public event Action DebugBreak;
+        public event Action DebugContinue;
 
         
         public struct DmaEvent {
@@ -24,7 +26,7 @@ namespace cor64.Debugging
             public int size;
         }
 
-        public Debugger(N64System target)
+        public EmuDebugger(N64System target)
         {
             m_Target = target;
             Current = this;
@@ -44,6 +46,7 @@ namespace cor64.Debugging
         public void Break()
         {
             StepNext = false;
+            StepRspNext = false;
 
             /* Signal the break active */
             IsBreakActive = true;
@@ -53,22 +56,32 @@ namespace cor64.Debugging
             {
                 Thread.Sleep(100);
             }
+
+            DebugBreak?.Invoke();
         }
 
         public void Continue()
         {
             IsBreakActive = false;
+            DebugContinue?.Invoke();
         }
 
         public void Step()
         {
-            IsBreakActive = false;
             StepNext = true;
+            Continue();
+        }
+
+        public void StepRsp() {
+            StepRspNext = true;
+            Continue();
         }
 
         public bool IsBreakActive { get; private set; }
 
         public bool StepNext { get; private set; }
+
+        public bool StepRspNext { get; private set; }
 
         [Conditional("DEBUG")]
         public void ReportDmaFinish(string type, bool toRcp, uint source, uint dest, int size)

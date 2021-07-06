@@ -23,6 +23,8 @@ namespace cor64.Rdp.LLE {
 
         public override String Description => "MadCat RDP";
 
+        public int Stats_Triangles { get; set; }
+
         public MadCatRdp() {
             ZBuffer.InitZBuffer();
             GraphicsState = new State();
@@ -524,6 +526,8 @@ namespace cor64.Rdp.LLE {
         }
 
         protected override void Triangle(RdpCommand command) {
+            Stats_Triangles++;
+            
             var cmd = command.As<Triangle>();
             RdpRasterizer.EdgewalkerForPrims(cmd);
         }

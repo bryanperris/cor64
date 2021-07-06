@@ -55,11 +55,6 @@ namespace cor64.Mips.R4300I
         {
             base.EntryPointHit();
 
-            DataMem.ReadData(0x80000314, 4);
-            var osVersion = DataMem.Data32;
-
-            Log.Debug("osVersion: {0}", osVersion);
-
             OSHooks_1.AddHooks(this, m_Hooks);
 
             //m_Hooks.Add(0x8018D298, new FatalPrintf(this));
@@ -179,6 +174,14 @@ namespace cor64.Mips.R4300I
         }
 
         private bool ExecuteNext() {
+            // TODO: still handle the result
+
+            #if !OPTIMAL
+            if (Debugger.IsBreakActive) {
+                return true;
+            }
+            #endif
+
             #if !DISABLE_CPU_HOOKS
             if (m_Hooks.TryGetValue(PC, out CpuCodeHook hook))
             {
@@ -213,8 +216,6 @@ namespace cor64.Mips.R4300I
 
             Cop0.MipsTimerTick(1);
 
-            // TODO: remove failed inst field
-
             if (!ValidateInstruction(CurrentInst))
                 return false;
 
@@ -223,9 +224,11 @@ namespace cor64.Mips.R4300I
             if (instHandler == null)
                 throw new NotSupportedException(String.Format("Opcode {0} not supported", CurrentInst.Op.Op));
 
-            #if DEBUG
-            CoreDbg.TestForInstBreakpoint(CurrentInst);
+            #if !OPTIMAL
+            Debugger.CheckInstructionBreakpoints(CurrentInst);
+            #endif
 
+            #if DEBUG
             TraceInstruction(CurrentInst, false, m_TakenException);
             #endif
 
@@ -1158,7 +1161,9 @@ namespace cor64.Mips.R4300I
                 Writeback64(31, PC + 8);
             }
 
-            CoreDbg.TestForBranchBreakpoint((uint)TargetAddress, TakeBranch);
+            #if !OPTIMAL
+            Debugger.CheckBranchBreakpoints((uint)TargetAddress, TakeBranch);
+            #endif
 
             // Branch delay is always taken for non-likely else, if likely, then condition must be true
             BranchDelay = !isLikely || (TakeBranch && isLikely);
@@ -1188,13 +1193,16 @@ namespace cor64.Mips.R4300I
                 }
             }
 
-            CoreDbg.TestForBranchBreakpoint((uint)TargetAddress, true);
+            #if !OPTIMAL
+            Debugger.CheckBranchBreakpoints((uint)TargetAddress, true);
 
             if (!isRegister && (uint)TargetAddress == (uint)PC && !m_WarnInfiniteJump)
             {
                 Log.Warn("An unconditional infinite jump was hit: " + inst.Address.ToString("X8"));
                 m_WarnInfiniteJump = true;
             }
+
+            #endif
         }
 
         public override void Store(DecodedInstruction inst)

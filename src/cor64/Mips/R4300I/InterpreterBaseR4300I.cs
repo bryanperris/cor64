@@ -27,10 +27,10 @@ namespace cor64.Mips.R4300I
         private readonly Clock m_CoreClock;
         protected DataMemory m_DataMemory;
         public bool StartedWithProfiler { get; protected set; }
-        private readonly CoreDebugger m_CoreDebugger = new CoreDebugger();
         private readonly BranchUnit m_BranchUnit = new BranchUnit();
         private readonly TLBCache m_TLBCache;
         private readonly ExecutionStateR4300I m_State;
+        private readonly MipsDebugger m_Debugger = new MipsDebugger();
 
 
         /* TODO: When we do have a cache system, 
@@ -38,21 +38,16 @@ namespace cor64.Mips.R4300I
          * atomic operations (LLBit is set back to 0)
          */
 
-        /* Debugging */
-
         protected InterpreterBaseR4300I(BaseDisassembler disassembler) : base(disassembler)
         {
             m_CoreClock = new Clock(10, 2);
             m_TLBCache = new TLBCache();
             m_Cop0Regs = new ControlRegisters(m_TLBCache);
-            m_Coprocessor0 = new SystemController(m_Cop0Regs, State);
             m_State = new ExecutionStateR4300I(m_Cop0Regs);
+            m_Coprocessor0 = new SystemController(m_Cop0Regs, State);
 
             m_TLBCache.AttachCoprocessor0(m_Coprocessor0);
             m_TLBCache.Initialize();
-
-            // Attach core debugger
-            State.SetCoreDebugger(m_CoreDebugger);
 
             CallTable
             .Map(Add32, ADD, ADDU, ADDI, ADDIU)
@@ -101,6 +96,10 @@ namespace cor64.Mips.R4300I
             .Map(Condition, C_F, C_UN, C_EQ, C_UEQ, C_OLT, C_ULT, C_OLE, C_ULE, C_SF, C_NGLE, C_SEQ, C_NGL, C_LT, C_NGE, C_LE, C_NGT)
 
             .Finish();
+
+            if (CoreConfig.Current.WorkbenchMode) {
+                Debugger.ActivateDebugger();
+            }
         }
 
         public void AttachRcp(RcpCore rcp)
@@ -250,7 +249,7 @@ namespace cor64.Mips.R4300I
 
         public ulong ReadRA()
         {
-            return State.GetGpr64(31);
+            return ReadGPR64(31);
         }
 
         public void SetOperation64Mode(bool mode)
@@ -281,11 +280,19 @@ namespace cor64.Mips.R4300I
             {
                 State.SetGpr32(reg, (uint)value);
             }
+
+            #if !OPTIMAL
+            Debugger.CheckGprWriteBreakpoints(reg);
+            #endif
         }
 
         protected void Writeback64(int reg, ulong value)
         {
             State.SetGpr64(reg, value);
+
+            #if !OPTIMAL
+            Debugger.CheckGprWriteBreakpoints(reg);
+            #endif
         }
 
         protected void WritebackHiLo32(ulong hi, ulong lo)
@@ -361,12 +368,11 @@ namespace cor64.Mips.R4300I
 
                 /* Incoming values are expected to be big-endian */
 
-                if (CoreConfig.Current.ByteSwap) {
-                    m_DataMemory.Data32 = val.ByteSwapped();
-                }
-                else {
-                    m_DataMemory.Data32 = val;
-                }
+                #if LITTLE_ENDIAN
+                m_DataMemory.Data32 = val;
+                #else
+                m_DataMemory.Data32 = val.ByteSwapped();
+                #endif
 
                 m_DataMemory.WriteData(addr, 4);
 
@@ -552,7 +558,7 @@ namespace cor64.Mips.R4300I
             return m_DataMemory.Data64.ToString("X16");
         }
 
-        public CoreDebugger CoreDbg => m_CoreDebugger;
+        public override MipsDebugger Debugger => m_Debugger;
 
         protected void InstructionIgnore(DecodedInstruction inst) {
             //Log.Debug("Ignoring instruction: {0:X8} {1}", m_Pc, Disassembler.GetFullDisassembly(inst));

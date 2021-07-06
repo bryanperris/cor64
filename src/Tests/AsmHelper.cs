@@ -1,4 +1,5 @@
 ﻿using cor64;
+using cor64.IO;
 using cor64.Mips;
 using NLog;
 using NUnit.Framework;
@@ -167,6 +168,10 @@ namespace Tests
             BassSymbolSource bassSymbolSource = null;
 
             rom = Asm.Assemble(ref bassSymbolSource, asm);
+
+            #if LITTLE_ENDIAN
+            rom = new Swap32Stream(rom);
+            #endif
 
             testCase.SetProgram(rom);
         }

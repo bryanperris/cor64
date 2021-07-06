@@ -153,6 +153,19 @@ namespace cor64.Rdp {
 
                 var resolvedCommand = command.ResolveType();
 
+                #if DEBUG_RDP_TRI_COMMANDS && !DEBUG_RDP_COMMANDS
+                if (resolvedCommand.Type.Id == CMD.TriNoShade.Id ||
+                    resolvedCommand.Type.Id == CMD.TriShade.Id ||
+                    resolvedCommand.Type.Id == CMD.TriTex.Id ||
+                    resolvedCommand.Type.Id == CMD.TriTexShade.Id ||
+                    resolvedCommand.Type.Id == CMD.TriZNoShade.Id ||
+                    resolvedCommand.Type.Id == CMD.TriZShade.Id ||
+                    resolvedCommand.Type.Id == CMD.TriZTex.Id ||
+                    resolvedCommand.Type.Id == CMD.TriZTexShade.Id) {
+                    Log.Debug("{0}", resolvedCommand.ToString());
+                }
+                #endif
+
                 #if DEBUG_RDP_COMMANDS
                 Log.Debug("RDP_CMD: {0:X8} {1}", address, resolvedCommand.ToString());
                 #endif
@@ -180,8 +193,8 @@ namespace cor64.Rdp {
             m_Interface.RFlags &= ~ReadStatusFlags.StartValid;
             m_Interface.RFlags &= ~ReadStatusFlags.EndValid;
 
-            // Indicate that the RDP color buffer (framebuffer) is ready to be read
-            m_Interface.RFlags |= ReadStatusFlags.ColorBufferReady;
+            // Indicate that the RDP command buffer is ready to be read
+            m_Interface.RFlags |= ReadStatusFlags.CommandBufferReady;
 
             // Log.Debug("RDP finished");
         }

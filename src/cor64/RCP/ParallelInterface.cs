@@ -134,6 +134,11 @@ namespace cor64.RCP
                 var off = (int)(DestAddress % 8);
 
                 if (off != 0) {
+                    // target address ends with 4
+                    // if (off == 4 && (DestAddress & 4) == 4) {
+                    //     off -= 4;
+                    // }
+
                     TransferBytesUnaligned(size - off);
                 }
                 else {
@@ -144,7 +149,7 @@ namespace cor64.RCP
                 TransferBytesUnaligned(size);
             }
 
-            Debugger.Current.ReportDmaFinish("PI", false, SourceAddress, DestAddress, size);
+            EmuDebugger.Current.ReportDmaFinish("PI", false, SourceAddress, DestAddress, size);
 
             m_DramAddress.RegisterValue += (uint)size+1;
             m_CartAddress.RegisterValue += (uint)size+1;
@@ -183,7 +188,7 @@ namespace cor64.RCP
             }
 
 
-            Debugger.Current.ReportDmaFinish("PI", true, SourceAddress, DestAddress, size);
+            EmuDebugger.Current.ReportDmaFinish("PI", true, SourceAddress, DestAddress, size);
 
             m_DramAddress.RegisterValue += (uint)size;
             m_CartAddress.RegisterValue += (uint)size;

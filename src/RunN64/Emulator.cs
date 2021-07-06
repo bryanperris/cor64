@@ -25,12 +25,12 @@ namespace RunN64
     {
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
 
-        private N64System m_System = new N64System();
+        private readonly N64System m_System = new N64System();
         private InterpreterBaseR4300I m_CpuEngine;
         public Config Configuration { get; set; } = new Config();
         private Cartridge m_Cartridge;
         private SingleThreadHost m_EmuHost;
-        private GLFramebufferWindow m_FramebufferWindow;
+        private GLWindow m_FramebufferWindow;
 
         public void SetupLogging()
         {
@@ -182,6 +182,10 @@ namespace RunN64
             // m_System.DeviceRcp.SetRdpDevice(new DummyRdp());
             m_System.DeviceRcp.DeviceRdp.SetDLDebug(true);
 
+            // Alternative RSP cores
+            // m_System.DeviceRcp.SetRspDevice(new ModRsp());
+            // m_System.DeviceRcp.SetRspDevice(new CrossBreedRsp());
+
             // m_System.DeviceRcp.DeviceRdp.Load += (s, texinfo) => {
             //     Log.Debug("Dumping RDP Texture: {0:X8} {1}", texinfo.RdramAddress, texinfo.Size);
             //     using var file = FileEnv.Open_RdpTexDumpFile(texinfo.RdramAddress, texinfo.Index, texinfo.Size);
@@ -210,11 +214,13 @@ namespace RunN64
         {
             Thread fbThread = new Thread(() =>
             {
-                m_FramebufferWindow = new GLFramebufferWindow(m_System);
+                m_FramebufferWindow = new GLWindow(m_System, WorkbenchMode);
                 m_FramebufferWindow.Start();
+                Console.WriteLine("Emulator will now close");
+                m_EmuHost.SignalExit();
             })
             {
-                Name = "Framebuffer Thread"
+                Name = "Graphics Render Thread"
             };
 
             fbThread.Start();
@@ -297,5 +303,7 @@ namespace RunN64
         public InterpreterBaseR4300I CPU => m_CpuEngine;
 
         public N64System System => m_System;
+
+        public bool WorkbenchMode { get; set; }
     }
 }

@@ -41,28 +41,30 @@ namespace cor64.IO
             m_MemModel.PIF = new PIFMemory(this);
             m_MemModel.DiskDriveRegisters = new DummyMemory(0x1000000, "Cartridge Domain 2, Address 1");
             m_MemModel.Unused = new DummyMemory(0x700000, "Unused section after SP regs");
-            m_MemModel.Init();
+        }
 
+        public void BuildMemMap() {
+            m_MemModel.Init();
             m_FastMemMap.Init(m_MemModel);
         }
 
-        private void DebugValue32(long address, byte[] buffer, uint testValue, bool isRead) {
-            unsafe {
-                fixed (byte * ptr = &buffer[0]) {
-                    IntPtr p = (IntPtr)ptr;
-                    var v = p.AsType_32Swp();
+        // private void DebugValue32(long address, byte[] buffer, uint testValue, bool isRead) {
+        //     unsafe {
+        //         fixed (byte * ptr = &buffer[0]) {
+        //             IntPtr p = (IntPtr)ptr;
+        //             var v = p.AsType_32Swp();
 
-                    if (v == testValue) {
-                        if (isRead) {
-                            Console.WriteLine("MEM32 DEBUG READ: {0:X8} {1:X8}", (uint)address, v);
-                        }
-                        else {
-                            Console.WriteLine("MEM32 DEBUG WRITE: {0:X8} {1:X8}", (uint)address, v);
-                        }
-                    }
-                }
-            }
-        }
+        //             if (v == testValue) {
+        //                 if (isRead) {
+        //                     Console.WriteLine("MEM32 DEBUG READ: {0:X8} {1:X8}", (uint)address, v);
+        //                 }
+        //                 else {
+        //                     Console.WriteLine("MEM32 DEBUG WRITE: {0:X8} {1:X8}", (uint)address, v);
+        //                 }
+        //             }
+        //         }
+        //     }
+        // }
 
         public void Read(long address, byte[] buffer, int offset, int count)
         {

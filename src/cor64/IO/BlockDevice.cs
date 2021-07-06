@@ -26,6 +26,10 @@ namespace cor64.IO
 
         }
 
+        public virtual void ReadNotify(uint position) {
+
+        }
+
         public virtual IntPtr[] GetReadPointerMap()
         {
             IntPtr[] map = new IntPtr[Size / 4];

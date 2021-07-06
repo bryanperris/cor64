@@ -266,6 +266,8 @@ namespace Tests
 
             if (m_TestCase.IsBranch)
             {
+                // TODO: Assert branching using the updated CPU pipeline process
+
                 if ((m_TestCase.ExpectationFlags & TestCase.Expectations.BranchTaken) == TestCase.Expectations.BranchTaken)
                 {
                     Assert.AreEqual(4UL, BranchTarget);

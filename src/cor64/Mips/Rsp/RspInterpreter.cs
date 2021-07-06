@@ -151,7 +151,7 @@ namespace cor64.Mips.Rsp
         private bool m_lastDoublePrecision = false;
         private bool m_InterruptOnBroke = false;
         private bool m_SkipForcedWait = false;
-        
+
         private readonly ExecutionState m_State = new ExecutionState();
 
         private TaskType m_SpTaskType;
@@ -159,7 +159,9 @@ namespace cor64.Mips.Rsp
         private readonly EventWaitHandle m_CpuRspWait = new EventWaitHandle(false, EventResetMode.ManualReset);
 
         private readonly EventWaitHandle m_HaltWait = new EventWaitHandle(false, EventResetMode.ManualReset);
-        
+
+        public Func<DecodedInstruction, Action<DecodedInstruction>> CallHack { get; set; }
+
         enum TaskType : int {
             Unknown = 0,
             Graphics,
@@ -191,6 +193,10 @@ namespace cor64.Mips.Rsp
             {
                 m_VecRegs[i] = new RspVector(m_VecPinnedMemory, i);
             }
+        }
+
+        public RspInterpreter(RspVector[] rspVecRegs) : base(new Disassembler("o32")) {
+            m_VecRegs = rspVecRegs;
         }
 
         public override void AttachInterface(MipsInterface rcpInterface, SPInterface iface, DPCInterface rdpInterface)
@@ -362,6 +368,7 @@ namespace cor64.Mips.Rsp
 
         public override void Init()
         {
+            // Important we do this
             Status.StatusFlags = StatusFlags.Halt;
         }
 
@@ -370,6 +377,12 @@ namespace cor64.Mips.Rsp
             if (IsHalted) {
                 return;
             }
+
+            #if !OPTIMAL
+            if (Debugger.IsBreakActive) {
+                return;
+            }
+            #endif
 
             //m_HaltWait.WaitOne();
 
@@ -443,6 +456,10 @@ namespace cor64.Mips.Rsp
             }
         }
 
+        public Action<DecodedInstruction> GetOpcodeHandler(DecodedInstruction inst) {
+            return CallTable[inst];
+        }
+
         private bool ExecuteInst()
         {
             DecodedInstruction decoded;
@@ -463,6 +480,11 @@ namespace cor64.Mips.Rsp
             {
                 var call = CallTable[decoded];
 
+                // XXX: This is used to hijack the opcode handler for debugging reasons
+                if (CallHack != null) {
+                    call = CallHack(decoded);
+                }
+
                 if (call == null)
                 {
                     throw new NotSupportedException(String.Format("Opcode {0} not supported", decoded.Op.Op));
@@ -473,9 +495,12 @@ namespace cor64.Mips.Rsp
 
                     if (!NullifyNext)
                     {
-                        //CoreDbg.TestForInstBreakpoint(decoded);
+                        #if !OPTIMAL
+                        Debugger.CheckInstructionBreakpoints(CurrentInst);
 
                         TraceInstruction(decoded, false);
+
+                        #endif
 
                         call(decoded);
 
@@ -533,6 +558,7 @@ namespace cor64.Mips.Rsp
             else
             {
                 Status.StatusFlags &= ~StatusFlags.Halt;
+                Status.StatusFlags &= ~StatusFlags.Broke;
                 m_HaltWait.Set();
                 // CpuWaitForFinish();
             }
@@ -560,6 +586,10 @@ namespace cor64.Mips.Rsp
             return m_VCarry.RegValue;
         }
 
+        public override void WriteVC0(ushort value) {
+            m_VCarry.RegValue = value;
+        }
+
         public override void WriteVCC(ushort vcc) {
             M_VccCompare.Value = (byte)vcc;
             m_VccClip.Value = (byte)(vcc >> 8);
@@ -568,37 +598,37 @@ namespace cor64.Mips.Rsp
         public override byte ReadVCE() {
             return m_Vce.Value;
         }
+
+        public void WriteVCE(byte value) {
+            m_Vce.Value = value;
+        }
+
         private static ushort ClampS16(int value) {
             return (ushort)Math.Clamp(value, S16_MIN, S16_MAX);
         }
 
         private static ushort Merge(bool compare, short pass, short fail) {
-            int value = fail;
-
             if (compare) {
-                value += pass - fail;
+                return (ushort)pass;
             }
-
-            return (ushort)(short)value;
+            else {
+                return (ushort)fail;
+            }
         }
 
         private static bool Merge(bool compare, bool pass, bool fail) {
-            unsafe {
-                int p = *(byte *)&pass;
-                int f = *(byte *)&fail;
-
-                if (compare) {
-                    f += p - f;
-                }
-
-                return f == 1;
+            if (compare) {
+                return pass;
+            }
+            else {
+                return fail;
             }
         }
 
-       /* ----------------------------------------------------------------
-        * Mips Instruction Core
-        * ----------------------------------------------------------------
-        */
+        /* ----------------------------------------------------------------
+         * Mips Instruction Core
+         * ----------------------------------------------------------------
+         */
 
         public override void Add(DecodedInstruction inst)
         {
@@ -857,12 +887,21 @@ namespace cor64.Mips.Rsp
 
                 case RegBoundType.Cp2:
                     {
-                        value = m_VecRegs[inst.VSource].PackedU16(inst.Element); break;
+                        int e = inst.VDest;
+
+                        byte b1 = m_VecRegs[inst.Destination].PackedU8((e + 1) & 0xF);
+                        byte b2 = m_VecRegs[inst.Destination].PackedU8((e + 0) & 0xF);
+
+                        ushort v = (ushort)( ((ushort)b2 << 8) | b1 );
+
+                        value = (uint)(short)v;
+
+                        break;
                     }
 
                 case RegBoundType.Cp2Ctl:
                     {
-                        switch (inst.VSource) {
+                        switch (inst.Destination & 3) {
                             case 0: {
                                 value = ReadVCO();
                                 break;
@@ -873,7 +912,8 @@ namespace cor64.Mips.Rsp
                                 break;
                             }
 
-                            case 2: {
+                            case 2:
+                            case 3: {
                                 value = ReadVCE();
                                 break;
                             }
@@ -926,13 +966,21 @@ namespace cor64.Mips.Rsp
 
                 case RegBoundType.Cp2:
                     {
-                         m_VecRegs[inst.VSource].PackedU16(inst.Element, (ushort)value);
-                         break;
+                        ushort write = (ushort)value;
+                        int e = inst.VDest;
+
+                        byte b1 = (byte)write;
+                        byte b2 = (byte)(write >> 8);
+
+                        m_VecRegs[inst.Destination].PackedU8((e + 1) & 0xF, b1);
+                        m_VecRegs[inst.Destination].PackedU8((e + 0) & 0xF, b2);
+
+                        break;
                     }
 
                 case RegBoundType.Cp2Ctl:
                     {
-                        switch (inst.VSource) {
+                        switch (inst.Destination & 3) {
                             case 0: {
                                 m_VCarry.RegValue = (ushort)value;
                                 break;
@@ -943,6 +991,7 @@ namespace cor64.Mips.Rsp
                                 break;
                             }
 
+                            case 2:
                             case 3: {
                                 m_Vce.Value = (byte)value;
                                 break;
@@ -988,8 +1037,13 @@ namespace cor64.Mips.Rsp
             var target =  m_VecRegs[inst.Target];
             var element = inst.Inst.lsde;
             var baseAddress = ReadGPR(inst.Source);
-            var offset = inst.Offset;
+            var raw = inst.Inst.inst;
+            // var offset = inst.Offset;
+
             long address;
+
+            // From cxd4 RSP, this fixes a triangle issue
+            short offset = (short)((raw & 64) > 0 ? -(short)((~raw % 64) + 1) : (short)(raw % 64));
 
             SetMemTraceAppendMode(true);
 
@@ -1092,7 +1146,12 @@ namespace cor64.Mips.Rsp
             var target =  m_VecRegs[inst.Target];
             var element = inst.Inst.lsde;
             var baseAddress = ReadGPR(inst.Source);
-            var offset = inst.Offset;
+            var raw = inst.Inst.inst;
+            // var offset = inst.Offset;
+
+            // From cxd4 RSP, this fixes a triangle issue
+            short offset = (short)((raw & 64) > 0 ? -(short)((~raw % 64) + 1) : (short)(raw % 64));
+
             long address;
 
             SetMemTraceAppendMode(true);
@@ -1215,6 +1274,7 @@ namespace cor64.Mips.Rsp
 
         public override void VectorSubtract(DecodedInstruction inst) {
             var carry = (inst.Op.Flags & ExecutionFlags.Carry) == ExecutionFlags.Carry;
+            var vs = m_VecRegs[inst.VSource];
             var vt = m_VecRegs[inst.VTarget].Resolve(inst.Element);
 
             if (carry) {
@@ -1223,12 +1283,21 @@ namespace cor64.Mips.Rsp
 
             for (int i = 0; i < 8; i++) {
                 if (!carry) {
-                    int result = (short)m_VecRegs[inst.VSource].PackedU16(i) - (short)vt.PackedU16(i) - m_VCarry.GetCarryBit(i);
-                    m_VecRegs[inst.VDest].PackedU16(i, ClampS16(result));
-                    Acc[i] = (ushort)result;
+                    int result = vs.PackedS16(i) - vt.PackedS16(i) - m_VCarry.GetCarryBit(i);
+                    Acc.Lo(i, (ushort)result);
+
+                    short lo = (short) ((result + 0x8000) >> 31);
+                    short hi = (short) ((0x7FFF - result) >> 31);
+                    short d = (short)(ushort)result;
+
+                    d &= (short)~lo;
+                    d |= hi;
+                    d ^= (short)(0x8000 & (short)(hi | lo));
+
+                    m_VecRegs[inst.VDest].PackedS16(i, d);
                 }
                 else {
-                    uint result = (uint)m_VecRegs[inst.VSource].PackedU16(i) - vt.PackedU16(i);
+                    uint result = (uint)vs.PackedU16(i) - vt.PackedU16(i);
                     m_VecRegs[inst.VDest].PackedU16(i, (ushort)result);
                     Acc[i] = (ushort)result;
 
@@ -1309,7 +1378,10 @@ namespace cor64.Mips.Rsp
                 {
                     vd.StoreProductClampedSignedAL(Acc, i);
                 }
-                else if (np)
+                else if (np && acc) {
+                    vd.StoreProductClampedSignedAL(Acc, i);
+                }
+                else if (np && !acc)
                 {
                     vd.PackedU16(i, Acc.Lo(i));
                 }
@@ -1432,7 +1504,7 @@ namespace cor64.Mips.Rsp
         }
 
         public override void VectorReciprocal(DecodedInstruction inst) {
-            var target = m_VecRegs[inst.VTarget];
+            var target = m_VecRegs[inst.VTarget & 31];
             var dest = m_VecRegs[inst.VDest];
             var useSqrt = (inst.Op.VectorFlags & VectorOpFlags.SquareRoot) == VectorOpFlags.SquareRoot;
             var high = (inst.Op.VectorFlags & VectorOpFlags.PartialH) == VectorOpFlags.PartialH;
@@ -1442,11 +1514,12 @@ namespace cor64.Mips.Rsp
             int shift = high ? 16 : 0;
 
             if (low && m_lastDoublePrecision) {
-                m_DivIn |= (int) (target.PackedS16(inst.Element) & 0xFFFF);
+                m_DivIn |= target.PackedU16(inst.Element & 7) & 0xFFFF;
             }
             else {
-                m_DivIn = ((int)target.PackedS16(inst.Element)) << shift;
+                m_DivIn = target.PackedS16(inst.Element & 7) << shift;
             }
+
 
             if (!high) {
                 int _data = m_DivIn;
@@ -1560,7 +1633,7 @@ namespace cor64.Mips.Rsp
                     }
 
                     case ArithmeticOp.LESS_THAN_OR_EQUAL: {
-                        equal &= (m_VCarry.GetNotEqualBool(i) && m_VCarry.GetCarryBitBool(i));
+                        equal &= m_VCarry.GetNotEqualBool(i) && m_VCarry.GetCarryBitBool(i);
                         M_VccCompare.SetBool(i, (source_value < target_value) || equal);
                         Acc.Lo(i, Merge(M_VccCompare.GetBool(i), source.PackedS16(i), target.PackedS16(i)));
                         break;

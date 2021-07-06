@@ -8,9 +8,17 @@ namespace cor64.RCP
     public class RspMemory : Stream
     {
         private readonly UnmanagedBuffer m_Buffer;
+        private readonly IntPtr m_Ptr;
 
-        public RspMemory(UnmanagedBuffer rspMemoryBuffer) {
+        public RspMemory(UnmanagedBuffer rspMemoryBuffer, bool isImem) {
             m_Buffer = rspMemoryBuffer;
+
+            if (isImem) {
+                m_Ptr = rspMemoryBuffer.GetPointer().Offset(0x1000);
+            }
+            else {
+                m_Ptr = rspMemoryBuffer.GetPointer();
+            }
         }
 
         public override bool CanRead => true;
@@ -30,7 +38,7 @@ namespace cor64.RCP
 
         public override int Read(byte[] buffer, int offset, int count)
         {
-            Marshal.Copy(m_Buffer.GetPointer().Offset((int)Position), buffer, offset, count);
+            Marshal.Copy(m_Ptr.Offset((int)Position), buffer, offset, count);
             return count;
         }
 
@@ -46,7 +54,7 @@ namespace cor64.RCP
 
         public override void Write(byte[] buffer, int offset, int count)
         {
-            Marshal.Copy(buffer, offset, m_Buffer.GetPointer().Offset((int)Position), count);
+            Marshal.Copy(buffer, offset, m_Ptr.Offset((int)Position), count);
         }
     }
 }

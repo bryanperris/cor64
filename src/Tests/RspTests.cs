@@ -205,6 +205,18 @@ namespace Tests
             .Expect("$FFEF, $DDCD, $BBAB, $9989, $7767, $5545, $3323, $1101").Run();
 
 
+            RspTest(
+                "00020002000200020002000200020002",
+                "00000000000000010000000000000001")
+            .InjectVc0(0x8888)
+            .InjectAccumulator(
+                "00000000000000000000000000000000",
+                "00000000000000010000000000000001",
+                "000000000000FFC2000000000000FFC2"
+            )
+            .Expect("00020002000200000002000200020000").Run();
+
+
             "UCodes.VSUBC.asm".SetTargetUCode(17 * 4);
 
             RspTest(
@@ -328,6 +340,21 @@ namespace Tests
                 "FFECE25BCDE5C289C046C71FD711F01E"
             );
 
+            "vmadl".GenerateAndSetTargetUCode();
+
+            RspTest(
+                "00000000800000000000000080000000",
+                "00000000000000000000000000000000")
+            .SetTargetE(4)
+            .Expect(
+                "03330000000000000000FBBC00000000")
+            .InjectAccumulator(
+                "00000000000000000000FFFF00000000",
+                "00000000000000000000FFFF00000000",
+                "03330000000000000000FBBC00000000"
+            )
+            .Run();
+
             "vmadm".GenerateAndSetTargetUCode();
 
             RspMultiplyAccTest(
@@ -377,6 +404,21 @@ namespace Tests
                 "FFEEE25DCDE7C28B37AF1C650A350120",
                 "0133B85D888F71C9740B8F55C3A71101"
             );
+
+            "vmadn".GenerateAndSetTargetUCode();
+
+            RspTest(
+                "000000010002FFFF4000000406330200",
+                "000000010002FFFF4000000406330200")
+            .SetTargetE(8)
+            .Expect(
+                "C7600000000091D20000FFFE0000FFFF")
+            .InjectAccumulator(
+                "00000000000000000000FFFF00000000",
+                "00000000000000020000FFFF0000FFFF",
+                "C7600000000091D20000FFFE0000FFFE"
+            )
+            .Run();
 
             "vmadh".GenerateAndSetTargetUCode();
 
@@ -457,13 +499,22 @@ namespace Tests
             )
             .Expect("84000000000000000000000000000000").Run();
 
+            // Need to inject DivIn value for double-precision VU divide op
+            // RspTest(
+            //     "00000000000000000000000000000000",
+            //     "0001D5370000FFFF7FD0D5370000FFFF"
+            // )
+            // .SetTargetE(11)
+            // .SetDestE(11)
+            // .ExpectAccumulator(
+            //     "FFFF000000000000FFFF000000000000",
+            //     "FFFF000000000000FFFF000000000000",
+            //     "00000000000000000000000000000000"
+            // )
+            // .Expect("00000000000080200000000000000000").Run();
+
             RspTest(
                 "00112233445566778899AABBCCDDEEFF",
-                "FFEEDDCCBBAA99887766554433221100"
-            )
-            .ExpectAccumulator(
-                "00000000000000000000000000000000",
-                "00000000000000000000000000000000",
                 "FFEEDDCCBBAA99887766554433221100"
             )
             .Expect("8FFF2233445566778899AABBCCDDEEFF").Run();

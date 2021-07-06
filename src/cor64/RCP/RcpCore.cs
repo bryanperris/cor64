@@ -31,6 +31,10 @@ namespace cor64.RCP
             m_Rdp = processor;
         }
 
+        public void SetRspDevice(InterpreterBaseRsp interpreter) {
+            m_Rsp = interpreter;
+        }
+
         public void AttachToMemory(N64MemoryController controller)
         {
             m_Memory = controller;

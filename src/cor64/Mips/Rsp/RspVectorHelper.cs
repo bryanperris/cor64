@@ -56,17 +56,17 @@ namespace cor64.Mips.Rsp
 
             StoreProductClampedSignedAM(vector, accumulator, index);
 
-            int result = vector.PackedU16(index);
-            int acc_m = accumulator.SignedMi(index);
+            short result = vector.PackedS16(index);
+            short acc_m = accumulator.SignedMi(index);
 
             if (result != acc_m) {
-                result ^= 0x8000;
+                result = (short)(result ^ 0x8000);
             }
             else {
                 result = accumulator.SignedLo(index);
             }
 
-            vector.PackedS16(index, (short)result);
+            vector.PackedS16(index, result);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

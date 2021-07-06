@@ -1,4 +1,4 @@
-﻿using cor64.IO;
+using cor64.IO;
 using cor64.Mips.R4300I;
 using NLog;
 using System;
@@ -28,6 +28,8 @@ namespace cor64.Mips
         private Func<ulong> m_MemRead64;
         private Action<ulong> m_MemWrite64;
 
+
+
         public DataMemory(Stream stream)
         {
             m_DataStream = stream;
@@ -35,22 +37,39 @@ namespace cor64.Mips
             m_BufferHandle = GCHandle.Alloc(m_DataBuffer, GCHandleType.Pinned);
             m_BufferPtr = m_BufferHandle.AddrOfPinnedObject();
 
-            if (CoreConfig.Current.ByteSwap) {
-                m_MemRead16 = () => m_BufferPtr.AsType_16Swp();
-                m_MemRead32 = () => m_BufferPtr.AsType_32Swp();
-                m_MemRead64 = () => m_BufferPtr.AsType_64Swp();
-                m_MemWrite16 = (x) => m_BufferPtr.AsType_16Swp(x);
-                m_MemWrite32 = (x) => m_BufferPtr.AsType_32Swp(x);
-                m_MemWrite64 = (x) => m_BufferPtr.AsType_64Swp(x);
-            }
-            else {
-                m_MemRead16 = () => m_BufferPtr.AsType_16();
-                m_MemRead32 = () => m_BufferPtr.AsType_32();
-                m_MemRead64 = () => m_BufferPtr.AsType_64();
-                m_MemWrite16 = (x) => m_BufferPtr.AsType_16(x);
-                m_MemWrite32 = (x) => m_BufferPtr.AsType_32(x);
-                m_MemWrite64 = (x) => m_BufferPtr.AsType_64(x);
-            }
+            #if LITTLE_ENDIAN
+            m_MemRead16 = () => m_BufferPtr.AsType_16();
+            m_MemRead32 = () => m_BufferPtr.AsType_32();
+            m_MemRead64 = () => m_BufferPtr.AsType_64();
+
+            // m_MemRead64 = () => {
+            //     ulong a = m_BufferPtr.AsType_32();
+            //     ulong b = (ulong)m_BufferPtr.Offset(4).AsType_32() << 32;
+            //     // Log.Debug("MEM read: {0:X16}", (a | b));
+            //     return a | b;
+            // };
+
+            m_MemWrite16 = (x) => m_BufferPtr.AsType_16(x);
+            m_MemWrite32 = (x) => m_BufferPtr.AsType_32(x);
+            m_MemWrite64 = (x) => m_BufferPtr.AsType_64(x);
+
+            // m_MemWrite64 = (x) => {
+            //     uint a = (uint)(m_BufferPtr.AsType_64() >> 32);
+            //     uint b = (uint) m_BufferPtr.AsType_64();
+            //     m_BufferPtr.AsType_32(a);
+            //     m_BufferPtr.Offset(4).AsType_32(b);
+            // };
+
+            #else
+            m_MemRead16 = () => m_BufferPtr.AsType_16Swp();
+            m_MemRead32 = () => m_BufferPtr.AsType_32Swp();
+            m_MemRead64 = () => m_BufferPtr.AsType_64Swp();
+            m_MemWrite16 = (x) => m_BufferPtr.AsType_16Swp(x);
+            m_MemWrite32 = (x) => m_BufferPtr.AsType_32Swp(x);
+            m_MemWrite64 = (x) => m_BufferPtr.AsType_64Swp(x);
+            #endif
+
+            // TODO: In little-endian mode, we must concat 32-bit pair for 64-bit access
         }
 
         public Stream BaseStream => m_DataStream;
@@ -70,6 +89,11 @@ namespace cor64.Mips
                 {
                     throw new InvalidDataException("read size can't be bigger than internal data buffer");
                 }
+
+                #if LITTLE_ENDIAN
+                if (size == 1)
+                    address ^= 3;
+                #endif
 
                 m_DataStream.Position = address;
                 m_DataStream.Read(m_DataBuffer, 0, size);
@@ -92,6 +116,11 @@ namespace cor64.Mips
             {
                 address = (uint)address;
                 LastAddress = address;
+
+                #if LITTLE_ENDIAN
+                if (size == 1)
+                    address ^= 3;
+                #endif
 
                 if (size > m_DataBuffer.Length)
                 {
@@ -143,32 +172,18 @@ namespace cor64.Mips
             ReadData(address + 8, 8);
             b = Data64;
 
-            if (CoreConfig.Current.ByteSwap) {
-                return new UInt128() {
-                    lo = b,
-                    hi = a
-                };
-            }
-            else {
-                return new UInt128() {
-                    lo = a,
-                    hi = b
-                };
-            }
+            return new UInt128() {
+                lo = b,
+                hi = a
+            };
         }
 
         public void WriteData128(long address, UInt128 value) {
             ulong a;
             ulong b;
 
-            if (CoreConfig.Current.ByteSwap) {
-                a = value.hi;
-                b = value.lo;
-            }
-            else {
-                a = value.lo;
-                b = value.hi;
-            }
+            a = value.hi;
+            b = value.lo;
 
             Data64 = a;
             WriteData(address, 8);

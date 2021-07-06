@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using cor64.Mips;
 using cor64.Mips.R4300I;
 using NLog;
 
@@ -16,17 +17,23 @@ namespace cor64
         private bool m_Running;
         private Exception m_Exception;
         private readonly AutoResetEvent m_StartWaitEvent;
-        private bool m_BreakPoint = false;
-        private bool m_StepOnce = false;
         public event Action Break;
         private Timer m_SiReadyDelayTimer;
 
         private Thread m_RspThread;
 
+        private bool m_SignalExit = false;
+        private readonly ManualResetEvent m_ExitWait = new ManualResetEvent(true);
+
         public SingleThreadHost(N64System system)
         {
             m_System = system;
             m_StartWaitEvent = new AutoResetEvent(false);
+        }
+
+        public void SignalExit() {
+            m_SignalExit = true;
+            m_ExitWait.WaitOne();
         }
 
         private void RunLoop()
@@ -35,54 +42,83 @@ namespace cor64
             m_Running = true;
             m_StartWaitEvent.Set();
 
+            bool paused = true;
+
+            var debugger = m_System.Dbg;
+
             // m_SiReadyDelayTimer = new Timer((_) => m_System.DeviceRcp.SerialDevice.SignalSiReady(), null, 7000, 0);
+
+            debugger.DebugBreak += () => {
+                m_System.DeviceCPU.Debugger.Break();
+                m_System.DeviceRcp.DeviceRsp.Debugger.Break();
+                Log.Info("BREAK...@" + m_System.DeviceCPU.ReadPC().ToString("X8"));
+            };
+
+            debugger.DebugContinue += () => {
+                m_System.DeviceCPU.Debugger.Continue();
+                m_System.DeviceRcp.DeviceRsp.Debugger.Continue();
+                Log.Info("CONTINUE...@" + m_System.DeviceCPU.ReadPC().ToString("X8"));
+            };
 
             try
             {
-                Log.Info("CONTINUE...@" + m_System.DeviceCPU.ReadPC().ToString("X8"));
-
-                while (true)
-                {
-                    if (m_Exception != null)
+                if (CoreConfig.Current.WorkbenchMode) {
+                    while (!m_SignalExit)
                     {
-                        throw m_Exception;
-                    }
+                        if (m_Exception != null) throw m_Exception;
 
-                    if (m_System.Dbg.StepNext)
-                    {
-                        m_StepOnce = true;
-                        m_BreakPoint = false;
-                    }
+                        // Debugger break active, do not do anything
+                        if (debugger.IsBreakActive) {
 
-                    if (!m_StepOnce && m_System.Dbg.IsBreakActive)
-                    {
-                        if (!m_BreakPoint)
-                        {
-                            Break?.Invoke();
-                            Log.Info("BREAK...@" + m_System.DeviceCPU.ReadPC().ToString("X8"));
-                            m_BreakPoint = true;
+                            if (!paused) {
+                                // TODO: Report RSP break
+                                paused = true;
+                            }
+
+                            Thread.Sleep(100);
+
+                            continue;
                         }
 
-                        continue;
-                    }
+                        if (paused) {
+                            paused = false;
+                        }
 
-                    if (m_BreakPoint)
-                    {
-                        m_BreakPoint = false;
-                        continue;
-                    }
+                        // System core step
+                        m_System.Tick();
 
-                    m_System.Tick();
+                        // RSP step
+                        // while (!m_System.DeviceRcp.DeviceRsp.IsHalted)
+                        m_System.DeviceRcp.DeviceRsp.Step();
 
-                    // while (!m_System.DeviceRcp.DeviceRsp.IsHalted)
-                    m_System.DeviceRcp.DeviceRsp.Step();
+                        if (debugger.StepNext || debugger.StepRspNext) {
+                            debugger.Break();
+                        }
 
-                    if (m_StepOnce)
-                    {
-                        m_System.Dbg.Break();
-                        m_StepOnce = false;
+                        if (!debugger.IsBreakActive && m_System.DeviceCPU.Debugger.IsBreakActive) {
+                            debugger.Break();
+                        }
+
+                        if (!debugger.IsBreakActive && m_System.DeviceRcp.DeviceRsp.Debugger.IsBreakActive) {
+                            debugger.Break();
+                        }
                     }
                 }
+                else {
+                    while (!m_SignalExit)
+                    {
+                        if (m_Exception != null) throw m_Exception;
+
+                        // System core step
+                        m_System.Tick();
+
+                        // RSP step
+                        // while (!m_System.DeviceRcp.DeviceRsp.IsHalted)
+                        m_System.DeviceRcp.DeviceRsp.Step();
+                    }
+                }
+
+                m_ExitWait.Set();
             }
             catch (Exception e)
             {
@@ -94,59 +130,60 @@ namespace cor64
                 m_Running = false;
                 m_StartWaitEvent.Reset();
                 m_System.TickFinally();
+                m_ExitWait.Set();
             }
         }
 
-        private void RspStart()
-        {
-            StringBuilder errorMessage = new StringBuilder();
+        // private void RspStart()
+        // {
+        //     StringBuilder errorMessage = new StringBuilder();
 
-            m_RspThread = new Thread(() =>
-            {
-                Log.Debug("RSP Core Execution has started...");
+        //     m_RspThread = new Thread(() =>
+        //     {
+        //         Log.Debug("RSP Core Execution has started...");
 
-                while (true)
-                {
-                    try
-                    {
-                        while (true)
-                        {
-                            m_System.DeviceRcp.DeviceRsp.Step();
+        //         while (true)
+        //         {
+        //             try
+        //             {
+        //                 while (true)
+        //                 {
+        //                     m_System.DeviceRcp.DeviceRsp.Step();
 
-                            #if DEBUG
-                            // We must sleep some to allow other events be processed
-                            // This is needed to allow the .NET debugger to function
-                            if (m_System.DeviceRcp.DeviceRsp.IsHalted) {
-                                Thread.Sleep(100);
-                            }
-                            #endif
-                        }
-                    }
-                    catch (Exception e)
-                    {
-                        // var lastInst = m_Rsp.LastReadInst;
+        //                     #if DEBUG
+        //                     // We must sleep some to allow other events be processed
+        //                     // This is needed to allow the .NET debugger to function
+        //                     if (m_System.DeviceRcp.DeviceRsp.IsHalted) {
+        //                         Thread.Sleep(100);
+        //                     }
+        //                     #endif
+        //                 }
+        //             }
+        //             catch (Exception e)
+        //             {
+        //                 // var lastInst = m_Rsp.LastReadInst;
 
-                        // errorMessage.AppendLine(String.Format("Last inst read: 0x{0:X8} 0x{1:X8} {2}", 
-                        //     lastInst.Address, lastInst.Inst.inst, m_System.DeviceRcp.DeviceRsp.Disassembler.GetFullDisassembly(lastInst)));
+        //                 // errorMessage.AppendLine(String.Format("Last inst read: 0x{0:X8} 0x{1:X8} {2}", 
+        //                 //     lastInst.Address, lastInst.Inst.inst, m_System.DeviceRcp.DeviceRsp.Disassembler.GetFullDisassembly(lastInst)));
 
-                        errorMessage.Append("Thrown exception: ").AppendLine(e.Message);
+        //                 errorMessage.Append("Thrown exception: ").AppendLine(e.Message);
 
-                        Log.Error(e.StackTrace.ToString());
+        //                 Log.Error(e.StackTrace.ToString());
 
-                        Log.Error(errorMessage.ToString());
+        //                 Log.Error(errorMessage.ToString());
 
-                        Log.Info("RSP will be halted now");
+        //                 Log.Info("RSP will be halted now");
 
-                        m_System.DeviceRcp.DeviceRsp.Halt();
-                    }
-                }
-            })
-            {
-                Name = "RSP Core Thread"
-            };
+        //                 m_System.DeviceRcp.DeviceRsp.Halt();
+        //             }
+        //         }
+        //     })
+        //     {
+        //         Name = "RSP Core Thread"
+        //     };
 
-            // m_RspThread.Start();
-        }
+        //     // m_RspThread.Start();
+        // }
 
         public void Start()
         {
@@ -157,7 +194,7 @@ namespace cor64
             
             t.Start();
 
-            RspStart();
+            //RspStart();
 
             if (!m_Running)
                 m_StartWaitEvent.WaitOne();

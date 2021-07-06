@@ -95,56 +95,28 @@ namespace cor64.IO
 
         public uint RegisterValue
         {
-            get
-            {
-                if (CoreConfig.Current.ByteSwap)
-                {
-                    return WritePtr.AsType_32Swp();
-                }
-                else
-                {
-                    return WritePtr.AsType_32();
-                }
-            }
+            #if LITTLE_ENDIAN
+            get => WritePtr.AsType_32();
 
-            set
-            {
-                if (CoreConfig.Current.ByteSwap)
-                {
-                    WritePtr.AsType_32Swp(value);
-                }
-                else
-                {
-                    WritePtr.AsType_32(value);
-                }
-            }
+            set => WritePtr.AsType_32(value);
+            #else
+            get => WritePtr.AsType_32Swp();
+
+            set => WritePtr.AsType_32Swp(value);
+            #endif
         }
 
         public uint ReadonlyRegisterValue
         {
-            get
-            {
-                if (CoreConfig.Current.ByteSwap)
-                {
-                    return ReadPtr.AsType_32Swp();
-                }
-                else
-                {
-                    return ReadPtr.AsType_32();
-                }
-            }
+            #if LITTLE_ENDIAN
+            get => ReadPtr.AsType_32();
 
-            set
-            {
-                if (CoreConfig.Current.ByteSwap)
-                {
-                    ReadPtr.AsType_32Swp(value);
-                }
-                else
-                {
-                    ReadPtr.AsType_32(value);
-                }
-            }
+            set => ReadPtr.AsType_32(value);
+            #else
+            get => ReadPtr.AsType_32Swp();
+
+            set => ReadPtr.AsType_32Swp(value);
+            #endif
         }
 
         public int Size { get; }

@@ -23,17 +23,27 @@ namespace cor64.Rdp {
         public IReadOnlyList<RdpCommand> ReadDisplayList(long address, int size) {
             List<RdpCommand> commands = new List<RdpCommand>();
             int count = 0;
-            
+
             m_Stream.Position = address;
 
+            #if LITTLE_ENDIAN
+            var swappedStream = new Swap64Stream(new Swap32Stream(m_Stream));
+            #else
             var swappedStream = new Swap64Stream(m_Stream);
+            #endif
+
             var swappedReader = new BinaryReader(swappedStream);
 
             while (count < size) {
                 /* Read the command type */
                 /* Always mask out the upper 2 unused bits (in case its signed) */
-                int commandId = m_Stream.ReadByte() & 0b00111111;
-                m_Stream.Position--;
+
+                var pos = m_Stream.Position;
+
+                ulong firstRow = swappedReader.ReadUInt64();
+                // Log.Debug("RDP First Row: {0:X16}", firstRow);
+                int commandId = (int)(firstRow >> 56) & 0b00111111;
+                m_Stream.Position = pos;
 
                 // Log.Debug("RDP Command ID: " + commandId.ToString("X"));
 

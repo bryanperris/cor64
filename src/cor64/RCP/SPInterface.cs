@@ -103,8 +103,7 @@ namespace cor64.RCP
     public class SPInterface : PerpherialDevice
     {
         private readonly static Logger Log = LogManager.GetCurrentClassLogger();
-        private readonly MemMappedBuffer m_DMemory = new MemMappedBuffer(0x1000);
-        private readonly MemMappedBuffer m_IMemory = new MemMappedBuffer(0x1000);
+        private readonly MemMappedBuffer m_SPMemory = new MemMappedBuffer(0x2000);
         private readonly MemMappedBuffer m_SpMemAddress = new MemMappedBuffer(4);
         private readonly MemMappedBuffer m_DramAddress = new MemMappedBuffer(4);
         private readonly MemMappedBuffer m_ReadLen = new MemMappedBuffer(4);
@@ -129,11 +128,41 @@ namespace cor64.RCP
 
         private readonly EventWaitHandle m_CpuRspWait = new EventWaitHandle(false, EventResetMode.ManualReset);
 
-        private uint m_ActualSpAddress;
+        public class MemExports {
+            public IntPtr RDRAMPtr { get; }
+            public IntPtr IMEMPtr { get; }
+            public IntPtr DMEMPtr { get; }
+            public IntPtr SpMemAddressPtr { get; }
+            public IntPtr DramAddressPtr { get; }
+            public IntPtr ReadLenPtr { get; }
+            public IntPtr WriteLenPtr { get; }
+            public IntPtr StatusPtr { get; }
+            public IntPtr FullPtr { get; }
+            public IntPtr BusyPtr { get; }
+            public IntPtr SemaphorePtr { get; }
+            public IntPtr PCPtr { get; }
+            public IntPtr BistPtr { get; }
+
+            public MemExports(SPInterface iface) {
+                RDRAMPtr = iface.ParentController.RDRAM.GetRamPointer(0);
+                DMEMPtr = iface.m_SPMemory.ReadPtr;
+                IMEMPtr = iface.m_SPMemory.ReadPtr.Offset(0x1000);
+                SpMemAddressPtr = iface.m_SpMemAddress.ReadPtr;
+                DramAddressPtr = iface.m_DramAddress.ReadPtr;
+                ReadLenPtr = iface.m_ReadLen.ReadPtr;
+                WriteLenPtr = iface.m_WriteLen.ReadPtr;
+                StatusPtr = iface.m_Status.ReadPtr;
+                FullPtr = iface.m_Full.ReadPtr;
+                BusyPtr = iface.m_Busy.ReadPtr;
+                SemaphorePtr = iface.m_Semaphore.ReadPtr;
+                PCPtr = iface.m_PC.ReadPtr;
+                BistPtr = iface.m_Bist.ReadPtr;
+            }
+        }
 
         public SPInterface(N64MemoryController controller) : base (controller, 0x100000)
         {
-            Map(m_DMemory, m_IMemory);
+            Map(m_SPMemory);
             Map(0x3E000);
             Map(m_SpMemAddress, m_DramAddress, m_ReadLen, m_WriteLen, m_Status, m_Full, m_Busy, m_Semaphore);
             Map(0x3FFE0);
@@ -229,7 +258,7 @@ namespace cor64.RCP
 
                 TransferBytes((int)size);
 
-                Debugger.Current.ReportDmaFinish("SP", false, SourceAddress, DestAddress, (int)size);
+                EmuDebugger.Current.ReportDmaFinish("SP", false, SourceAddress, DestAddress, (int)size);
 
                 m_DramAddress.RegisterValue += size + skip;
                 m_SpMemAddress.RegisterValue += size;
@@ -275,7 +304,7 @@ namespace cor64.RCP
 
                 TransferBytes((int)size);
 
-                Debugger.Current.ReportDmaFinish("SP", true, SourceAddress, DestAddress, (int)size);
+                EmuDebugger.Current.ReportDmaFinish("SP", true, SourceAddress, DestAddress, (int)size);
 
                 m_DramAddress.RegisterValue += size + skip;
                 m_SpMemAddress.RegisterValue += size;
@@ -307,12 +336,29 @@ namespace cor64.RCP
 
         public uint PC => m_PC.RegisterValue;
 
+        public void SetPC(uint pc) => m_PC.RegisterValue = pc;
+
+        public uint SPMemAddr => m_SpMemAddress.RegisterValue;
+
+        public uint DramMemAddr => m_SpMemAddress.RegisterValue;
+
+        public uint ReadLen => m_ReadLen.RegisterValue;
+
+        public uint WriteLen => m_WriteLen.RegisterValue;
+
+        public bool ReadSignal(int select) {
+            int mask = 1 << select;
+            return ((m_Status.ReadonlyRegisterValue >> 7) & mask) != 0;
+        }
+
         public Stream CreateIMemorySream() {
-            return new RspMemory(m_IMemory.BufferA);
+            return new RspMemory(m_SPMemory.BufferA, true);
         }
 
         public Stream CreateDMemorySream() {
-            return new RspMemory(m_DMemory.BufferA);
+            return new RspMemory(m_SPMemory.BufferA, false);
         }
+
+        public MemExports ExportPointers() => new MemExports(this);
     }
 }
