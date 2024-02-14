@@ -16,7 +16,6 @@ namespace cor64.Mips
     /// </summary>
     public abstract class BaseDisassembler
     {
-        private Stream m_InstStream;
         private ISymbolProvider m_SymbolProvider;
         private readonly byte[] m_InstBuffer = new Byte[4];
 
@@ -31,38 +30,31 @@ namespace cor64.Mips
             ABI = abi;
         }
 
-        /// <summary>
-        /// An instruction stream in big endian ordering
-        /// </summary>
-        /// <param name="stream"></param>
-        public virtual void SetStreamSource(Stream stream)
-        {
-            #if LITTLE_ENDIAN
-            m_InstStream = stream;
-            #else
-            m_InstStream = new Swap32Stream(stream);
-            #endif
-
-            m_InstBinaryReader = new BinaryReader(m_InstStream);
-        }
-
         public String ABI { get; }
 
         protected abstract Opcode DecodeOpcode(BinaryInstruction inst);
 
-        public virtual String GetFullDisassembly(DecodedInstruction inst)
+        // Reads raw instruction from big endian memory into a native structure
+        public BinaryInstruction DecodeBinary(uint value) {
+            return new BinaryInstruction(value);
+        }
+
+        // Decode the instruction
+        public DecodedInstruction DecodeInst(BinaryInstruction inst) {
+            return new DecodedInstruction(DecodeOpcode(inst), inst);
+        }
+
+        public DecodedInstruction Decode(uint value) {
+            return DecodeInst(DecodeBinary(value));
+        }
+
+        // Disassembles instruction ignoring its memory address
+        public virtual String Disassemble(DecodedInstruction inst)
         {
             var opcode = inst.Op;
             var bInst = inst.Inst;
-            var strict = this.ABI == "strict";
 
-            var symbol = GetSymbol(inst.Address);
-
-            if (!String.IsNullOrEmpty(symbol)) {
-                symbol = String.Format("<{0}> ", symbol);
-            }
-
-            if (opcode.Family != OperationFamily.Null)
+            if (opcode.Family != OperationFamily.Invalid)
             {
                 String op = opcode.Op;
                 String operands = "";
@@ -80,21 +72,7 @@ namespace cor64.Mips
                     }
 
                     /* Decode operands */
-                    operands = Operands.Decode(this.ABI, bInst, fmt, inst.Address, m_SymbolProvider);
-
-                    /* Append some branch/jump info */
-                    if (!strict && opcode.Family == OperationFamily.Branch)
-                    {
-                        /* Don't show target on jumps that use register based computations */
-                        if (!opcode.Op.EndsWith("r") && !opcode.Op.StartsWith("eret"))
-                        {
-                            if (String.IsNullOrEmpty(symbol)) {
-                                operands += String.Format(
-                                    " ----> 0x{0:X8}",
-                                    opcode.Op.StartsWith("j") ? ComputeJumpTarget(inst) : ComputeBranchTarget(inst));
-                            }
-                        }
-                    }
+                    operands = Operands.Decode(this.ABI, bInst, fmt, m_SymbolProvider);
                 }
 
                 if (op == "sll" && inst.Source == 0 && inst.Target == 0 && inst.Destination == 0)
@@ -103,7 +81,7 @@ namespace cor64.Mips
                     operands = "";
                 }
 
-                return String.Format("{0}{1} {2}", symbol, op, operands).Trim();
+                return String.Format("{0} {1}", op, operands).Trim();
             }
             else
             {
@@ -111,10 +89,40 @@ namespace cor64.Mips
             }
         }
 
-        public String GetSymbol(ulong address, bool vmem = true)
+        // Disassembles instruction including information related to its memory address
+        public virtual String Disassemble(long address, DecodedInstruction inst)
+        {
+            var opcode = inst.Op;
+            var strict = this.ABI == "strict";
+
+            var symbol = GetSymbol(address);
+
+            if (!String.IsNullOrEmpty(symbol)) {
+                symbol = String.Format("<{0}> ", symbol);
+            }
+
+            var disassembled = Disassemble(inst);
+
+            if (!strict && opcode.Family == OperationFamily.Branch)
+            {
+                /* Don't show target on jumps that use register based computations */
+                if (!opcode.Op.EndsWith("r") && !opcode.Op.StartsWith("eret"))
+                {
+                    if (String.IsNullOrEmpty(symbol)) {
+                        disassembled += String.Format(
+                            " ----> 0x{0:X8}",
+                            opcode.Op.StartsWith("j") ? ComputeJumpTarget(address, inst) : ComputeBranchTarget(address, inst));
+                    }
+                }
+            }
+
+            return String.Format("{0}{1}", symbol, disassembled);
+        }
+
+        public String GetSymbol(long address, bool vmem = true)
         {
             /* We must clamp the virtual address to what ELF expects */
-            if (vmem && (address & 0xF0000000UL) == 0xA0000000UL)
+            if (vmem && (address & 0xF0000000L) == 0xA0000000L)
             {
                 address <<= 8;
                 address >>= 8;
@@ -134,9 +142,9 @@ namespace cor64.Mips
             return "";
         }
 
-        public String GetLabel(ulong address, bool vmem = true) {
+        public String GetLabel(long address, bool vmem = true) {
             /* We must clamp the virtual address to what ELF expects */
-            if (vmem && (address & 0xF0000000UL) == 0xA0000000UL)
+            if (vmem && (address & 0xF0000000L) == 0xA0000000L)
             {
                 address <<= 8;
                 address >>= 8;
@@ -161,54 +169,85 @@ namespace cor64.Mips
             m_SymbolProvider = provider;
         }
 
-        private DecodedInstruction DecodeBinaryInst(long address)
-        {
-            m_InstStream.Position = address;
-            var read = m_InstBinaryReader.ReadUInt32();
-            return Decode((ulong)m_InstStream.Position, (ulong)m_InstStream.Length, read);
-        }
+        // private DecodedInstruction DecodeBinaryInst(long address)
+        // {
+        //     m_InstStream.Position = address;
+        //     var read = m_InstBinaryReader.ReadUInt32();
+        //     return Decode((ulong)m_InstStream.Position, (ulong)m_InstStream.Length, read);
+        // }
 
-        public DecodedInstruction Decode(ulong address, ulong bound, uint inst) {
-            BinaryInstruction binst = new(inst);
+        // private DecodedInstruction DecodeBinaryInst(long vaddr, long physaddr)
+        // {
+        //     m_InstStream.Position = physaddr;
+        //     var read = m_InstBinaryReader.ReadUInt32();
+        //     return Decode((ulong)vaddr, (ulong)m_InstStream.Length, read);
+        // }
 
-            return new DecodedInstruction(
-                address,
-                DecodeOpcode(binst),
-                binst,
-                false,
-                address + 4 >= bound);
-        }
+        // public DecodedInstruction Decode(ulong address, ulong bound, uint inst) {
+        //     BinaryInstruction binst = new(inst);
 
-        public DecodedInstruction Disassemble(ulong address)
-        {
-            // If the stream position goes out of range, return internal null opcode
-            if (address >= (ulong)m_InstStream.Length)
-                return new DecodedInstruction(0, new Opcode(), new BinaryInstruction(), true, false);
+        //     return new DecodedInstruction(
+        //         address,
+        //         DecodeOpcode(binst),
+        //         binst,
+        //         false,
+        //         address + 4 >= bound);
+        // }
 
-            // Do the normal opcode decoding
-            return DecodeBinaryInst((long)address);
-        }
+        // public DecodedInstruction Decode(ulong address, uint inst) {
+        //     BinaryInstruction binst = new(inst);
 
-        public DecodedInstruction[] Disassemble(ulong address, int count)
+        //     return new DecodedInstruction(
+        //         address,
+        //         DecodeOpcode(binst),
+        //         binst,
+        //         false,
+        //         false);
+        // }
+
+        // public DecodedInstruction Disassemble(ulong address)
+        // {
+        //     // If the stream position goes out of range, return internal null opcode
+        //     if (address >= (ulong)m_InstStream.Length)
+        //         return new DecodedInstruction(0, new Opcode(), new BinaryInstruction(), true, false);
+
+        //     // Do the normal opcode decoding
+        //     return DecodeBinaryInst((long)address);
+        // }
+
+        // public DecodedInstruction Disassemble(ulong vaddr, ulong phyaddr)
+        // {
+        //     // If the stream position goes out of range, return internal null opcode
+        //     if (phyaddr >= (ulong)m_InstStream.Length)
+        //         return new DecodedInstruction(0, new Opcode(), new BinaryInstruction(), true, false);
+
+        //     // Do the normal opcode decoding
+        //     return DecodeBinaryInst((long)vaddr, (long)phyaddr);
+        // }
+
+
+        public DecodedInstruction[] Disassemble(Stream stream, int count)
         {
             DecodedInstruction[] disassembly = new DecodedInstruction[count];
 
+            BinaryReader reader = new BinaryReader(stream);
+
             for (int i = 0; i < count; i++)
             {
-                disassembly[i] = Disassemble(address + (uint)(i * 4));
+                disassembly[i] = Decode(reader.ReadUInt32());
             }
 
             return disassembly;
         }
 
-        protected static ulong ComputeJumpTarget(DecodedInstruction inst)
+        protected static long ComputeJumpTarget(long address, DecodedInstruction inst)
         {
-            return CoreUtils.ComputeTargetPC(false, inst.Address, 0, inst.Inst.target);
+            return CoreUtils.ComputeTargetPC(false, address, 0, inst.Inst.target);
         }
 
-        protected static ulong ComputeBranchTarget(DecodedInstruction inst)
+        protected static long ComputeBranchTarget(long address, DecodedInstruction inst)
         {
-            return CoreUtils.ComputeBranchPC(false, inst.Address, CoreUtils.ComputeBranchTargetOffset(inst.Inst.imm));
+            return CoreUtils.ComputeBranchPC(false, address, CoreUtils.ComputeBranchTargetOffset(inst.Inst.imm));
         }
 
         protected static String DecodeCop1Format(BinaryInstruction inst)

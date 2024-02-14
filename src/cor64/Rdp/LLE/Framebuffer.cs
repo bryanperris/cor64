@@ -169,6 +169,38 @@ namespace cor64.Rdp.LLE {
             }
         }
 
+        // Uuse this for debugging the RDP, this puts pixels write into the framebuffer, no processing involved
+        public void DirectWrite(uint curpixel, int r, int g, int b) {
+            switch ((ImageSizeType)GS.FramebufferSize) {
+
+                case ImageSizeType.SizeInBytes_4:  {
+                    m_Rdp.RdramMemory.WriteIdx8(GS.FramebufferAddress + curpixel, 0);
+                    break;
+                }
+
+                case ImageSizeType.SizeInBytes_8: {
+                    m_Rdp.RdramMemory.WriteRdram8(GS.FramebufferAddress + curpixel, (byte)(r & 0xFF));
+                    break;
+                }
+
+                case ImageSizeType.SizeInBytes_16: {
+                    uint fb = (GS.FramebufferAddress >> 1) + curpixel;
+                    int finalColor = ((r & ~7) << 8) | ((g & ~7) << 3) | ((b & ~7) >> 2);
+                    m_Rdp.RdramMemory.WriteRdram16(fb << 1, (ushort)finalColor);
+                    break;
+                }
+
+                case ImageSizeType.SizeInBytes_32: {
+                    uint fb = (GS.FramebufferAddress >> 2) + curpixel;
+                    uint finalColor = ((uint)r << 24) | ((uint)g << 16) | ((uint)b << 8);
+                    m_Rdp.RdramMemory.WriteRdram32(fb << 2, finalColor);
+                    break;
+                }
+
+                default: throw new RdpException("invalid fb size");
+            }
+        }
+
         public void Write(uint curpixel, int r, int g, int b, bool enableBlend, uint curpixel_cvg, uint curpixel_memcvg) {
             switch ((ImageSizeType)GS.FramebufferSize) {
 

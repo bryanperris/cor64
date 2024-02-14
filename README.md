@@ -15,13 +15,39 @@ What you need
 
 Required Global DotNet Tools
 * Paket
-* Nuke.Global
+* nuke.globaltool
 
 Build and Run
 $ nuke Run
 
 Run Unit Tests
-$ dotnet test -v q
+$ nuke Test [--filter <name>] [--debug-test]
+
+### CppSharp support for Ubuntu 18.04
+
+* Must have dotnet runtime 3.1 insalled
+
+```
+git clone https://github.com/InteropAlliance/premake-core/
+cd premake-core
+make -f Bootstrap.mak linux
+cd ..
+git clone --recursive https://github.com/mono/CppSharp.git
+cd CppSharp
+git checkout 1.0.1
+cd build
+cp -r ../../premake-core/bin/release/* premake/
+./build.sh clone_llvm
+./build.sh build_llvm
+./build.sh package_llvm
+./build.sh generate -configuration Release -platform x64
+./build.sh -configuration Release -platform x64
+```
+
+### GlideN64 Crashing
+* Make sure font file `/usr/share/fonts/truetype/freefont/FreeSans.ttf` exists
+
+Now add the generated library to your ld configuration or use `LD_LIBRARY_PATH`
 
 ### References ###
 

@@ -1,3 +1,4 @@
+using System.Linq;
 using System;
 using cor64.Rdp.Commands;
 using System.Diagnostics;
@@ -21,6 +22,12 @@ namespace cor64.Rdp.LLE {
         internal Rdram RdramMemory { get; private set; }
         internal Framebuffer N64Framebuffer { get; private set; }
 
+        internal Color[] DebugColorPallette;
+
+        public bool DebugLaserLines { get; set; } = false;
+
+        public bool DebugColorSpans { get; set; } = false;
+
         public override String Description => "MadCat RDP";
 
         public int Stats_Triangles { get; set; }
@@ -33,6 +40,7 @@ namespace cor64.Rdp.LLE {
             RdpRasterizer = new Rasterizer(this);
             RdpTextureUnit = new TextureUnit(this);
             RdpTextureMemory = new TextureMemory(this);
+            DebugColorPallette = GenerateDebugPalette().ToArray();
         }
 
         public override void Init() {
@@ -52,9 +60,31 @@ namespace cor64.Rdp.LLE {
             RdpBlender.UpdateInputs(blenderSelections0, blenderSelections1);
         }
 
-        public override void AttachMemory(N64MemoryController.N64MemoryStream stream) {
-            base.AttachMemory(stream);
-            RdramMemory = new Rdram(stream);
+        private IEnumerable<Color> GenerateDebugPalette()
+        {
+            for (int scale = 1; scale < 256; scale *= 2)
+            {
+                for (int r = 0; r <= scale; r++)
+                for (int g = 0; g <= scale; g++)
+                for (int b = 0; b <= scale; b++)
+                {
+                    if (scale == 1 || (r & 1) == 1 || (g & 1) == 1 || (b & 1) == 1)
+                    {
+                        yield return new Color
+                        {
+                            A = 255,
+                            R = (byte) (255 * r / scale),
+                            G = (byte) (255 * g / scale),
+                            B = (byte) (255 * b / scale),
+                        };
+                    }
+                }
+            }
+        }
+
+        public override void AttachMemory(N64MemoryController memory) {
+            base.AttachMemory(memory);
+            RdramMemory = new Rdram(new N64MemoryStream(memory));
             N64Framebuffer = new Framebuffer(this);
         }
 

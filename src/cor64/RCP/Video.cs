@@ -90,7 +90,7 @@ namespace cor64.RCP
                  [27:16] vertical subpixel offset (2.10 format)
         0x0440 0038 to 0x044F FFFF  Unused*/
 
-    public class Video : PerpherialDevice
+    public class Video : N64MemoryDevice
     {
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
         private readonly MemMappedBuffer m_ControlReg = new MemMappedBuffer(4);
@@ -123,7 +123,7 @@ namespace cor64.RCP
 
         public Video(N64MemoryController controller, MipsInterface mipsInterface) : base(controller, 0x100000)
         {
-            Map(
+            StaticMap(
                 m_ControlReg,
                 m_Origin,
                 m_Width,
@@ -188,8 +188,13 @@ namespace cor64.RCP
             m_ControlRegStruct = new VideoControlReg(m_ControlReg);
         }
 
+        public override string Name => "Video Interface";
+
         public void Tick() {
             m_Ticks++;
+
+            ScanlineTick();
+            // m_CurrentLine.RegisterValue = m_Interrupt.RegisterValue;
 
             #if FASTER_VI
             m_Ticks += 10;
@@ -369,6 +374,17 @@ namespace cor64.RCP
         //     m_CurrentLine.RegisterValue = m_Interrupt.RegisterValue;
         // }
 
+        public void ScanlineTick() {
+            if (IsVideoActive) {
+                m_CurrentLine.RegisterValue++;
+
+                // Don't reset right away, let it run it over so the CPU has a chance to see the wait value
+                if (m_CurrentLine.RegisterValue >= (m_Interrupt.RegisterValue + 100)) {
+                    m_CurrentLine.RegisterValue = 0;
+                }
+            }
+        }
+
         public void SimulateFullScan() {
             if (!IsVideoActive) return;
 
@@ -388,6 +404,7 @@ namespace cor64.RCP
         internal void SetFBWidthFromRDP(int framebufferWidth)
         {
             m_RdpFramebufferWidth = framebufferWidth;
+            // Console.WriteLine("RDP Set Framebuffer Width: {0}", framebufferWidth);
         }
 
         public void SetFBFromRDP(uint framebufferAddress)
@@ -401,6 +418,42 @@ namespace cor64.RCP
 
         public void FakeCurrentLine() {
             m_CurrentLine.RegisterValue = m_Interrupt.ReadonlyRegisterValue;
+        }
+
+        public MemExports ExportPointers() => new MemExports(this);
+
+        public class MemExports {
+            public IntPtr Status { get; }
+            public IntPtr Origin { get; }
+            public IntPtr Width { get; }
+            public IntPtr Interrupt { get; }
+            public IntPtr CurrentLine { get; }
+            public IntPtr Timing { get; }
+            public IntPtr VSync { get; }
+            public IntPtr HSync { get; }
+            public IntPtr Leap { get; }
+            public IntPtr HStart { get; }
+            public IntPtr VStart { get; }
+            public IntPtr VBurst { get; }
+            public IntPtr XScale { get; }
+            public IntPtr YScale { get; }
+
+            public MemExports(Video iface) {
+                Status = iface.m_ControlReg.ReadPtr;
+                Origin = iface.m_Origin.ReadPtr;
+                Width = iface.m_Width.ReadPtr;
+                Interrupt = iface.m_Interrupt.ReadPtr;
+                CurrentLine = iface.m_CurrentLine.ReadPtr;
+                Timing = iface.m_Timing.ReadPtr;
+                VSync = iface.m_VSync.ReadPtr;
+                HSync = iface.m_HSync.ReadPtr;
+                Leap = iface.m_Leap.ReadPtr;
+                HStart = iface.m_HStart.ReadPtr;
+                VStart = iface.m_VStart.ReadPtr;
+                VBurst = iface.m_VBurst.ReadPtr;
+                XScale = iface.m_XScale.ReadPtr;
+                YScale = iface.m_YScale.ReadPtr;
+            }
         }
     }
 }

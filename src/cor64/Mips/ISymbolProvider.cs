@@ -3,8 +3,8 @@ namespace cor64.Mips
 {
     public interface ISymbolProvider
     {
-        String GetSymbol(ulong address);
+        String GetSymbol(long address);
 
-        String GetLabel(ulong address);
+        String GetLabel(long address);
     }
 }

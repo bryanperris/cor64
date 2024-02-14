@@ -180,7 +180,19 @@ namespace cor64.Mips.R4300I
 
         public bool IsAddress64 => TestFlags(StatusFlags.Kernel64Mode) || TestFlags(StatusFlags.User64Mode) || TestFlags(StatusFlags.Supervisor64Mode);
 
-        public bool IsOperation64 => ModeBits == 0 || TestFlags(StatusFlags.User64Mode) || TestFlags(StatusFlags.Supervisor64Mode);
+        public bool IsOperation64 {
+            get {
+                #if CPU_FORCE_32 && !CPU_ALWAYS_64
+                    return false;
+                #else
+                    #if CPU_ALWAYS_64
+                        return true;
+                    #else
+                        return ModeBits == 0 || TestFlags(StatusFlags.User64Mode) || TestFlags(StatusFlags.Supervisor64Mode);
+                    #endif
+                #endif
+            }
+        }
 
         public bool InterruptsEnabled => TestFlags(StatusFlags.InterruptsEnabled);
 

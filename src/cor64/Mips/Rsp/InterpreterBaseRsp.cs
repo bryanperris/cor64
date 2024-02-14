@@ -6,19 +6,23 @@ using cor64.RCP;
 using static cor64.Mips.OpcodesCommon;
 using static cor64.Mips.R4300I.Opcodes;
 using static cor64.Mips.Rsp.RspOpcodes;
+using cor64.IO;
 
 namespace cor64.Mips.Rsp
 {
     public abstract class InterpreterBaseRsp : BaseInterpreter, IMipsOpcodes
     {
-        public DataMemory DMem { get; private set; }
         protected readonly RspOpcodes.CallTable CallTable = RspOpcodes.CreateCallTable();
         public SPInterface Interface { get; private set; }
         protected DPCInterface RdpInterface {get; private set; }
         protected MipsInterface RcpInterface { get; private set; }
+        protected cor64.HLE.GraphicsHLEDevice HLEGraphicsDevice { get; private set; }
         protected SPStatusRegister Status { get; private set; }
         public virtual bool IsHalted { get; protected set; } = true;
         public DecodedInstruction LastReadInst { get; protected set; }
+
+        public RspMemorySection IMEM { get; private set; }
+        public RspMemorySection DMEM { get; private set; }
 
         private readonly MipsDebugger m_Debugger = new MipsDebugger();
 
@@ -62,10 +66,6 @@ namespace cor64.Mips.Rsp
         public abstract void WriteVCC(ushort vcc);
 
         public abstract void WriteVC0(ushort vc0);
-
-        public override void AttachDStream(Stream memoryStream) {
-            DMem = new DataMemory(new DataStreamWrapper(this, memoryStream));
-        }
 
         public override MipsDebugger Debugger => m_Debugger;
 
@@ -164,11 +164,20 @@ namespace cor64.Mips.Rsp
             RcpInterface = rcpInterface;
         }
 
+        public virtual void AttachHLEGraphics(cor64.HLE.GraphicsHLEDevice device) {
+            HLEGraphicsDevice = device;
+        }
+
+        public virtual void AttachMemory(N64MemoryController memory) {
+            DMEM = new RspMemorySection(memory, 0x04000000);
+            IMEM = new RspMemorySection(memory, 0x04001000);
+        }
+
         public virtual void Halt() {
             IsHalted = true;
         }
 
-        public abstract void ManualStart(ulong pc);
+        public abstract void ManualStart(long pc);
 
         /********************************************************
         * Branch Unit Logic
@@ -178,7 +187,7 @@ namespace cor64.Mips.Rsp
 
         public bool BranchDelay { get; set; }
 
-        public ulong TargetAddress { get; set; }
+        public long TargetAddress { get; set; }
 
         protected bool UnconditionalJump { get; set; }
 
@@ -188,7 +197,7 @@ namespace cor64.Mips.Rsp
 
         public bool BranchDelaySlot => BranchDelay;
 
-        public ulong BranchTarget => TargetAddress;
+        public long BranchTarget => TargetAddress;
 
         public void ClearBranchUnit()
         {

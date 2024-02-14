@@ -123,8 +123,7 @@ namespace cor64.Mips
 
         public static uint CPUABI32_ReadArgDataPtr(this InterpreterBaseR4300I core, int index) {
             var address = core.CPUABI32_ReadArgData(index);
-            core.DataMem.ReadData(address, 4);
-            return core.DataMem.Data32;
+            return core.PhysicalMemory.U32(address);
         }
 
         #endregion

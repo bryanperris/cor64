@@ -3,6 +3,7 @@ using cor64.Debugging;
 using System;
 using cor64.Rdp;
 using NLog;
+using cor64.Mips;
 
 namespace cor64.RCP {
 /*
@@ -46,7 +47,7 @@ namespace cor64.RCP {
         (R): [23:0] clock counter
     0x0410 0020 to 0x041F FFFF  Unused
 */
-    public class DPCInterface : PerpherialDevice {
+    public class DPCInterface : N64MemoryDevice {
         [Flags]
         public enum WriteStatusFlags : uint {
             ClearXbusDmemDma = 1,
@@ -86,6 +87,7 @@ namespace cor64.RCP {
         private readonly MemMappedBuffer m_PipeBusyCounter = new MemMappedBuffer(4, MemMappedBuffer.MemModel.SINGLE_READONLY);
         private readonly MemMappedBuffer m_TmemLoadCounter = new MemMappedBuffer(4, MemMappedBuffer.MemModel.SINGLE_READONLY);
         private readonly DrawProcessor m_Rdp;
+        private readonly MipsInterface m_RcpInterface;
 
         private readonly MemMappedBuffer[] m_RegSelects;
 
@@ -125,10 +127,12 @@ namespace cor64.RCP {
             }
         }
 
-        public DPCInterface(N64MemoryController controller) : base (controller, 0x100000) {
-            Map(m_Start, m_End, m_Current);
-            Map(m_Status);
-            Map(m_Clock, m_BufferBusyCounter, m_PipeBusyCounter, m_TmemLoadCounter);
+        public DPCInterface(N64MemoryController controller, MipsInterface rcpInterface) : base (controller, 0x100000) {
+            m_RcpInterface = rcpInterface;
+
+            StaticMap(m_Start, m_End, m_Current);
+            StaticMap(m_Status);
+            StaticMap(m_Clock, m_BufferBusyCounter, m_PipeBusyCounter, m_TmemLoadCounter);
 
             m_Start.Write += DisplayListStart;
             m_End.Write += DisplayListEnd;
@@ -177,6 +181,7 @@ namespace cor64.RCP {
             // Nothing happens when START and END are set to the same value
             if (m_End.RegisterValue <= m_Start.RegisterValue) {
                 // Log.Debug("DPC: End <= Start");
+                // m_RcpInterface.SetInterrupt(MipsInterface.INT_DP, true);
                 return;
             }
 
@@ -256,6 +261,8 @@ namespace cor64.RCP {
         public void ReflectStatus() {
             m_Status.ReadonlyRegisterValue = m_Status.RegisterValue;
         }
+
+        public override string Name => "RDP Command Interface";
     }
 
 }

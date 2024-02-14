@@ -968,97 +968,99 @@ namespace cor64.Mips.R4300I.JitIL
 
         public void Jump(DecodedInstruction inst)
         {
-            LogIL("Opcode Jump");
+            throw new NotSupportedException("TODO: fix this");
+            // LogIL("Opcode Jump");
 
-            EmitMipsRef();
-            EmitBlockRef();
+            // EmitMipsRef();
+            // EmitBlockRef();
 
-            bool isLink = inst.IsLink();
-            bool isRegister = inst.IsRegister();
+            // bool isLink = inst.IsLink();
+            // bool isRegister = inst.IsRegister();
 
-            if (isLink)
-            {
-                if (m_IsRuntime64)
-                    Constant64(inst.Address + 8, true);
-                else
-                    Constant32((uint)inst.Address + 8, true);
+            // if (isLink)
+            // {
+            //     if (m_IsRuntime64)
+            //         Constant64(inst.Address + 8, true);
+            //     else
+            //         Constant32((uint)inst.Address + 8, true);
 
-                EmitGpr_S(31);
-            }
+            //     EmitGpr_S(31);
+            // }
 
-            if (!isRegister)
-            {
-                Constant64((inst.Inst.target << 2) | (inst.Address & 0xF0000000), true);
-            }
-            else
-            {
-                EmitGpr_L(inst.Source);
-                UnsignedConvert(CLRValueType.UINT_32);
-                UnsignedConvert(CLRValueType.UINT_64);
-            }
+            // if (!isRegister)
+            // {
+            //     Constant64((inst.Inst.target << 2) | (inst.Address & 0xF0000000), true);
+            // }
+            // else
+            // {
+            //     EmitGpr_L(inst.Source);
+            //     UnsignedConvert(CLRValueType.UINT_32);
+            //     UnsignedConvert(CLRValueType.UINT_64);
+            // }
 
-            Emit(IL.Call, m_MipsBindings[nameof(IDynamicMips.SetBlockJump)]);
+            // Emit(IL.Call, m_MipsBindings[nameof(IDynamicMips.SetBlockJump)]);
         }
 
         public void Branch(DecodedInstruction inst)
         {
-            LogIL("Opcode Branch");
+            throw new NotSupportedException("TODO: fix this");
+            // LogIL("Opcode Branch");
 
-            bool isLikely = inst.IsLikely();
-            bool isLink = inst.IsLink();
-            var valtype = m_IsRuntime64 ? CLRValueType.INT_64 : CLRValueType.INT_32;
-            bool isFpu = inst.Op.ArithmeticType == ArithmeticOp.TRUE || inst.Op.ArithmeticType == ArithmeticOp.FALSE;
+            // bool isLikely = inst.IsLikely();
+            // bool isLink = inst.IsLink();
+            // var valtype = m_IsRuntime64 ? CLRValueType.INT_64 : CLRValueType.INT_32;
+            // bool isFpu = inst.Op.ArithmeticType == ArithmeticOp.TRUE || inst.Op.ArithmeticType == ArithmeticOp.FALSE;
 
-            /* Compute and hardcode the target address */
-            Constant64((long)CoreUtils.ComputeBranchPC(false, inst.Address, CoreUtils.ComputeBranchTargetOffset(inst.Immediate)));
-            EmitAddress_S();
+            // /* Compute and hardcode the target address */
+            // Constant64((long)CoreUtils.ComputeBranchPC(false, inst.Address, CoreUtils.ComputeBranchTargetOffset(inst.Immediate)));
+            // EmitAddress_S();
 
-            if (isLink)
-            {
-                if (m_IsRuntime64)
-                    Constant64(inst.Address + 8, true);
-                else
-                    Constant32((uint)inst.Address + 8, true);
+            // if (isLink)
+            // {
+            //     if (m_IsRuntime64)
+            //         Constant64(inst.Address + 8, true);
+            //     else
+            //         Constant32((uint)inst.Address + 8, true);
 
-                EmitGpr_S(31);
-            }
+            //     EmitGpr_S(31);
+            // }
 
-            if (!isFpu)
-            {
-                EmitGpr_L(inst.Source);
-                SignedConvert(valtype);
+            // if (!isFpu)
+            // {
+            //     EmitGpr_L(inst.Source);
+            //     SignedConvert(valtype);
 
-                if (inst.Op.ArithmeticType == ArithmeticOp.EQUAL || inst.Op.ArithmeticType == ArithmeticOp.NOT_EQUAL)
-                    EmitGpr_L(inst.Target);
-                else
-                    EmitGpr_L(0);
+            //     if (inst.Op.ArithmeticType == ArithmeticOp.EQUAL || inst.Op.ArithmeticType == ArithmeticOp.NOT_EQUAL)
+            //         EmitGpr_L(inst.Target);
+            //     else
+            //         EmitGpr_L(0);
 
-                SignedConvert(valtype);
-            }
+            //     SignedConvert(valtype);
+            // }
 
-            EmitBranchCondition(() =>
-            {
-                /* Branch taken */
-                EmitMipsCall(nameof(IDynamicMips.SetBlockJump), () =>
-                {
-                    EmitBlockRef();
-                    EmitAddress_L();
-                    UnsignedConvert(CLRValueType.UINT_32);
-                    UnsignedConvert(CLRValueType.UINT_64);
-                });
-            },
-            () =>
-            {
-                /* Branch not taken */
-                EmitMipsCall(nameof(IDynamicMips.ClearBlockJump), EmitBlockRef);
+            // EmitBranchCondition(() =>
+            // {
+            //     /* Branch taken */
+            //     EmitMipsCall(nameof(IDynamicMips.SetBlockJump), () =>
+            //     {
+            //         EmitBlockRef();
+            //         EmitAddress_L();
+            //         UnsignedConvert(CLRValueType.UINT_32);
+            //         UnsignedConvert(CLRValueType.UINT_64);
+            //     });
+            // },
+            // () =>
+            // {
+            //     /* Branch not taken */
+            //     EmitMipsCall(nameof(IDynamicMips.ClearBlockJump), EmitBlockRef);
 
-                if (isLikely)
-                {
-                    //EmitMipsCall(nameof(IDynamicMips.SetNullified), null);
-                    Emit(IL.Br, m_BlockEndLabel);
-                }
-            },
-            inst.Op.ArithmeticType);
+            //     if (isLikely)
+            //     {
+            //         //EmitMipsCall(nameof(IDynamicMips.SetNullified), null);
+            //         Emit(IL.Br, m_BlockEndLabel);
+            //     }
+            // },
+            // inst.Op.ArithmeticType);
         }
 
         public void Cache(DecodedInstruction inst)

@@ -15,6 +15,8 @@ namespace cor64.Mips
         const int F_COND = 4;
         const int F_FS = 5;
 
+        const uint WRITE_MASK = 0x183FFFF;
+
         public FloatControlRegister()
         {
             m_Fiddler.DefineField(00, 2);
@@ -24,6 +26,7 @@ namespace cor64.Mips
             m_Fiddler.DefineField(23, 1);
             m_Fiddler.DefineField(24, 1);
         }
+        
 
         public uint Value
         {
@@ -34,7 +37,7 @@ namespace cor64.Mips
 
             set
             {
-                m_Value = value;
+                m_Value = value & WRITE_MASK;
             }
         }
 

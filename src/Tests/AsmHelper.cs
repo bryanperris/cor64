@@ -169,10 +169,6 @@ namespace Tests
 
             rom = Asm.Assemble(ref bassSymbolSource, asm);
 
-            #if LITTLE_ENDIAN
-            rom = new Swap32Stream(rom);
-            #endif
-
             testCase.SetProgram(rom);
         }
     }

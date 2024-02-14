@@ -13,7 +13,6 @@ namespace cor64.Mips.R4300I.TLB
         private const int F_DIRTY = 2;
         private const int F_CO_BITS = 3;
         private const int F_PFN = 4;
-
         static EntryLoRegister() {
             /* Global */ m_BitFiddler.DefineField(0, 1);
             /* Valid */  m_BitFiddler.DefineField(1, 1);
@@ -23,18 +22,18 @@ namespace cor64.Mips.R4300I.TLB
         }
 
         public void Write(ulong value) {
-            m_Value = value;
+            m_Value = value & 0x3FFFFFFF;
         }
 
         public ulong Read() {
-            return m_Value;
+            return m_Value & 0x3FFFFFFF;
         }
 
         /// <summary>
         /// The upper bits of the physical address
         /// </summary>
         public uint PageFrameNumber {
-            get => (uint)m_BitFiddler.X(F_PFN, ref m_Value);
+            get => (uint)m_BitFiddler.X(F_PFN, m_Value);
             set => m_BitFiddler.J(F_PFN, ref m_Value, value);
         }
 
@@ -42,7 +41,7 @@ namespace cor64.Mips.R4300I.TLB
         /// Gets the coherency mode that determines whether the page access hits the cache.
         /// </summary>
         public PageCoherencyMode CoherencyMode {
-            get => (PageCoherencyMode)m_BitFiddler.X(F_CO_BITS, ref m_Value);
+            get => (PageCoherencyMode)m_BitFiddler.X(F_CO_BITS, m_Value);
             set => m_BitFiddler.J(F_CO_BITS, ref m_Value, (byte)value);
         }
 
@@ -50,7 +49,7 @@ namespace cor64.Mips.R4300I.TLB
         /// Gets whether if the page can be written to.
         /// </summary>
         public bool IsDirty {
-            get => m_BitFiddler.XB(F_DIRTY, ref m_Value);
+            get => m_BitFiddler.XB(F_DIRTY, m_Value);
             set => m_BitFiddler.J(F_DIRTY, ref m_Value, value);
         }
 
@@ -58,7 +57,7 @@ namespace cor64.Mips.R4300I.TLB
         /// Gets whether the page is valid to be used in address translation.
         /// </summary>
         public bool IsValid {
-            get => m_BitFiddler.XB(F_VALID, ref m_Value);
+            get => m_BitFiddler.XB(F_VALID, m_Value);
             set => m_BitFiddler.J(F_VALID, ref m_Value, value);
         }
 
@@ -66,14 +65,13 @@ namespace cor64.Mips.R4300I.TLB
         /// Gets whether the page ignores the ASID feature.
         /// </summary>
         public bool IsGlobal {
-            get => m_BitFiddler.XB(F_GLOBAL, ref m_Value);
+            get => m_BitFiddler.XB(F_GLOBAL, m_Value);
             set => m_BitFiddler.J(F_GLOBAL, ref m_Value, value);
         }
 
-        public EntryLoRegister MakeCacheCopy() {
-            var copy = new EntryLoRegister();
-            copy.Write(Read());
-            return copy;
+        public ulong RawValue  {
+            get => m_Value;
+            set => m_Value = value;
         }
     }
 }

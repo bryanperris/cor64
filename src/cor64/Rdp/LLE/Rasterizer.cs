@@ -471,6 +471,18 @@ namespace cor64.Rdp.LLE
                             }
                         }
 
+                        if (m_Rdp.DebugColorSpans) {
+                            int colorIndex = i + j;
+                            Color color = m_Rdp.DebugColorPallette[colorIndex];
+                            m_Rdp.N64Framebuffer.DirectWrite((uint)currentPixel, color.R, color.G, color.B);
+                        }
+
+                        if (m_Rdp.DebugLaserLines) {
+                            if (j == 0 || ((j + 1) >= length) || i == start || ((i + 1) >= end)) {
+                                m_Rdp.N64Framebuffer.DirectWrite((uint)currentPixel, 0xFF, 0, 0);
+                            }
+                        }
+
                         if (enableTexture && !enableTexel1) {
                             tcoord += tcoordInc;
                         }
@@ -818,6 +830,18 @@ namespace cor64.Rdp.LLE
                                 {
                                     ZBuffer.ZStore(m_Rdp.RdramMemory, (uint)zbcur, (uint)sz, dzpixenc);
                                 }
+                            }
+                        }
+
+                        if (m_Rdp.DebugColorSpans) {
+                            int colorIndex = i + j;
+                            Color color = m_Rdp.DebugColorPallette[colorIndex];
+                            m_Rdp.N64Framebuffer.DirectWrite((uint)curpixel, color.R, color.G, color.B);
+                        }
+
+                        if (m_Rdp.DebugLaserLines) {
+                            if (j == 0 || ((j + 1) >= length) || i == start || ((i + 1) >= end)) {
+                                m_Rdp.N64Framebuffer.DirectWrite((uint)curpixel, 0xFF, 0, 0);
                             }
                         }
 

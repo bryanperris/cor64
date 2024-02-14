@@ -1,6 +1,4 @@
-﻿
-
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
@@ -11,118 +9,37 @@ namespace cor64.Mips.R4300I.TLB
     public class TLBCache
     {
         private readonly static Logger Log = LogManager.GetCurrentClassLogger();
-        private readonly BitFiddler64 m_BitFiddler = new BitFiddler64();
-        private SystemController m_Cop0;
-        private readonly EntryLoRegister m_EntryLo0 = new EntryLoRegister();
-        private readonly EntryLoRegister m_EntryLo1 = new EntryLoRegister();
-        private readonly EntryHiRegister m_EntryHi = new EntryHiRegister();
-        private ulong m_Index;
-        private ulong m_Wired;
-        private ulong m_PageMask;
-        private ulong m_Random;
-        private readonly TLBEntry[] m_Entries = new TLBEntry[48];
-        private readonly Dictionary<EntryKey, CacheMappedEntry> m_MappedEntries = new();
+        private readonly SystemController m_Cop0;
+        private readonly TLBRegisters m_Registers;
+        private readonly TLBEntry[] m_Entries = new TLBEntry[32];
         private Boolean m_DisableTLB = false; // Used to simulate a real TLB shutdown
+        private readonly Dictionary<uint, int> m_EntryHashLookup = new Dictionary<uint, int>();
 
-        private const int F_PAGE_MASK = 0;
-        private const int F_INDEX = 1;
-        private const int F_PROBE_FAIL = 2;
-        private const int F_RANDOM = 3;
-        private const int F_WIRED = 4;
-
-        public bool TLBWritten { get; private set; }
-
-        private struct EntryKey : IEqualityComparer<EntryKey>, IEquatable<EntryKey>
+        public TLBCache(SystemController systemController)
         {
-            private readonly uint m_VPN2; // Max possible bits is 27 bits
-            private readonly byte m_ASID; // address space ID
-            private readonly uint m_Mask; // Page Mask
-            private readonly byte m_Global; // global bit
-
-            public EntryKey(uint vpn2, byte asid, uint mask, bool global)
-            {
-                m_VPN2 = vpn2 & 0x7FFFFFF;
-                m_ASID = asid;
-                m_Mask = mask;
-                m_Global = (byte)(global ? 1 : 0);
-            }
-
-            public static long MakeKey(EntryKey key)
-            {
-                ulong k = (ulong)key.m_Global << (27 + 8 + 12);
-                k |= key.m_VPN2;
-                k |= (ulong)key.m_ASID << 27;
-                k |= (ulong)(key.m_Mask & 0xFFF) << (27 + 8);
-                return (long)k;
-            }
-
-            public long GetKey() => MakeKey(this);
-
-            public bool Equals(EntryKey other)
-            {
-                return GetKey() == other.GetKey();
-            }
-
-            public bool Equals(EntryKey x, EntryKey y)
-            {
-                return x.GetKey() == y.GetKey();
-            }
-
-            public int GetHashCode([DisallowNull] EntryKey obj)
-            {
-                // Do the slow and safe method
-                return GetKey().ToString("X16").GetHashCode();
-            }
-
-            public override string ToString()
-            {
-                return GetKey().ToString("X16");
-            }
-        }
-
-        private struct CacheMappedEntry
-        {
-            private readonly int m_Index;
-            private readonly TLBEntry m_Entry;
-
-
-            public CacheMappedEntry(int index, TLBEntry entry)
-            {
-                m_Index = index;
-                m_Entry = entry;
-            }
-
-            public int Index => m_Index;
-            public TLBEntry Entry => m_Entry;
-        }
-
-        public TLBCache()
-        {
-            /* Page Mask */
-            m_BitFiddler.DefineField(13, 12);
-            /* Index */
-            m_BitFiddler.DefineField(0, 6);
-            /* P-Fail */
-            m_BitFiddler.DefineField(30, 1);
-            /* Random */
-            m_BitFiddler.DefineField(0, 6);
-            /* Wired */
-            m_BitFiddler.DefineField(0, 6);
-        }
-
-        public void AttachCoprocessor0(SystemController cop0) {
-            m_Cop0 = cop0;
-        }
-
-        public void Initialize()
-        {
-            m_Cop0.REGS.Write(CTS.CP0_REG_BADVADDR, 0xFFFFFFFF);
-            RF_Random = 32;
-            m_MappedEntries.Clear();
+            m_Cop0 = systemController;
+            m_Registers = systemController.REGS.TLBRegs;
 
             for (int i = 0; i < m_Entries.Length; i++)
             {
                 m_Entries[i] = new TLBEntry();
+            }
+        }
+
+        public void Initialize() {
+            m_Registers.Reset();
+        }
+
+        public void Tick() {
+            m_Registers.UpdateRandom();
+        }
+
+        private uint Key(uint pageMask, uint vpn2, uint asid, bool global) {
+            if (global) {
+                return (vpn2 ^ 0x100);
+            }
+            else {
+                return (vpn2 ^ asid);
             }
         }
 
@@ -135,36 +52,44 @@ namespace cor64.Mips.R4300I.TLB
         /// </remarks>
         public virtual void Probe()
         {
-            if (m_DisableTLB)
-                return;
+            if (m_DisableTLB) return;
 
-            // #if DEBUG_TLB
-            // Log.Debug("TLB probe entry {0}", RF_Index);
-            // #endif
+            m_Registers.ProbeFail = false;
 
-            UpdateRandom();
+            for (int i = 0; i < m_Entries.Length; i++) {
+                var entry = m_Entries[i];
 
-            var vpn2 = m_EntryHi.GetVPN2(m_Cop0.IsOperation64, RF_PageMask.VPN2Shift);
-            var asid = m_EntryHi.ASID;
-            var lKey = new EntryKey(vpn2, asid, RF_PageMask.SearchKey, false);
-            var gKey = new EntryKey(vpn2, asid, RF_PageMask.SearchKey, true);
+                uint vpn2 = m_Registers.RegEntryHi.VPN2 & ~entry.Mask >> 13;
 
-            // ASID Matching
-            if (m_MappedEntries.TryGetValue(lKey, out CacheMappedEntry lEntry))
-            {
-                RF_Index = lEntry.Index;
-                return;
+                bool regionMatch = true;
+
+                // Console.WriteLine("Entry {0}: {1}", i, entry.ToString());
+                // Console.WriteLine("EntryHi {0}", m_Registers.RegEntryHi.ToString());
+
+                if (m_Cop0.IsOperation64) {
+                    regionMatch = m_Registers.RegEntryHi.Region == entry.EntryHi.Region;
+                }
+
+                if (m_Registers.RegEntryHi.ASID == entry.ASID) {
+                    if (vpn2 == entry.EntryHi.VPN2 && regionMatch) {
+                        // Console.WriteLine("Match ASID: {0} {1}", i, entry.ToString());
+                        m_Registers.Index = i;
+                        return;
+                    }
+                }
+                else {
+                    if (entry.IsGlobal && regionMatch) {
+                        if (vpn2 == entry.EntryHi.VPN2) {
+                            // Console.WriteLine("Match G: {0} {1}", i, entry.ToString());
+                            m_Registers.Index = i;
+                            return;
+                        }
+                    }
+                }
             }
 
-            // Global Matching
-            if (m_MappedEntries.TryGetValue(gKey, out CacheMappedEntry gEntry))
-            {
-                RF_Index = gEntry.Index;
-                return;
-            }
-
-            // Probe Failed - no matching entry
-            RF_IndexProbeFailed = true;
+            m_Registers.Index = 0;
+            m_Registers.ProbeFail = true;
         }
 
         /// <summary>
@@ -175,75 +100,82 @@ namespace cor64.Mips.R4300I.TLB
         {
             if (m_DisableTLB) return;
 
-            UpdateRandom();
+            var index = isRandomWrite ? m_Registers.Random : m_Registers.Index;
 
-            var index = isRandomWrite ? RF_Random : RF_Index;
+            // Upper 32  or lower 32 entries
 
-            if (index >= RF_Wired)
-            {
-                TLBWritten = true;
+            int wired = m_Registers.Wired;
 
-                var entry = new CacheMappedEntry(
-                    index,
-                    new TLBEntry(
-                        m_EntryHi,
-                        RF_PageMask,
-                        m_EntryLo0,
-                        m_EntryLo1
-                    )
-                );
-
-                // We must dual register entries so they can be globally searched
-
-                var localKey = new EntryKey(
-                    m_EntryHi.GetVPN2(m_Cop0.IsOperation64, RF_PageMask.VPN2Shift),
-                    m_EntryHi.ASID,
-                    RF_PageMask.SearchKey,
-                    false
-                );
-
-                var globalKey = new EntryKey(
-                    m_EntryHi.GetVPN2(m_Cop0.IsOperation64, RF_PageMask.VPN2Shift),
-                    0,
-                    RF_PageMask.SearchKey,
-                    true
-                );
-
-                #if DEBUG_TLB
-                Log.Debug("TLB Write to entry {0} SearchKeys: L|{1} G|{2}", RF_Index, localKey.ToString(), globalKey.ToString());
-                Log.Debug("{0}", entry.Entry.ToString());
-                #endif
-
-                m_Entries[entry.Index] = entry.Entry;
-
-                if (m_MappedEntries.ContainsKey(localKey))
-                    m_MappedEntries.Remove(localKey);
-
-                if (m_MappedEntries.ContainsKey(globalKey))
-                    m_MappedEntries.Remove(globalKey);
-
-                m_MappedEntries.Add(localKey, entry);
-                m_MappedEntries.Add(globalKey, entry);
+            if (wired > 32) {
+                wired -= 32;
             }
+
+            wired--;
+
+            if (isRandomWrite && (index >= wired)) return;
+
+            var entry = new TLBEntry(
+                m_Registers.PageMaskFixed,
+                new EntryHiStore(
+                    m_Registers.RegEntryHi.ASID,
+                    m_Registers.RegEntryLo0.IsGlobal && m_Registers.RegEntryLo1.IsGlobal,
+                    m_Registers.RegEntryHi.VPN2 & (~m_Registers.PageMask >> 13),
+                    m_Registers.RegEntryHi.Region
+                ),
+                new EntryLoStore(
+                    m_Registers.RegEntryLo0.PageFrameNumber,
+                    m_Registers.RegEntryLo0.IsDirty,
+                    m_Registers.RegEntryLo0.IsValid,
+                    m_Registers.RegEntryLo0.CoherencyMode
+                ),
+                new EntryLoStore(
+                    m_Registers.RegEntryLo1.PageFrameNumber,
+                    m_Registers.RegEntryLo1.IsDirty,
+                    m_Registers.RegEntryLo1.IsValid,
+                    m_Registers.RegEntryLo1.CoherencyMode
+                )
+            );
+
+            #if DEBUG_TLB
+            if (entry.IsValid)
+                Console.WriteLine("Entry {0} set to {1}", index, entry.ToString());
+            #endif
+
+            #if FAST_TLB
+            uint key = Key(entry.Mask, entry.EntryHi.VPN2, entry.ASID, entry.IsGlobal);
+
+            foreach (KeyValuePair<uint, int> e in m_EntryHashLookup) {
+                if (e.Value == index) {
+                    m_EntryHashLookup.Remove(e.Key);
+                }
+            }
+
+            if (entry.IsValid) m_EntryHashLookup.Add(key, index);
+            #endif
+
+            m_Entries[index] = entry;
         }
 
         public virtual void Read()
         {
             if (m_DisableTLB) return;
 
-            UpdateRandom();
+            var entry = m_Entries[m_Registers.Index];
 
-            if (RF_Index < 0 || RF_Index >= m_Entries.Length)
-            {
-                return;
-            }
+            m_Registers.PageMask = entry.Mask;
 
-            var entry = m_Entries[RF_Index];
+            m_Registers.RegEntryHi.ASID = entry.EntryHi.ASID;
+            m_Registers.RegEntryHi.VPN2 = entry.EntryHi.VPN2;
 
-            RF_PageMask = entry.Mask;
-            m_EntryHi.Write(entry.VPN2.Read());
-            m_EntryLo0.Write(entry.Even.Read());
-            m_EntryLo1.Write(entry.Odd.Read());
+            m_Registers.RegEntryLo0.CoherencyMode = entry.Even.CoherencyMode;
+            m_Registers.RegEntryLo0.PageFrameNumber = entry.Even.PageFrameNumber;
+            m_Registers.RegEntryLo0.IsDirty = entry.Even.IsDirty;
+            m_Registers.RegEntryLo0.IsValid = entry.Even.IsValid;
+
+            m_Registers.RegEntryLo1.CoherencyMode = entry.Odd.CoherencyMode;
+            m_Registers.RegEntryLo1.PageFrameNumber = entry.Odd.PageFrameNumber;
+            m_Registers.RegEntryLo1.IsDirty = entry.Odd.IsDirty;
+            m_Registers.RegEntryLo1.IsValid = entry.Odd.IsValid;
         }
 
         public void FlushAll()
@@ -254,202 +186,129 @@ namespace cor64.Mips.R4300I.TLB
         }
 
         private void RaiseRefillException(ulong vaddr, uint vpn2, byte asid, bool isStore) {
-            m_Cop0.REGS.Write(CTS.CP0_REG_BADVADDR, vaddr);
-            m_Cop0.SetTLBRefillException(isStore);
-            m_Cop0.REGS.Write(CTS.CP0_REG_CONTEXT, vpn2);
-            m_EntryHi.ASID = asid;
-            m_EntryHi.SetVPN2(vpn2);
+            // m_Cop0.REGS.Write(CTS.CP0_REG_BADVADDR, vaddr);
+            // m_Cop0.SetTLBRefillException(isStore);
+            // m_Cop0.REGS.Write(CTS.CP0_REG_CONTEXT, vpn2);
+            // m_EntryHi.ASID = asid;
+            // m_EntryHi.SetVPN2(vpn2);
         }
 
         private void RaiseInvalidException(ulong vaddr, uint vpn2, byte asid, bool isStore) {
-            m_Cop0.REGS.Write(CTS.CP0_REG_BADVADDR, vaddr);
-            m_Cop0.SetInvalidTLBException(isStore);
-            m_Cop0.REGS.Write(CTS.CP0_REG_CONTEXT, vpn2);
-            m_EntryHi.ASID = asid;
-            m_EntryHi.SetVPN2(vpn2);
+            // m_Cop0.REGS.Write(CTS.CP0_REG_BADVADDR, vaddr);
+            // m_Cop0.SetInvalidTLBException(isStore);
+            // m_Cop0.REGS.Write(CTS.CP0_REG_CONTEXT, vpn2);
+            // m_EntryHi.ASID = asid;
+            // m_EntryHi.SetVPN2(vpn2);
         }
 
-        public long TranslateVirtualAddress(long virtualAddress, bool isStore)
-        {
-            // Extract the VPN2 from the virtual address just for kernel mode
-            var shift = RF_PageMask.VPN2Shift;
-            var vaddress = (uint)virtualAddress;
-            var vpn2 = (vaddress & 0x1FFFFFFF) >> shift;
+        private static long SinglePageSize(uint pageMask) {
+            return SinglePageMask(pageMask) + 1;
+        }
 
-            var asid = m_EntryHi.ASID;
-            var isGlobal = m_EntryLo0.IsGlobal && m_EntryLo1.IsGlobal;
-            var pageSize = RF_PageMask;
+        private static uint SinglePageMask(uint pageMask) {
+            return (pageMask | 0x1FFF) >> 1;
+        }
 
-            // Make the search keys
-            var localKey = new EntryKey(
-                vpn2,
-                asid,
-                RF_PageMask.SearchKey,
-                false
-            );
+        private bool FastTranslate(long virtualAddress, out TLBEntry entry) {
+            uint size = 1;
 
-            var globalKey = new EntryKey(
-                vpn2,
-                0,
-                RF_PageMask.SearchKey,
-                true
-            );
+            entry = null;
 
-            CacheMappedEntry entry;
+            for (int i = 0; i < 7; i++) {
+                size *= 4;
+                uint pageMask = ((size << 12 ) - 1) >> 1;
 
-            if (isGlobal)
-            {
-                // #if DEBUG_TLB_TRANSLATE
+                uint vpn2 = (uint)virtualAddress >> 13;
+                vpn2 &= ~pageMask >> 13;
+                vpn2 &= 0x7FFFFFF;
 
-                if (!m_MappedEntries.TryGetValue(globalKey, out entry))
-                {
-                    // Address bus is always 32 bit mode
-                    RaiseRefillException((ulong)virtualAddress, vpn2, asid, isStore);
-                    return 0;
+                // Try asid entry
+                uint key_asid = Key(pageMask, vpn2, m_Registers.RegEntryHi.ASID, false);
+                uint key_global = Key(pageMask, vpn2, 0, true);
+
+                // Console.WriteLine("FastTLB try lookup: {0:X8} {1:X8} {2:X8}", pageMask, key_asid, key_global);
+
+                if (m_EntryHashLookup.TryGetValue(key_asid, out int foundA)) {
+                    // Console.WriteLine("index found A = {0}", foundA);
+                    entry = m_Entries[foundA];
+                }
+
+                if (m_EntryHashLookup.TryGetValue(key_global, out int foundB)) {
+                    // Console.WriteLine("index found B = {0}", foundB);
+                    entry = m_Entries[foundB];
                 }
             }
 
-            else
-            {
-                /* If nothing found globally, then access the entries grouped the provided ASID */
-                if (!m_MappedEntries.TryGetValue(localKey, out entry))
-                {
-                    // Address bus is always 32 bit mode
-                    RaiseRefillException((ulong)virtualAddress, vpn2, asid, isStore);
-                    return 0;
+            return entry != null;
+        }
+
+        private bool TryPhysicalTranslate(TLBEntry entry, long virtualAddress, out long physicalAddress) {
+            uint pfn;
+
+            if ((virtualAddress & SinglePageSize(entry.Mask)) != 0) {
+                if (!entry.Odd.IsValid)
+                    throw new InvalidOperationException("odd page is invalid!");
+
+                pfn = entry.Odd.PageFrameNumber;
+            }
+            else {
+                if (!entry.Even.IsValid)
+                    throw new InvalidOperationException("even page is invalid!");
+
+                pfn = entry.Even.PageFrameNumber;
+            }
+
+            // offset from vaddr is always 12 bytes
+            pfn &= 0xFFFFFF;
+            physicalAddress = pfn << 12;
+            physicalAddress |= (uint)virtualAddress & SinglePageMask(entry.Mask);
+
+            #if DEBUG_TLB_TRANSLATE
+            Log.Debug("TLB Translated: {0:X8} -> {1:X8}", virtualAddress, physicalAddress);
+            #endif
+
+            return true;
+        }
+
+        public long Translate(long virtualAddress, bool isStore)
+        {
+            // TODO: Throw TLB mod exception when isStore == isDirty
+
+            #if FAST_TLB
+            if (FastTranslate(virtualAddress, out TLBEntry entry)) {
+                if (TryPhysicalTranslate(entry, virtualAddress, out long address)) {
+                    return address;
                 }
             }
+            #else
 
-            RF_Index = entry.Index;
+            for (int i = 0; i < m_Entries.Length; i++) {
+                var entry = m_Entries[i];
 
-            /* Check if hits the even page or oddpage
-               If the address goes over the even page boundary
-               it means its on the odd page
-            */
-            var isOddPage = (virtualAddress & pageSize.Size) != 0;
-            var entryLo = isOddPage ? entry.Entry.Odd : entry.Entry.Even;
+                if (!entry.Even.IsValid && !entry.Odd.IsValid)
+                    continue;
 
-            if (entryLo.IsValid)
-            {
-                var physAddress = (entryLo.PageFrameNumber << 12) & ~0xFFFU; // Physical Base Address
-                physAddress |= (uint)virtualAddress & RF_PageMask.Mask;      // Offset in the page
-                return physAddress;
+                // Console.WriteLine("Test TLB entry: " + entry.ToString());
+
+                if (entry.IsGlobal || (!entry.IsGlobal && entry.ASID == m_Registers.RegEntryHi.ASID) ) {
+                    uint vpn2 = (uint)virtualAddress >> 13;
+                    vpn2 &= ~entry.Mask >> 13;
+                    vpn2 &= 0x7FFFFFF;
+
+                    // Console.WriteLine("VPN2 from vaddr = {0:X8}, mask = {1:X8}", vpn2, mask);
+
+                    if (entry.EntryHi.VPN2 == vpn2) {
+                        // Console.WriteLine("Entry Found");
+                        if (TryPhysicalTranslate(entry, virtualAddress, out long address)) {
+                            return address;
+                        }
+                    }
+                }
             }
-            else
-            {
-                RaiseInvalidException((ulong)virtualAddress, vpn2, asid, isStore);
-                return 0;
-            }
-        }
+            #endif
 
-        public void WireSetNotify()
-        {
-            if (m_DisableTLB) return;
-
-            RF_Random = 46;
-        }
-
-        private void UpdateRandom()
-        {
-            if (RF_Index <= RF_Random)
-            {
-                RF_Random = RF_Wired + 1;
-            }
-            else
-            {
-                RF_Random++;
-
-                if (RF_Random >= 47)
-                    RF_Random = RF_Wired + 1;
-            }
-        }
-
-        public ulong PageMask
-        {
-            get { return m_PageMask; }
-            set { m_PageMask = value; }
-        }
-
-        private PageMask RF_PageMask
-        {
-            get => new((uint)m_PageMask);
-            set => m_PageMask = value.Value;
-        }
-
-        public ulong EntryHi
-        {
-            get => m_EntryHi.Read();
-            set {
-                m_EntryHi.Write(value);
-
-                #if DEBUG_TLB_ENTRYHI
-                Log.Debug("TLB EntryHi: {0:X16}", value);
-                #endif
-            }
-        }
-
-        public ulong EntryLo0
-        {
-            get => m_EntryLo0.Read();
-            set {
-                m_EntryLo0.Write(value);
-                // #if DEBUG_TLB
-                // Log.Debug("TLB EntryLo0: {0:X16}", value);
-                // #endif
-            }
-        }
-
-        public ulong EntryLo1
-        {
-            get => m_EntryLo1.Read();
-            set {
-                m_EntryLo1.Write(value);
-                // #if DEBUG_TLB
-                // Log.Debug("TLB EntryLo1: {0:X16}", value);
-                // #endif
-            }
-        }
-
-        public ulong Index
-        {
-            get => m_Index;
-            set => m_Index = value;
-        }
-
-        private int RF_Index
-        {
-            get => (int)m_BitFiddler.X(F_INDEX, ref m_Index);
-            set => m_BitFiddler.J(F_INDEX, ref m_Index, (uint)value);
-        }
-
-        private bool RF_IndexProbeFailed
-        {
-            get => m_BitFiddler.XB(F_PROBE_FAIL, ref m_Index);
-            set => m_BitFiddler.J(F_PROBE_FAIL, ref m_Index, value);
-        }
-
-        public ulong Wired
-        {
-            get { return m_Wired; }
-            set { m_Wired = value; }
-        }
-
-        private int RF_Wired
-        {
-            get => (int)m_BitFiddler.X(F_WIRED, ref m_Wired);
-            set => m_BitFiddler.J(F_WIRED, ref m_Wired, (uint)value);
-        }
-
-        public ulong Random
-        {
-            get => m_Random;
-            set => m_Random = value;
-        }
-
-        public int RF_Random
-        {
-            get => (int)m_BitFiddler.X(F_RANDOM, ref m_Random);
-            set => m_BitFiddler.J(F_RANDOM, ref m_Random, (uint)value);
+            // if (RaiseRefillException(virtualAddress, ))
+            throw new InvalidOperationException("todo accurately throw TLB exceptions");
         }
     }
 }

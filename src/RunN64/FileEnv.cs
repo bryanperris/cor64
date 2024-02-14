@@ -5,6 +5,7 @@ namespace RunN64 {
     public static class FileEnv {
         public static string WorkingDir => Environment.CurrentDirectory;
         public static string DumpDir => WorkingDir + Path.DirectorySeparatorChar + "Dump";
+        public static string ScriptsDir => WorkingDir + Path.DirectorySeparatorChar + "Scripts";
         private static string s_CurrentRomPath;
 
         static FileEnv() {
@@ -71,6 +72,16 @@ namespace RunN64 {
             }
 
             return File.Open(path, FileMode.CreateNew, FileAccess.ReadWrite);
+        }
+
+        public static FileStream Open_ScriptFile(String scriptName) {
+            var path = ScriptsDir + Path.DirectorySeparatorChar + scriptName;
+            return File.OpenRead(path);
+
+        }
+
+        public static string GetScriptPath(string scriptName) {
+            return ScriptsDir + Path.DirectorySeparatorChar + scriptName + ".py";
         }
     }
 }

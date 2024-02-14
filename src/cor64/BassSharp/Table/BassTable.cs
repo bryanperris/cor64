@@ -103,7 +103,7 @@ namespace cor64.BassSharp.Table
                 }
 
                 if (data != null && data.Length > 0) {
-                    Log.Info("Instruction Set: " + m);
+                    if (!Quiet) Log.Info("Assembling " + m + " ...");
                     DirectiveParser directiveParser = new DirectiveParser(this);
                     data = directiveParser.ParseDirective(data);
                     m_Table.Clear();
@@ -469,7 +469,7 @@ namespace cor64.BassSharp.Table
             var rhs = part[1].Split(':');
             String token = rhs[0];
 
-            Log.Trace("Parsing Directive: " + line);
+            if (!Quiet) Log.Trace("Parsing Directive: " + line);
 
             if (token == "EMIT_BYTES") {
                 int i = int.Parse(rhs[1]);
@@ -535,7 +535,7 @@ namespace cor64.BassSharp.Table
                 sb.Append(Regex.Unescape(x.Pattern.Split(' ')[0]).Trim() + " ");
             }
 
-            Log.Trace("Table: " + sb.ToString());
+            if (!Quiet) Log.Trace("Table: " + sb.ToString());
 
             return true;
         }

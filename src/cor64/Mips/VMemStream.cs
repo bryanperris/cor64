@@ -10,24 +10,20 @@ namespace cor64.Mips
 {
     public abstract class VMemStream : Stream
     {
-        private Stream m_BaseStream;
+        private readonly Stream m_BaseStream;
 
         protected VMemStream(Stream stream)
         {
             m_BaseStream = stream;
         }
 
-        protected abstract long TranslateAddress(long address, bool isStore);
-
         public override int Read(byte[] buffer, int offset, int count)
         {
-            m_BaseStream.Position = TranslateAddress((uint)Position, false);
             return m_BaseStream.Read(buffer, offset, count);
         }
 
         public override void Write(byte[] buffer, int offset, int count)
         {
-            m_BaseStream.Position = TranslateAddress((uint)Position, true);
             m_BaseStream.Write(buffer, offset, count);
         }
 
@@ -55,6 +51,9 @@ namespace cor64.Mips
 
         public override long Length => 0xFFFFFFFF;
 
-        public Stream BaseStream => m_BaseStream;
+        public sealed override long Position {
+            get => m_BaseStream.Position;
+            set => m_BaseStream.Position = value;
+        }
     }
 }

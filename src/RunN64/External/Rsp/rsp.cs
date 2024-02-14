@@ -843,14 +843,17 @@ namespace RunN64.External.Rsp
 
         public void Dispose()
         {
-            Dispose(disposing: true);
+            Dispose(disposing: true, callNativeDtor : __ownsNativeInstance );
         }
 
-        public virtual void Dispose(bool disposing)
+        partial void DisposePartial(bool disposing);
+
+        internal protected virtual void Dispose(bool disposing, bool callNativeDtor )
         {
             if (__Instance == IntPtr.Zero)
                 return;
             NativeToManagedMap.TryRemove(__Instance, out _);
+            DisposePartial(disposing);
             if (__ownsNativeInstance)
                 Marshal.FreeHGlobal(__Instance);
             __Instance = IntPtr.Zero;
@@ -1022,14 +1025,17 @@ namespace RunN64.External.Rsp
 
         public void Dispose()
         {
-            Dispose(disposing: true);
+            Dispose(disposing: true, callNativeDtor : __ownsNativeInstance );
         }
 
-        public virtual void Dispose(bool disposing)
+        partial void DisposePartial(bool disposing);
+
+        internal protected virtual void Dispose(bool disposing, bool callNativeDtor )
         {
             if (__Instance == IntPtr.Zero)
                 return;
             NativeToManagedMap.TryRemove(__Instance, out _);
+            DisposePartial(disposing);
             if (__ownsNativeInstance)
                 Marshal.FreeHGlobal(__Instance);
             __Instance = IntPtr.Zero;
@@ -1169,14 +1175,17 @@ namespace RunN64.External.Rsp
 
         public void Dispose()
         {
-            Dispose(disposing: true);
+            Dispose(disposing: true, callNativeDtor : __ownsNativeInstance );
         }
 
-        public virtual void Dispose(bool disposing)
+        partial void DisposePartial(bool disposing);
+
+        internal protected virtual void Dispose(bool disposing, bool callNativeDtor )
         {
             if (__Instance == IntPtr.Zero)
                 return;
             NativeToManagedMap.TryRemove(__Instance, out _);
+            DisposePartial(disposing);
             if (__ownsNativeInstance)
                 Marshal.FreeHGlobal(__Instance);
             __Instance = IntPtr.Zero;
@@ -1292,14 +1301,17 @@ namespace RunN64.External.Rsp
 
         public void Dispose()
         {
-            Dispose(disposing: true);
+            Dispose(disposing: true, callNativeDtor : __ownsNativeInstance );
         }
 
-        public virtual void Dispose(bool disposing)
+        partial void DisposePartial(bool disposing);
+
+        internal protected virtual void Dispose(bool disposing, bool callNativeDtor )
         {
             if (__Instance == IntPtr.Zero)
                 return;
             NativeToManagedMap.TryRemove(__Instance, out _);
+            DisposePartial(disposing);
             if (__ownsNativeInstance)
                 Marshal.FreeHGlobal(__Instance);
             __Instance = IntPtr.Zero;
@@ -1440,14 +1452,17 @@ namespace RunN64.External.Rsp
 
         public void Dispose()
         {
-            Dispose(disposing: true);
+            Dispose(disposing: true, callNativeDtor : __ownsNativeInstance );
         }
 
-        public virtual void Dispose(bool disposing)
+        partial void DisposePartial(bool disposing);
+
+        internal protected virtual void Dispose(bool disposing, bool callNativeDtor )
         {
             if (__Instance == IntPtr.Zero)
                 return;
             NativeToManagedMap.TryRemove(__Instance, out _);
+            DisposePartial(disposing);
             if (__ownsNativeInstance)
                 Marshal.FreeHGlobal(__Instance);
             __Instance = IntPtr.Zero;
@@ -1619,14 +1634,17 @@ namespace RunN64.External.Rsp
 
         public void Dispose()
         {
-            Dispose(disposing: true);
+            Dispose(disposing: true, callNativeDtor : __ownsNativeInstance );
         }
 
-        public virtual void Dispose(bool disposing)
+        partial void DisposePartial(bool disposing);
+
+        internal protected virtual void Dispose(bool disposing, bool callNativeDtor )
         {
             if (__Instance == IntPtr.Zero)
                 return;
             NativeToManagedMap.TryRemove(__Instance, out _);
+            DisposePartial(disposing);
             if (__ownsNativeInstance)
                 Marshal.FreeHGlobal(__Instance);
             __Instance = IntPtr.Zero;
@@ -1806,14 +1824,17 @@ namespace RunN64.External.Rsp
 
         public void Dispose()
         {
-            Dispose(disposing: true);
+            Dispose(disposing: true, callNativeDtor : __ownsNativeInstance );
         }
 
-        public virtual void Dispose(bool disposing)
+        partial void DisposePartial(bool disposing);
+
+        internal protected virtual void Dispose(bool disposing, bool callNativeDtor )
         {
             if (__Instance == IntPtr.Zero)
                 return;
             NativeToManagedMap.TryRemove(__Instance, out _);
+            DisposePartial(disposing);
             if (__ownsNativeInstance)
                 Marshal.FreeHGlobal(__Instance);
             __Instance = IntPtr.Zero;
@@ -1849,7 +1870,7 @@ namespace RunN64.External.Rsp
         {
             get
             {
-                return (byte*)((__Internal*)__Instance)->RDRAM;
+                return (byte*) ((__Internal*)__Instance)->RDRAM;
             }
 
             set
@@ -1862,7 +1883,7 @@ namespace RunN64.External.Rsp
         {
             get
             {
-                return (byte*)((__Internal*)__Instance)->DMEM;
+                return (byte*) ((__Internal*)__Instance)->DMEM;
             }
 
             set
@@ -1875,7 +1896,7 @@ namespace RunN64.External.Rsp
         {
             get
             {
-                return (byte*)((__Internal*)__Instance)->IMEM;
+                return (byte*) ((__Internal*)__Instance)->IMEM;
             }
 
             set
@@ -1888,7 +1909,7 @@ namespace RunN64.External.Rsp
         {
             get
             {
-                return (uint*)((__Internal*)__Instance)->MI_INTR_REG;
+                return (uint*) ((__Internal*)__Instance)->MI_INTR_REG;
             }
 
             set
@@ -1901,7 +1922,7 @@ namespace RunN64.External.Rsp
         {
             get
             {
-                return (uint*)((__Internal*)__Instance)->SP_MEM_ADDR_REG;
+                return (uint*) ((__Internal*)__Instance)->SP_MEM_ADDR_REG;
             }
 
             set
@@ -1914,7 +1935,7 @@ namespace RunN64.External.Rsp
         {
             get
             {
-                return (uint*)((__Internal*)__Instance)->SP_DRAM_ADDR_REG;
+                return (uint*) ((__Internal*)__Instance)->SP_DRAM_ADDR_REG;
             }
 
             set
@@ -1927,7 +1948,7 @@ namespace RunN64.External.Rsp
         {
             get
             {
-                return (uint*)((__Internal*)__Instance)->SP_RD_LEN_REG;
+                return (uint*) ((__Internal*)__Instance)->SP_RD_LEN_REG;
             }
 
             set
@@ -1940,7 +1961,7 @@ namespace RunN64.External.Rsp
         {
             get
             {
-                return (uint*)((__Internal*)__Instance)->SP_WR_LEN_REG;
+                return (uint*) ((__Internal*)__Instance)->SP_WR_LEN_REG;
             }
 
             set
@@ -1953,7 +1974,7 @@ namespace RunN64.External.Rsp
         {
             get
             {
-                return (uint*)((__Internal*)__Instance)->SP_STATUS_REG;
+                return (uint*) ((__Internal*)__Instance)->SP_STATUS_REG;
             }
 
             set
@@ -1966,7 +1987,7 @@ namespace RunN64.External.Rsp
         {
             get
             {
-                return (uint*)((__Internal*)__Instance)->SP_DMA_FULL_REG;
+                return (uint*) ((__Internal*)__Instance)->SP_DMA_FULL_REG;
             }
 
             set
@@ -1979,7 +2000,7 @@ namespace RunN64.External.Rsp
         {
             get
             {
-                return (uint*)((__Internal*)__Instance)->SP_DMA_BUSY_REG;
+                return (uint*) ((__Internal*)__Instance)->SP_DMA_BUSY_REG;
             }
 
             set
@@ -1992,7 +2013,7 @@ namespace RunN64.External.Rsp
         {
             get
             {
-                return (uint*)((__Internal*)__Instance)->SP_PC_REG;
+                return (uint*) ((__Internal*)__Instance)->SP_PC_REG;
             }
 
             set
@@ -2005,7 +2026,7 @@ namespace RunN64.External.Rsp
         {
             get
             {
-                return (uint*)((__Internal*)__Instance)->SP_SEMAPHORE_REG;
+                return (uint*) ((__Internal*)__Instance)->SP_SEMAPHORE_REG;
             }
 
             set
@@ -2018,7 +2039,7 @@ namespace RunN64.External.Rsp
         {
             get
             {
-                return (uint*)((__Internal*)__Instance)->DPC_START_REG;
+                return (uint*) ((__Internal*)__Instance)->DPC_START_REG;
             }
 
             set
@@ -2031,7 +2052,7 @@ namespace RunN64.External.Rsp
         {
             get
             {
-                return (uint*)((__Internal*)__Instance)->DPC_END_REG;
+                return (uint*) ((__Internal*)__Instance)->DPC_END_REG;
             }
 
             set
@@ -2044,7 +2065,7 @@ namespace RunN64.External.Rsp
         {
             get
             {
-                return (uint*)((__Internal*)__Instance)->DPC_CURRENT_REG;
+                return (uint*) ((__Internal*)__Instance)->DPC_CURRENT_REG;
             }
 
             set
@@ -2057,7 +2078,7 @@ namespace RunN64.External.Rsp
         {
             get
             {
-                return (uint*)((__Internal*)__Instance)->DPC_STATUS_REG;
+                return (uint*) ((__Internal*)__Instance)->DPC_STATUS_REG;
             }
 
             set
@@ -2070,7 +2091,7 @@ namespace RunN64.External.Rsp
         {
             get
             {
-                return (uint*)((__Internal*)__Instance)->DPC_CLOCK_REG;
+                return (uint*) ((__Internal*)__Instance)->DPC_CLOCK_REG;
             }
 
             set
@@ -2083,7 +2104,7 @@ namespace RunN64.External.Rsp
         {
             get
             {
-                return (uint*)((__Internal*)__Instance)->DPC_BUFBUSY_REG;
+                return (uint*) ((__Internal*)__Instance)->DPC_BUFBUSY_REG;
             }
 
             set
@@ -2096,7 +2117,7 @@ namespace RunN64.External.Rsp
         {
             get
             {
-                return (uint*)((__Internal*)__Instance)->DPC_PIPEBUSY_REG;
+                return (uint*) ((__Internal*)__Instance)->DPC_PIPEBUSY_REG;
             }
 
             set
@@ -2109,7 +2130,7 @@ namespace RunN64.External.Rsp
         {
             get
             {
-                return (uint*)((__Internal*)__Instance)->DPC_TMEM_REG;
+                return (uint*) ((__Internal*)__Instance)->DPC_TMEM_REG;
             }
 
             set
@@ -2278,14 +2299,17 @@ namespace RunN64.External.Rsp
 
         public void Dispose()
         {
-            Dispose(disposing: true);
+            Dispose(disposing: true, callNativeDtor : __ownsNativeInstance );
         }
 
-        public virtual void Dispose(bool disposing)
+        partial void DisposePartial(bool disposing);
+
+        internal protected virtual void Dispose(bool disposing, bool callNativeDtor )
         {
             if (__Instance == IntPtr.Zero)
                 return;
             NativeToManagedMap.TryRemove(__Instance, out _);
+            DisposePartial(disposing);
             if (__ownsNativeInstance)
                 Marshal.FreeHGlobal(__Instance);
             __Instance = IntPtr.Zero;
@@ -2557,14 +2581,17 @@ namespace RunN64.External.Rsp
 
         public void Dispose()
         {
-            Dispose(disposing: true);
+            Dispose(disposing: true, callNativeDtor : __ownsNativeInstance );
         }
 
-        public virtual void Dispose(bool disposing)
+        partial void DisposePartial(bool disposing);
+
+        internal protected virtual void Dispose(bool disposing, bool callNativeDtor )
         {
             if (__Instance == IntPtr.Zero)
                 return;
             NativeToManagedMap.TryRemove(__Instance, out _);
+            DisposePartial(disposing);
             if (__ownsNativeInstance)
                 Marshal.FreeHGlobal(__Instance);
             __Instance = IntPtr.Zero;
@@ -2762,14 +2789,17 @@ namespace RunN64.External.Rsp
 
         public void Dispose()
         {
-            Dispose(disposing: true);
+            Dispose(disposing: true, callNativeDtor : __ownsNativeInstance );
         }
 
-        public virtual void Dispose(bool disposing)
+        partial void DisposePartial(bool disposing);
+
+        internal protected virtual void Dispose(bool disposing, bool callNativeDtor )
         {
             if (__Instance == IntPtr.Zero)
                 return;
             NativeToManagedMap.TryRemove(__Instance, out _);
+            DisposePartial(disposing);
             if (__ownsNativeInstance)
                 Marshal.FreeHGlobal(__Instance);
             __Instance = IntPtr.Zero;
@@ -2779,7 +2809,7 @@ namespace RunN64.External.Rsp
         {
             get
             {
-                return (byte*)((__Internal*)__Instance)->VectorRegisters;
+                return (byte*) ((__Internal*)__Instance)->VectorRegisters;
             }
 
             set
@@ -2792,7 +2822,7 @@ namespace RunN64.External.Rsp
         {
             get
             {
-                return (byte*)((__Internal*)__Instance)->Accumulator;
+                return (byte*) ((__Internal*)__Instance)->Accumulator;
             }
 
             set
@@ -2805,7 +2835,7 @@ namespace RunN64.External.Rsp
         {
             get
             {
-                return (byte*)((__Internal*)__Instance)->SURegisters;
+                return (byte*) ((__Internal*)__Instance)->SURegisters;
             }
 
             set
@@ -2875,6 +2905,12 @@ namespace RunN64.External.Rsp
 
             [SuppressUnmanagedCodeSecurity, DllImport("rsp.so", EntryPoint = "SetVce", CallingConvention = __CallingConvention.Cdecl)]
             internal static extern void SetVce(byte value);
+
+            [SuppressUnmanagedCodeSecurity, DllImport("rsp.so", EntryPoint = "DmaRead", CallingConvention = __CallingConvention.Cdecl)]
+            internal static extern void DmaRead();
+
+            [SuppressUnmanagedCodeSecurity, DllImport("rsp.so", EntryPoint = "DmaWrite", CallingConvention = __CallingConvention.Cdecl)]
+            internal static extern void DmaWrite();
 
             [SuppressUnmanagedCodeSecurity, DllImport("rsp.so", EntryPoint = "RomOpen", CallingConvention = __CallingConvention.Cdecl)]
             internal static extern void RomOpen();
@@ -3098,6 +3134,16 @@ namespace RunN64.External.Rsp
             __Internal.SetVce(value);
         }
 
+        public static void DmaRead()
+        {
+            __Internal.DmaRead();
+        }
+
+        public static void DmaWrite()
+        {
+            __Internal.DmaWrite();
+        }
+
         public static void RomOpen()
         {
             __Internal.RomOpen();
@@ -3141,7 +3187,7 @@ namespace RunN64.External.Rsp.__Symbols
         {
             var path = "rsp.so";
             var image = CppSharp.SymbolResolver.LoadImage(ref path);
-            if (image == IntPtr.Zero) throw new System.DllNotFoundException(path);
+            if (image == IntPtr.Zero) throw new global::System.DllNotFoundException(path);
             _GBI_phase = CppSharp.SymbolResolver.ResolveSymbol(image, "GBI_phase");
         }
     }

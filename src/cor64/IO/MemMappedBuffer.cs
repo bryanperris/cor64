@@ -22,6 +22,14 @@ namespace cor64.IO
         public event Action Write;
         public event Action Read;
 
+        public void ClearReaders() {
+            Read = EmptyHandler;
+        }
+
+        public void ClearWriters() {
+            Write = EmptyHandler;
+        }
+
         public MemMappedBuffer() : this(4) {
             
         }
@@ -95,28 +103,16 @@ namespace cor64.IO
 
         public uint RegisterValue
         {
-            #if LITTLE_ENDIAN
-            get => WritePtr.AsType_32();
+            get => N64Endianess.ReadPtr32(WritePtr);
 
-            set => WritePtr.AsType_32(value);
-            #else
-            get => WritePtr.AsType_32Swp();
-
-            set => WritePtr.AsType_32Swp(value);
-            #endif
+            set => N64Endianess.WritePtr32(WritePtr, value);
         }
 
         public uint ReadonlyRegisterValue
         {
-            #if LITTLE_ENDIAN
-            get => ReadPtr.AsType_32();
+            get => N64Endianess.ReadPtr32(ReadPtr);
 
-            set => ReadPtr.AsType_32(value);
-            #else
-            get => ReadPtr.AsType_32Swp();
-
-            set => ReadPtr.AsType_32Swp(value);
-            #endif
+            set => N64Endianess.WritePtr32(ReadPtr, value);
         }
 
         public int Size { get; }

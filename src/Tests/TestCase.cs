@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using cor64.IO;
 
 namespace Tests
 {
@@ -21,10 +22,14 @@ namespace Tests
         private RegBoundType m_XferSource;
         private RegBoundType m_XferTarget;
 		private byte[] m_TestData;
-        private int m_TestDataOffset;
+
+        private const int DATA_OFFSET = 0x200; // hardcoded data offset;
+        private int m_TestDataOffset = DATA_OFFSET;
         private bool m_InjectDMem;
         private bool m_IsFPU;
-        private bool m_IsFPUHalfMode;
+        private bool m_IsFPUHalfMode = true; // Using this mode by default for all FPU testing
+
+        // TODO: It seems FPU half mode is either broken or just incompatible with tests.
 
         [Flags]
         public enum Expectations : ushort
@@ -155,25 +160,16 @@ namespace Tests
 
         private void UpdateTestData(byte[] data) {
             m_TestData = data;
-
-            // m_TestData = new byte[4 * 2];
-
-            // for (int i = 0; i < m_TestData.Length; i++) {
-            //     if (i < data.Length) {
-            //         m_TestData[i] = data[i];
-            //     }
-            // }
-
-            // Stream stream = new MemoryStream(m_TestData);
-            // stream = cor64.DataEndianess.PreByteSwapStream(stream, cor64.Cartridge.RomEndianess.Big);
-            // stream.Read(m_TestData, 0, m_TestData.Length);
         }
 
         public TestCase ExpectDMem(int offset, params byte[] value)
 		{
 			m_ExpectationFlags |= Expectations.DMemStore;
             UpdateTestData(value);
-            m_TestDataOffset = offset;
+            m_TestDataOffset = DATA_OFFSET + offset;
+
+            // Allow CPUTestTriple operandC to be added with the data address
+            SourceC = new KeyValuePair<int, dynamic>(SourceC.Key, (ulong)m_TestDataOffset + SourceC.Value);
             IsLoadStore = true;
 			return this;
 		}
@@ -185,6 +181,9 @@ namespace Tests
             UpdateTestData(data);
             m_InjectDMem = true;
             /* Better way to manage this? */
+
+            address = DATA_OFFSET + address;
+
             Result = new KeyValuePair<int, dynamic>(SourceA.Key, Result.Value);
             SourceC = new KeyValuePair<int, dynamic>(SourceC.Key, (ulong)address);
             return this;

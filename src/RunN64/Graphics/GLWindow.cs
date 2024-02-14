@@ -13,6 +13,8 @@ using Veldrid;
 using ImGuiNET;
 using cor64.Mips.Rsp;
 using cor64.PIF;
+using RunN64.Workbench.VisualRsp;
+using RunN64.Workbench;
 
 namespace RunN64.Graphics
 {
@@ -23,6 +25,7 @@ namespace RunN64.Graphics
         private readonly NativeWindow m_Window;
         private readonly Video m_VideoInterface;
         private readonly DPCInterface m_RdpInterface;
+        private readonly cor64.HLE.GraphicsHLEDevice m_HLEGraphicsDevice;
         private readonly Cartridge m_Cart;
         private readonly IntPtr m_GLContextPtr;
         private Veldrid.GraphicsDevice m_VelGLDevice;
@@ -51,11 +54,20 @@ namespace RunN64.Graphics
         private readonly CpuDisassemblyWindow m_WinCpuDisasm;
         private readonly DebugWindow m_WinDebug;
         private readonly RdpWindow m_WinRdp;
+        private readonly DmaWindow m_WinDma;
+        private readonly RspDissectWindow m_WinRspDissect;
+        private readonly ScriptsWindow m_WinScripts;
 
         private readonly GlfwInputSnapshot m_Inputs;
 
 
-        public GLWindow(N64System system, bool workbenchMode)
+        public event Action OnFrame;
+
+        private readonly cor64.HLE.GraphicsHLEDevice.GLGetProcAddress m_Callback_GetProcAddress;
+        private readonly cor64.HLE.GraphicsHLEDevice.GLSwapBuffers m_Callback_SwapBuffers;
+
+
+        public GLWindow(N64System system, bool workbenchMode, ScriptHost scriptHost)
         {
             m_System = system;
 
@@ -92,7 +104,7 @@ namespace RunN64.Graphics
             };
 
             m_Window.Closing += (s, e) => {
-                m_VelGLDevice.WaitForIdle();
+               m_VelGLDevice.WaitForIdle();
                 m_ImGuiRenderer.Dispose();
                 m_VelGLDevice.Dispose();
             };
@@ -102,11 +114,12 @@ namespace RunN64.Graphics
                 m_IsClosed = true;
             };
 
-            // Glfw.IconifyWindow(m_Window);
+            Glfw.IconifyWindow(m_Window);
 
             m_VideoInterface = system.DeviceRcp.VideoInterface;
             m_RdpInterface = system.DeviceRcp.DisplayProcessorCommandInterface;
             m_Cart = system.AttachedCartridge;
+            m_HLEGraphicsDevice = system.DeviceRcp.GraphicsHLEDevice;
 
             m_GLContextPtr = GetNativeContext(m_Window);
 
@@ -117,6 +130,26 @@ namespace RunN64.Graphics
             OpenTK.Graphics.OpenGL.GL.LoadBindings(new GlfwOpenTKContext());
             Console.WriteLine("GL Version: " + OpenTK.Graphics.OpenGL.GL.GetString(OpenTK.Graphics.OpenGL.StringName.Version));
             Console.WriteLine("GL Renderer: " + OpenTK.Graphics.OpenGL.GL.GetString(OpenTK.Graphics.OpenGL.StringName.Renderer));
+
+            Glfw.MakeContextCurrent(m_Window);
+
+            if (m_HLEGraphicsDevice != null) {
+                m_Callback_GetProcAddress = new cor64.HLE.GraphicsHLEDevice.GLGetProcAddress(Glfw.GetProcAddress);
+
+                m_Callback_SwapBuffers = () => {
+                    Render();
+                };
+
+                m_HLEGraphicsDevice.AttachGL(
+                    0,
+                    m_Callback_GetProcAddress,
+                    m_Callback_SwapBuffers
+                );
+            }
+
+            if (m_HLEGraphicsDevice != null) {
+                m_HLEGraphicsDevice.Init();
+            }
 
             BindVeldrid();
 
@@ -133,7 +166,8 @@ namespace RunN64.Graphics
                 throw;
             }
 
-            m_FBWIndow = new FBViewWindow(system, m_VelGLDevice, m_ImGuiRenderer, workbenchMode);
+           m_FBWIndow = new FBViewWindow(system, m_VelGLDevice, m_ImGuiRenderer, workbenchMode);
+
 
             if (workbenchMode) {
                 m_WinRsp = new RspWindow(system);
@@ -141,6 +175,9 @@ namespace RunN64.Graphics
                 m_WinRspDisasm = new RspDisassemblyWindow(system);
                 m_WinCpuDisasm = new CpuDisassemblyWindow(system);
                 m_WinRdp = new RdpWindow(system);
+                m_WinDma = new DmaWindow(system);
+                m_WinRspDissect = new RspDissectWindow(system);
+                m_WinScripts = new ScriptsWindow(scriptHost);
             }
         }
 
@@ -207,11 +244,16 @@ namespace RunN64.Graphics
 
             while (!m_Window.IsClosed)
             {
-                m_FBWIndow.Scan();
+                if (m_HLEGraphicsDevice == null) {
+                   m_FBWIndow.Scan();
+                }
+
                 Render();
+
                 Thread.Sleep(17);
             }
         }
+        
 
         public bool IsCreated => m_Created;
 
@@ -229,31 +271,47 @@ namespace RunN64.Graphics
                 return;
             }
 
-            m_FBWIndow.UpdateFramebufferTex();
+            if (m_HLEGraphicsDevice == null) {
+                m_FBWIndow.StageRdramTexture();
+                m_ImGuiCommandList.Begin();
+                    m_FBWIndow.CopyRdramToGPU(m_ImGuiCommandList);
+                    m_ImGuiCommandList.End();
+                    m_VelGLDevice.SubmitCommands(m_ImGuiCommandList);
+                m_VelGLDevice.WaitForIdle();
 
-            m_Inputs.UpdateMouse();
+                m_Inputs.UpdateMouse();
 
-            m_ImGuiRenderer.Update(1f / 60f, m_Inputs);
+                m_ImGuiRenderer.Update(1f / 60f, m_Inputs);
 
-            m_Inputs.ClearMouse();
-            m_Inputs.ClearKeyboard();
+                m_Inputs.ClearMouse();
+                m_Inputs.ClearKeyboard();
 
-            // m_FBWIndow.UpdatePosition(
-            //     new(
-            //         (m_Window.Size.Width / 2) - (FBViewWindow.N64_MAX_RESOLUTION_X / 2),
-            //         1f
-            //     )
-            // );
+                m_FBWIndow.UpdatePosition(
+                    new(
+                        (m_Window.Size.Width / 2) - (FBViewWindow.N64_MAX_RESOLUTION_X / 2),
+                        1f
+                    )
+                );
 
-            m_FBWIndow.UpdatePosition(
-                new(
-                    0,
-                    0f
-                )
-            );
+                m_FBWIndow.UpdatePosition(
+                    new(
+                        0,
+                        0f
+                    )
+                );
 
-            BuildUI();
-            RenderImGui();
+                OnFrame?.Invoke();
+
+                BuildUI();
+                RenderImGui();
+            }
+            else {
+                m_GLBackend.ExecuteOnGLThread(() => {
+                    if (m_HLEGraphicsDevice.PendingTasks > 0) m_HLEGraphicsDevice.GetNextTask().Invoke();
+                    m_HLEGraphicsDevice.Render();
+                });
+                m_GLBackend.FlushAndFinish();
+            }
 
             m_VelGLDevice.SwapBuffers();
 
@@ -269,7 +327,6 @@ namespace RunN64.Graphics
                 else
                     m_ImGuiCommandList.ClearColorTarget(0, CLEAR_COLOR);
 
-                m_FBWIndow.PrepareResources(m_ImGuiCommandList);
                 m_ImGuiRenderer.Render(m_VelGLDevice, m_ImGuiCommandList);
             m_ImGuiCommandList.End();
 
@@ -321,8 +378,11 @@ namespace RunN64.Graphics
                 m_WinRsp.Build();
                 m_WinDebug.Build();
                 m_WinRspDisasm.Build();
-                m_WinCpuDisasm.Build();
+                //m_WinCpuDisasm.Build(); // Still issues
                 m_WinRdp.Build();
+                m_WinDma.Build();
+                // m_WinRspDissect.Build();
+                m_WinScripts.Build();
             }
         }
     }

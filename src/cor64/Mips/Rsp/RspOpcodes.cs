@@ -120,7 +120,7 @@ namespace cor64.Mips.Rsp
         public static readonly Opcode SUV = Define(VU, "suv", VU_LOADSTORE, Unsigned);
         public static readonly Opcode SHV = Define(VU, "shv", VU_LOADSTORE, Half);
         public static readonly Opcode SFV = Define(VU, "sfv", VU_LOADSTORE, Forth);
-        public static readonly Opcode SWV = Define(VU, "swv", VU_LOADSTORE, Wrap); // Undocumented RSP Opcode
+        public static readonly Opcode SWV = Define(VU, "swv", VU_LOADSTORE, Wrap);
         public static readonly Opcode STV = Define(VU, "stv", VU_LOADSTORE, Transpose);
 
 

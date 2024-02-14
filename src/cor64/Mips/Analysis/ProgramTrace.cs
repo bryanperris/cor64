@@ -1,4 +1,6 @@
-﻿using System.Net.NetworkInformation;
+﻿using System.Diagnostics;
+using System.IO;
+using System.Net.NetworkInformation;
 using cor64.Debugging;
 using cor64.Mips.R4300I;
 using NLog;
@@ -9,36 +11,23 @@ using System.Text;
 
 namespace cor64.Mips.Analysis
 {
-
-    // TODO: Handle exception jumps
-
     public class ProgramTrace
     {
         private readonly static Logger Log = LogManager.GetCurrentClassLogger();
-        private InfoBasicBlock m_Root;
-        private readonly BaseDisassembler m_Disassembler;
-        private bool m_InServiceHandler;
-        private bool m_HandleExceptionReturn;
+
+        // We keep track of blocks in sequence, every new block
         private readonly List<InfoBasicBlock> m_Blocks = new List<InfoBasicBlock>();
+        private readonly BaseDisassembler m_Disassembler;
         private InfoBasicBlock m_CurrentBlock;
-        private InfoBasicBlockInstruction m_CurrentInst;
-        private bool m_End;
-        private bool m_DelaySlot;
-        private ulong m_LastBranch;
-        private InfoBasicBlock m_InterruptedBlock;
-        private InfoBasicBlockLink m_LastLink;
-        private readonly List<InfoBasicBlockLink> m_Links = new List<InfoBasicBlockLink>();
-        private InfoBasicBlock m_LastBlock;
-        private readonly Dictionary<ulong, InfoBasicBlock> m_InstToBlockMapping = new Dictionary<ulong, InfoBasicBlock>();
+        private bool m_Interrupted;
+        private long? m_EntryPoint;
+        private InfoBasicBlock m_BlockWithDelaySlot;
 
-        /* Debugging */
-        private bool m_DoVerify = false;
-        private readonly List<String> m_VerifyLog = new List<string>();
-        private int m_VerifyLogPosition = 0;
-        private bool m_HaltVerify = false;
+        public bool EnableFullTracing { get; set; } = false;
 
+        public bool DisableAdvancedTraceReduction { get; set; }
 
-        public ulong StoppedAt { get; set; }
+        public event Action<long, DecodedInstruction> OnInstTrace;
 
         public enum TraceMode
         {
@@ -54,413 +43,181 @@ namespace cor64.Mips.Analysis
             MemoryAccess = 0b1
         }
 
-        public void EnableLogVerfication() {
-            m_DoVerify = true;
-        }
-
         public ProgramTrace(BaseDisassembler disassembler)
         {
             m_Disassembler = disassembler;
         }
 
-        private void BeginNewBlock(ulong address) {
-            m_End = false;
-            m_CurrentBlock = new InfoBasicBlock(address);
-
-            #if DEBUG_TRACE_LOG
-            Console.WriteLine("Create Block {0:X8}", m_CurrentBlock.Address);
-            #endif
-
-            m_Blocks.Add(m_CurrentBlock);
-
-            if (m_Blocks.Count == 1)
-            {
-                m_Root = m_CurrentBlock;
+        public void Interrupt() {
+            if (m_CurrentBlock != null) {
+                // Finish the block, prepare for new block
+                m_CurrentBlock.Finish(BlockEnding.Interrupted);
+                BlockFinalize();
             }
+
+            m_Interrupted = true;
         }
 
-        private void FinishBlock(DecodedInstruction inst) {
-            bool isExceptionReturnEnding = m_HandleExceptionReturn;
-
-            /* First determine if we truly are executing the delay slot */
-            if (!m_CurrentBlock.EndsWithExceptionReturn && !m_DelaySlot && m_LastBranch + 4 == inst.Address)
-            {
-                m_DelaySlot = true;
-            }
-            else
-            {
-                /* End the block and move on to the next when we have moved out of the delay slot or eret */
-                if ((m_DelaySlot && m_LastBranch + 4 != inst.Address) || m_CurrentBlock.EndsWithExceptionReturn) {
-                    m_LastBlock = m_CurrentBlock;
-
-                    /* Mark the block finished */
-                    m_CurrentBlock.SetFinish();
-
-                    #if DEBUG_TRACE_LOG
-                    Console.WriteLine("Marked active block {0:X8} as finished", m_CurrentBlock.Address);
-                    #endif
-
-                    /* We are leaving a block via ERET (interrupted / normal) */
-                    if (m_HandleExceptionReturn) {
-                        m_HandleExceptionReturn = false;
-                        m_InServiceHandler = false;
-                    }
-
-                    /* Check if the instruction has been associated with a block already */
-                    if (m_InstToBlockMapping.ContainsKey(inst.Address))
-                    {
-                        m_CurrentBlock = m_InstToBlockMapping[inst.Address];
-
-                        #if DEBUG_TRACE_LOG
-                        Console.WriteLine("Jumping to mapped inst {0:X8}", inst.Address);
-                        #endif
-                    }
-                    else
-                    {
-                        /* We jumped somewhere new */
-                        m_CurrentBlock = null;
-
-                        #if DEBUG_TRACE_LOG
-                        Console.WriteLine("Cleared current block after block end (inst {0:X8} is not mapped)", inst.Address);
-                        #endif
-                    }
-
-                    /* Ok we are on the next block */
-                    m_End = false;
-                    m_DelaySlot = false;
-                }
-            }
-        }
-
-        public void AppendInstruction(DecodedInstruction inst, bool nullified, bool inInterrupt)
+        public void AppendInstruction(long address, DecodedInstruction inst)
         {
-            #if DEBUG_TRACE_LOG
-            var mapped = m_InstToBlockMapping.ContainsKey(inst.Address);
+            OnInstTrace?.Invoke(address, inst);
 
-            Console.WriteLine("TRACE INST: [{2}] {0:X8} {1}", inst.Address, m_Disassembler.GetFullDisassembly(inst),
-            mapped ? " M" : "UM");
-            #endif
+            if (m_CurrentBlock != null && !m_CurrentBlock.FullyFinished && m_CurrentBlock.Ending == BlockEnding.NormalJump) {
+                // There are 2 types of normal jump endings
+                // 1. active delay slot
+                // 2. nullified delays slot
 
-            if (m_DoVerify) {
-                m_VerifyLog.Add(new InfoBasicBlockInstruction(m_Disassembler, inst, nullified).ToString());
-            }
-
-            if (inInterrupt) {
-                // If we just interrupted in execution, start building a new block for the interrupt handler
-                if (!m_InServiceHandler) {
-                    m_HandleExceptionReturn = false;
-                    m_InServiceHandler = true;
-
-                    m_InterruptedBlock = m_CurrentBlock;
-
-                    /* Remove the last inst in the block since it hasn't been executed */
-                    if (m_CurrentBlock.Size > 0) {
-                        m_InstToBlockMapping.Remove(m_CurrentBlock.GetLastInst().Address);
-                        m_CurrentBlock.UndoLastAppend();
-                    }
-
-                    var exists = m_InstToBlockMapping.ContainsKey(inst.Address);
-
-                    if (!exists) {
-                        BeginNewBlock(inst.Address);
-                        m_CurrentBlock.StartsInterruptServicing = true;
-                    }
-                    else {
-                        m_CurrentBlock = m_InstToBlockMapping[inst.Address];
-                    }
-
-                    // Check if interrupt repeated and needs frozen mode
-
-                    /* [Normal Block @ X] -> [Interrupt Handler Block] */
-                    var handlerLink = new InfoBlockInterruptedLink(m_CurrentBlock, 0, m_InterruptedBlock.Size - 1);
-
-                    m_Links.Add(handlerLink);
-                    m_InterruptedBlock.AppendBlockLink(handlerLink);
-
-                    #if DEBUG_TRACE_LOG
-                    Console.WriteLine("Link block {0:X8} to interrupt block {1:X8} +{2}", m_InterruptedBlock.Address, m_CurrentBlock.Address, handlerLink.BlockOffset);
-                    #endif
-                }
-            }
-
-            /* End of block indicated via delay slot signal */
-            if (m_End)
-            {
-                #if DEBUG_TRACE_LOG
-                Console.WriteLine("Finish block: {0:X8}", m_CurrentBlock.Address);
-                #endif
-
-                FinishBlock(inst);
-            }
-
-            /* Check if we need to create a new block */
-            if (m_CurrentBlock == null)
-            {
-                BeginNewBlock(inst.Address);
-            }
-
-            /* Link blocks if not null */
-            if (m_LastBlock != null)
-            {
-                InfoBasicBlockLink link;
-
-                if (inst.Address != m_CurrentBlock.Address) {
-                    var addr = inst.Address;
-                    var byteOffset = addr - m_CurrentBlock.Address;
-                    int blockIndex = (int)byteOffset / 4;
-                    link = new InfoBasicBlockLink(m_CurrentBlock, blockIndex);
+                if (address == m_CurrentBlock.GetLastInst().Address + 4) {
+                    // Executing delay slot
+                    m_CurrentBlock.AppendDelaySlot(new InfoBasicBlockInstruction(m_CurrentBlock, address, inst));
+                    m_BlockWithDelaySlot = m_CurrentBlock;
+                    BlockFinalize();
+                    return;  // We can return after adding the delay slot
                 }
                 else {
-                    link = new InfoBasicBlockLink(m_CurrentBlock, 0);
+                    m_BlockWithDelaySlot = null;
+                    m_CurrentBlock.SetNullifiedDelaySlot();
+                    BlockFinalize();
                 }
-
-                m_LastLink = link;
-                m_Links.Add(m_LastLink);
-                m_LastBlock.AppendBlockLink(link);
-
-                #if DEBUG_TRACE_LOG
-                Console.WriteLine("Link block {0:X8} to block {1:X8} +{2}", m_LastBlock.Address, m_CurrentBlock.Address, link.BlockOffset);
-                #endif
-
-                m_LastBlock = null;
             }
 
-            if (!m_CurrentBlock.IsFinished)
+            /* ----- Time for a new block ----- */
+            if (m_CurrentBlock == null)
             {
-                m_CurrentInst = new InfoBasicBlockInstruction(m_Disassembler, inst);
+                m_CurrentBlock = new InfoBasicBlock(this, address);
 
-                /* This happens when a block overlaps another block, they just get merged */
-                if (m_InstToBlockMapping.ContainsKey(inst.Address))
-                {
-                    var originalBlock = m_InstToBlockMapping[inst.Address];
-                    var originalBlockAddress = originalBlock.Address;
-
-                    /* Update block linking */
-                    foreach (var blockLink in m_Links) {
-                        /* Update links that have to be shifted to the correct offset */
-                        if (blockLink.TargetAddress == originalBlockAddress) {
-                            blockLink.Modify(originalBlock, blockLink.BlockOffset + m_CurrentBlock.InstructionList.Count);
-                        }
-
-                        /* Update links that point to the block that will be removed */
-                        if (blockLink.TargetAddress == m_CurrentBlock.Address) {
-                            blockLink.Modify(originalBlock, 0);
-                        }
-                    }
-
-                    /* Merge the new block into the existing one */
-                    originalBlock.MergeBlockToHead(m_CurrentBlock);
-
-                    /* Update the instuction mapping */
-                    for (uint i = 0; i < originalBlock.Size; i++)
-                    {
-                        m_InstToBlockMapping[originalBlock.Address + i] = originalBlock;
-                    }
-
-                    m_Blocks.Remove(m_CurrentBlock);
-                    m_CurrentBlock = originalBlock;
-                }
-                else
-                {
-                    m_CurrentBlock.Append(m_CurrentInst);
-                    m_InstToBlockMapping.Add(inst.Address, m_CurrentBlock);
-
-                    #if DEBUG_TRACE_LOG
-                    Console.WriteLine("Add inst {0:X8} to block {1:X8}", inst.Address, m_CurrentBlock.Address);
-                    #endif
+                // Check if last block was interrupted
+                if (m_Interrupted) {
+                    m_CurrentBlock.IsExceptionHandler = true;
+                    m_Interrupted = false;
                 }
             }
-            else
+
+            bool blockWillEnd = inst.IsBranch && m_CurrentBlock.Ending == BlockEnding.None;
+
+            m_CurrentBlock.Append(new InfoBasicBlockInstruction(m_CurrentBlock, address, inst));
+
+            if (blockWillEnd)
             {
-                if (!m_InstToBlockMapping.ContainsKey(inst.Address)) {
-                    #if DEBUG_TRACE_LOG
-                    Console.WriteLine("Block {0:X8} is frozen but inst {1} is not mapped in it", m_CurrentBlock.Address, m_Disassembler.GetFullDisassembly(inst));
-                    #endif
+                bool isEret = inst.Opcode.StartsWith("eret");
 
-                    throw new InvalidOperationException(String.Format("Inst wasn't found in the block map: {0:X8} {1}", inst.Address, m_Disassembler.GetFullDisassembly(inst)));
+                if (isEret) {
+                    m_CurrentBlock.Finish(BlockEnding.ExceptionReturn);
+                    BlockFinalize();
+
+                }
+                else {
+                    m_CurrentBlock.Finish(BlockEnding.NormalJump);
                 }
 
-                /* We don't modify anything here, just update the current block/inst we are in, so notes can be added to them */
+                // TODO: Debug log block ending
+            }
+        }
 
-                m_CurrentBlock = m_InstToBlockMapping[inst.Address];
-                var blockIndex = (int) ((inst.Address - m_CurrentBlock.Address) / 4);
+        internal void MakeEntryNote(long pc)
+        {
+            m_EntryPoint = pc;
+        }
 
-                if (blockIndex >= m_CurrentBlock.InstructionList.Count) {
-                    throw new InvalidOperationException(String.Format("instruction is out of range of block: {0:X8} {1}", inst.Address, m_Disassembler.GetFullDisassembly(inst)));
+        // Run some optimal checks and add block to the list
+        public void BlockFinalize() {
+            // Check if the current block is a repeat of the last
+            if (!EnableFullTracing && m_CurrentBlock != null && m_Blocks.Count > 0) {
+
+                // Simple block duplication check
+                var lastBlock = m_Blocks[^1];
+                if (lastBlock.Equals(m_CurrentBlock)) {
+                    // Identical
+                    lastBlock.Repeat++;
+                    m_CurrentBlock = null;
+                    return;
                 }
-
-                m_CurrentInst = m_CurrentBlock.InstructionList[blockIndex];
             }
 
-            if (inst.IsBranch)
-            {
-                m_End = true;
-                m_LastBranch = inst.Address;
-                m_HandleExceptionReturn = inst.Opcode.StartsWith("eret");
-            }
-
-            m_CurrentInst.AppendNullifyUsage(nullified);
-
-#if TRACE_LOG_HALT
-            if (m_VerifyLog.Count > 0 && m_VerifyLog[^1] != m_CurrentInst.ToString())
-            {
-                throw new InvalidOperationException();
-            }
-#endif
+            m_Blocks.Add(m_CurrentBlock);
+            m_CurrentBlock = null;
         }
 
         public IList<String> GenerateTraceLog()
         {
-            // XXX: We are tracking blocks by their object reference
-            //      It is possible to have multiple blocks using the same
-            //      address
-
             List<String> traceLog = new List<string>();
-            Dictionary<InfoBasicBlock, int> blockHitCounter = new Dictionary<InfoBasicBlock, int>();
-            var currBlock = m_Root;
-            var blockOffset = 0;
             bool inServiceHandler = false;
+            StringBuilder traceLineBuilder = new StringBuilder();
 
-            while (currBlock != null)
+            if (!EnableFullTracing && !DisableAdvancedTraceReduction) {
+                // Perform some post-processing block reduction
+                TraceOptimizer.TrimMultiBlockLoops(this, m_Blocks);
+            }
+
+            for (int i = 0; i < m_Blocks.Count; i++)
             {
-                #if DEBUG_TRACE_LOG
-                Console.WriteLine("TRACEGEN: Current Block {0:X8}", currBlock.Address);
-                #endif
+                var block = m_Blocks[i];
 
-                var code = currBlock.GetCodeRecordSet();
-                var links = currBlock.Links;
+                // Just a note block
+                if (block is NoteBasicBlock noteBlock)
+                {
+                    traceLog.Add(noteBlock.Note);
+                    continue;
+                }
 
-                if (currBlock.StartsInterruptServicing) {
+                var code = block.GetCodeRecordSet();
+
+                if (!inServiceHandler && block.IsExceptionHandler) {
                     inServiceHandler = true;
                     traceLog.Add("/* Exception Handler Begin */");
                 }
 
-                if (!blockHitCounter.ContainsKey(currBlock))
+                for (int j = 0; j < code.Length; j++)
                 {
-                    blockHitCounter.Add(currBlock, 0);
-                }
+                    var tracedInstruction = code[j];
+                    traceLineBuilder.Length = 0;
+                    traceLineBuilder.Append(tracedInstruction.ToString());
 
-                var linkIndex = blockHitCounter[currBlock];
+                    var memAccessNote = block.LookupMemAccess(j);
 
-                InfoBlockInterruptedLink interruptLink = null;
-
-                // Check if the intruction was interrupted
-                if (linkIndex < links.Count) {
-                    interruptLink = links[linkIndex] as InfoBlockInterruptedLink;
-
-                    #if DEBUG_TRACE_LOG
-                    if (interruptLink != null)
-                        Console.WriteLine("TRACEGEN: Interrupt Link {0:X8} found in {1:X8}", interruptLink.TargetAddress, currBlock.Address);
-                    #endif
-                }
-
-                for (int i = blockOffset; i < code.Length; i++)
-                {
-                    var codeLine = code[i];
-
-                    // When execution was stopped during the last block, don't trace beyond the halt
-                    if (m_CurrentBlock.Address == currBlock.Address && codeLine.Address > StoppedAt) {
-                        currBlock = null;
-                        break;
+                    if (memAccessNote != null) {
+                        traceLineBuilder.Append($"  // {memAccessNote.ReadMeta()}");
                     }
 
-                    codeLine.AddToLog(traceLog);
-
-
-                    if (m_DoVerify && m_VerifyLogPosition < m_VerifyLog.Count) {
-                        var raw = m_VerifyLog[m_VerifyLogPosition++];
-                        var l = codeLine.ToString();
-
-                        traceLog.Add(raw + " ~");
-
-                        if (!m_HaltVerify && !l.Equals(raw)) {
-                            traceLog.Add("Mismatched instructions");
-                            m_HaltVerify = true;
-                        }
-
-                     //   traceLog[^1] = raw + "                   " + traceLog[^1];
+                    if (m_EntryPoint != null && m_EntryPoint.Value == tracedInstruction.Address) {
+                        traceLog.Add("/* Program Entry Point */");
                     }
 
-                    codeLine.IncrementUsageRef();
-
-                    if (!inServiceHandler && interruptLink != null) {
-                        // We hit an interruption instruction in the block
-                        if (interruptLink.InterruptedInst == i) {
-                            break;
-                        }
-                    }
+                    traceLog.Add(traceLineBuilder.ToString());
                 }
 
-                if (currBlock == null) {
-                    break;
+                if (block.Repeat > 0) {
+                    traceLog.Add($"( Repeats for {block.Repeat} time(s) )");
                 }
 
-                if (inServiceHandler && currBlock.EndsWithExceptionReturn) {
+                if (inServiceHandler && block.Ending == BlockEnding.ExceptionReturn) {
                     inServiceHandler = false;
                     traceLog.Add("/* Exception Handler End */");
-                }
-
-                if (linkIndex < links.Count)
-                {
-                    /* Get the next link */
-                    var link = links[linkIndex];
-
-                    #if DEBUG_TRACE_LOG
-                    Console.WriteLine("TRACEGEN: Next Link {0:X8} found in {1:X8}", link.TargetAddress, currBlock.Address);
-                    #endif
-
-                    // Check for repeating links that are adjecent to each other
-                    if (linkIndex + 1 < links.Count &&
-                       link.TargetAddress == links[linkIndex + 1].TargetAddress &&
-                       link.TargetAddress == currBlock.Address + (ulong)link.BlockOffset)
-                    {
-                        int repeat = 1;
-                        var oldLinkList = links.ToList();
-
-                        for (int i = linkIndex + 1; i < oldLinkList.Count; i++) {
-
-                            if (oldLinkList[linkIndex].TargetAddress != oldLinkList[i].TargetAddress) {
-                                var sizeForRepeated = currBlock.Size - link.BlockOffset;
-                                traceLog.Add(String.Format("( Repeats for {0} time(s) )", repeat));
-                                blockHitCounter[currBlock] += repeat ;
-                                link = links[linkIndex + repeat];
-                                m_VerifyLogPosition += repeat * sizeForRepeated;
-                                break;
-                            }
-
-                            repeat++;
-                        }
-                    }
-                    else {
-                        blockHitCounter[currBlock]++;
-                    }
-
-                    currBlock = link.LinkedBlock;
-                    blockOffset = link.BlockOffset;
-                }
-                else
-                {
-                    #if DEBUG_TRACE_LOG
-                    Console.WriteLine("TRACEGEN: No more links found for block {0:X8}", currBlock.Address);
-                    #endif
-
-                    break;
                 }
             }
 
             return traceLog;
         }
 
-        public void AddInstructionMemAccess(ulong address, bool isWrite, String val, bool appendMode, bool appendModeFirstOne)
+        public void TraceMemoryAccess(ulong address, bool isWrite, String val)
         {
-            if ((Details & TraceDetails.MemoryAccess) == TraceDetails.MemoryAccess && m_CurrentInst != null)
+            if ((Details & TraceDetails.MemoryAccess) == TraceDetails.MemoryAccess)
             {
-                var lastOne = m_CurrentInst.GetLastMemAccessMeta();
+                if (m_CurrentBlock != null) {
+                    if (m_CurrentBlock.Size > 0) {
+                        m_CurrentBlock.SetMemAccess(
+                            m_CurrentBlock.Size - 1,
+                            new MemoryAccessMeta(address, isWrite, val));
+                    }
+                    return;
+                }
 
-                if (appendModeFirstOne || !appendMode || lastOne == null)
-                    m_CurrentInst.AppendMemoryAccess(new MemoryAccessMeta(address, isWrite, val));
-                else
-                    lastOne.AppendValue(val);
+                if (m_BlockWithDelaySlot != null) {
+                        m_BlockWithDelaySlot.SetMemAccess(
+                            m_BlockWithDelaySlot.Size - 1,
+                            new MemoryAccessMeta(address, isWrite, val));
+                    m_BlockWithDelaySlot = null;
+                }
             }
         }
 
@@ -468,44 +225,8 @@ namespace cor64.Mips.Analysis
 
         public TraceDetails Details { get; set; }
 
-        public IList<String> TestLog => m_VerifyLog;
+        public BaseDisassembler Disassembler => m_Disassembler;
 
         public bool FilterInterruptHandlers { get; set; }
-
-        private void AddJumpArrow(IList<String> input, int start, int end, int repeat)
-        {
-            int maxLineLength = 0;
-
-            for (int i = start; i <= end; i++)
-            {
-                maxLineLength = Math.Max(maxLineLength, input[i].Length);
-            }
-
-            for (int i = start; i <= end; i++)
-            {
-                int count = Math.Abs(maxLineLength - input[i].Length);
-
-                if (count > 0)
-                {
-                    input[i] += new string(' ', count);
-                }
-
-                if (i == start)
-                {
-                    input[i] += " <------+";
-
-                    if (repeat > 0)
-                        input[i] += String.Format("[{0}]", repeat);
-                }
-                else if (i == end)
-                {
-                    input[i] += "       -+";
-                }
-                else
-                {
-                    input[i] += "        |";
-                }
-            }
-        }
     }
 }

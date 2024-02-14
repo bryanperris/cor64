@@ -1,4 +1,5 @@
 using System;
+using cor64.IO;
 using cor64.Mips;
 
 namespace cor64.HLE.OS.V1 {
@@ -19,7 +20,7 @@ namespace cor64.HLE.OS.V1 {
         public override ReturnControl Execute()
         {
             /* Read Arguments */
-            m_ArgQueue = ReadArg32(0);
+            m_ArgQueue = (uint)MemHelper.VirtualToPhysical(ReadArg32(0));
 
             m_Queue = CpuStruct.NewStruct<CpuPointer32<CpuPointer32<ThreadStruct>>>(Core, m_ArgQueue);
 
@@ -34,7 +35,7 @@ namespace cor64.HLE.OS.V1 {
 
         public override void DebugPrint()
         {
-            if (!m_Queue.IsNull) {
+            if (m_Queue.Valid) {
                 if (!m_Queue.Read(Core).IsNull) {
                     Console.WriteLine("Pop Thread: Next Thread #{0}", m_Queue.Read(Core).Read(Core).ID);
                 }

@@ -24,7 +24,7 @@ using System.Threading.Tasks;
 
 namespace cor64.RCP
 {
-    public class RdramRegisters : PerpherialDevice
+    public class RdramRegisters : N64MemoryDevice
     {
         private MemMappedBuffer m_Config = new MemMappedBuffer(4);
         private MemMappedBuffer m_DeviceId = new MemMappedBuffer(4);
@@ -40,11 +40,13 @@ namespace cor64.RCP
 
         public RdramRegisters(N64MemoryController controller) : base(controller, 0x100000)
         {
-            Map(m_Config, m_DeviceId, m_Delay, m_Mode, m_RefInterval, m_RefRow, m_RasInterval, m_MinInterval, m_AddressSelect, m_Manuf);
+            StaticMap(m_Config, m_DeviceId, m_Delay, m_Mode, m_RefInterval, m_RefRow, m_RasInterval, m_MinInterval, m_AddressSelect, m_Manuf);
 
             m_Config.RegisterValue = 0xB4190010;
             m_Delay.RegisterValue = 0x2B3B1A0B;
             m_RasInterval.RegisterValue = 0x101C0A04;
         }
+
+        public override string Name => "Rdram Registers";
     }
 }

@@ -48,7 +48,7 @@ namespace cor64.RCP
         0x0450 0018 to 0x045F FFFF  Unused
         */
 
-    public class Audio : PerpherialDevice
+    public class Audio : N64MemoryDevice
     {
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
         private readonly MemMappedBuffer m_Dram = new MemMappedBuffer(4);
@@ -58,12 +58,13 @@ namespace cor64.RCP
         private readonly MemMappedBuffer m_DigitalToAudioRate= new MemMappedBuffer(4);
         private readonly MemMappedBuffer m_BitRate = new MemMappedBuffer(4);
         private readonly MipsInterface m_Interface;
+        private int m_AudioBufferFifo = 0;
 
         private bool m_EnableDma = false;
 
         public Audio(N64MemoryController controller, MipsInterface mipsInterface) : base(controller, 0x100000)
         {
-            Map(
+            StaticMap(
                 m_Dram,
                 m_Length,
                 m_Control,
@@ -74,11 +75,11 @@ namespace cor64.RCP
 
             m_Dram.Write += () => {
                 // Log.Debug("Audio RDRAM Set {0:X8}", m_Dram.RegisterValue);
-                m_Dram.RegisterValue &= 0x0FFFFFFF;
+                m_Dram.RegisterValue &= 0xFFFFF8;
             };
 
             m_Control.Write += () => {
-                m_EnableDma = (m_Control.RegisterValue & 1) != 0;
+                // m_EnableDma = (m_Control.RegisterValue & 1) != 0;
             };
 
             m_Interface = mipsInterface;
@@ -88,19 +89,32 @@ namespace cor64.RCP
         }
 
         public void LengthWrite() {
-            if (!m_EnableDma)
-                return;
-                
+            // if (!m_EnableDma)
+            //     return;
+
             // TODO: Support the AI DMA hardware bug
 
-            uint len = m_Length.RegisterValue & 0x3FFF8;
+            m_Length.RegisterValue &= 0x3FFF8;
+            // uint len = m_Length.RegisterValue;
 
-            // TODO: pass audio samples to audio backend
+            // // Audio is trippled buffered
+            // // Don't do anything if the last buffer has been used
+            // if (m_AudioBufferFifo == 2) return;
 
-            m_Dram.RegisterValue += len;
+            // m_AudioBufferFifo ^= 1;
+            // m_AudioBufferFifo++;
 
-            m_Interface.SetInterrupt(MipsInterface.INT_AI, true);
-            m_Status.ReadonlyRegisterValue &= ~0xC0000001;
+            // // Set busy/full status when triple buffering is used up
+            // if (m_AudioBufferFifo == 2) {
+            //     m_Status.ReadonlyRegisterValue |= 0x80000001U;
+            // }
+
+            // // TODO: pass audio samples to audio backend
+
+            if (m_EnableDma) {
+                m_Interface.SetInterrupt(MipsInterface.INT_AI, true);
+                m_Status.ReadonlyRegisterValue &= ~0xC0000001;
+            }
 
             // Log.Debug("Audio Write {0:X8}", len);
         }
@@ -109,5 +123,7 @@ namespace cor64.RCP
             m_Interface.ClearInterrupt(MipsInterface.INT_AI);
             m_Status.RegisterValue = 0;
         }
+
+         public override string Name => "Audio Interface";
     }
 }

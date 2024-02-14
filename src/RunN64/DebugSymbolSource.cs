@@ -10,9 +10,9 @@ namespace RunN64
 {
     public class DebugSymbolSource : ISymbolProvider
     {
-        private readonly Dictionary<ulong, String> m_LocalSymbols = new Dictionary<ulong, string>();
-        private readonly Dictionary<ulong, String> m_GlobalSymbols = new Dictionary<ulong, string>();
-        private readonly Dictionary<ulong, String> m_Labels = new Dictionary<ulong, string>();
+        private readonly Dictionary<long, String> m_LocalSymbols = new Dictionary<long, string>();
+        private readonly Dictionary<long, String> m_GlobalSymbols = new Dictionary<long, string>();
+        private readonly Dictionary<long, String> m_Labels = new Dictionary<long, string>();
 
         public DebugSymbolSource(String  filePath)
         {
@@ -41,8 +41,12 @@ namespace RunN64
             }
         }
 
-        private void AddSymbol(SymbolEntry<uint> entry, IDictionary<ulong, string> dict)
+        private void AddSymbol(SymbolEntry<uint> entry, IDictionary<long, string> dict)
         {
+            #if PRINT_ELF_SYMBOLS
+            Console.WriteLine("Loaded Symbol: {0} {1:X8}", entry.Name, entry.Value);
+            #endif
+
             if (m_Labels.ContainsKey(entry.Value)) {
                 m_Labels[entry.Value] += "|" + entry.Name;
             }
@@ -75,7 +79,7 @@ namespace RunN64
             }
         }
 
-        public string GetSymbol(ulong address)
+        public string GetSymbol(long address)
         {
             if (m_LocalSymbols.ContainsKey(address))
             {
@@ -94,7 +98,7 @@ namespace RunN64
             }
         }
 
-        public string GetLabel(ulong address)
+        public string GetLabel(long address)
         {
             if (m_Labels.ContainsKey(address)) {
                 return m_Labels[address];

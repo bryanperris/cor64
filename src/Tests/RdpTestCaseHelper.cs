@@ -18,28 +18,30 @@ namespace Tests {
         }
 
         public static void Run(this RdpTestCase testCase) {
-            var displayList = Asm.AssembleSingleCommandDisplayList(testCase.RdpAsm);
+            // var displayList = Asm.AssembleSingleCommandDisplayList(testCase.RdpAsm);
 
-            /* Dump out the displaylist */
-            StringBuilder sb = new StringBuilder();
-            foreach (var b in displayList) sb.Append(b.ToString("X2"));
-            //Console.WriteLine("Raw DP: " + sb.ToString());
+            throw new NotImplementedException("todo, fix this");
 
-            var dpStream = new MemoryStream(displayList);
-            DisplayListReader dpReader = new DisplayListReader(dpStream);
+            // /* Dump out the displaylist */
+            // StringBuilder sb = new StringBuilder();
+            // foreach (var b in displayList) sb.Append(b.ToString("X2"));
+            // //Console.WriteLine("Raw DP: " + sb.ToString());
 
-            var decodedCommand = dpReader.ReadDisplayList(0, displayList.Length)[0];
-            var decoded = decodedCommand.ResolveType().ToString();
+            // var dpStream = new MemoryStream(displayList);
+            // DisplayListReader dpReader = new DisplayListReader(dpStream);
 
-            //Console.WriteLine(decoded);
+            // var decodedCommand = dpReader.ReadDisplayList(0, displayList.Length)[0];
+            // var decoded = decodedCommand.ResolveType().ToString();
 
-            var results = decoded.Split(Environment.NewLine);
+            // //Console.WriteLine(decoded);
 
-            Assert.AreEqual(testCase.ExpectedDecode.Length, results.Length);
+            // var results = decoded.Split(Environment.NewLine);
 
-            for (int i = 0; i < testCase.ExpectedDecode.Length; i++) {
-                Assert.AreEqual(testCase.ExpectedDecode[i], results[i]);
-            }
+            // Assert.AreEqual(testCase.ExpectedDecode.Length, results.Length);
+
+            // for (int i = 0; i < testCase.ExpectedDecode.Length; i++) {
+            //     Assert.AreEqual(testCase.ExpectedDecode[i], results[i]);
+            // }
         }
     }
 }

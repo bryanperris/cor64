@@ -1,4 +1,5 @@
-﻿using System;
+﻿using System.Net.NetworkInformation;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -25,12 +26,17 @@ namespace cor64.Mips.R4300I
         private SystemController m_Coprocessor0;
         private readonly ControlRegisters m_Cop0Regs;
         private readonly Clock m_CoreClock;
-        protected DataMemory m_DataMemory;
+        // protected DataMemory m_DataMemory;
+        public N64MemoryController PhysicalMemory { get; private set; }
         public bool StartedWithProfiler { get; protected set; }
-        private readonly BranchUnit m_BranchUnit = new BranchUnit();
-        private readonly TLBCache m_TLBCache;
+        // private readonly BranchUnit m_BranchUnit = new BranchUnit();
         private readonly ExecutionStateR4300I m_State;
         private readonly MipsDebugger m_Debugger = new MipsDebugger();
+        private readonly MemoryManager m_MMU;
+
+
+        const uint RDRAM_SIZE_4MB = 0x400000;
+        const uint RDRAM_SIZE_8MB = 0x800000;
 
 
         /* TODO: When we do have a cache system, 
@@ -41,13 +47,11 @@ namespace cor64.Mips.R4300I
         protected InterpreterBaseR4300I(BaseDisassembler disassembler) : base(disassembler)
         {
             m_CoreClock = new Clock(10, 2);
-            m_TLBCache = new TLBCache();
-            m_Cop0Regs = new ControlRegisters(m_TLBCache);
+
+            m_Cop0Regs = new ControlRegisters();
             m_State = new ExecutionStateR4300I(m_Cop0Regs);
             m_Coprocessor0 = new SystemController(m_Cop0Regs, State);
-
-            m_TLBCache.AttachCoprocessor0(m_Coprocessor0);
-            m_TLBCache.Initialize();
+            m_MMU = new MemoryManager(m_Coprocessor0);
 
             CallTable
             .Map(Add32, ADD, ADDU, ADDI, ADDIU)
@@ -107,15 +111,20 @@ namespace cor64.Mips.R4300I
             m_Coprocessor0.AttachInterface(rcp.RcpInterface);
         }
 
+        public virtual void Init() {
+            m_MMU.Init();
+        }
+
         protected override void EntryPointHit() {
             base.EntryPointHit();
 
             /* Report RDRAM Size */
             var traceMode = TraceMode;
             SetTraceMode(Analysis.ProgramTrace.TraceMode.None);
-            m_DataMemory.Data32 = 0x00800000;
-            m_DataMemory.WriteData(0x80000318, 4);
+            PhysicalMemory.U32(0x00000318, N64Endianess.U32(RDRAM_SIZE_8MB));
             SetTraceMode(traceMode);
+
+            // TODO: osMemSize is located at 0x3F0 for CIC-6105
         }
 
         /********************************************************
@@ -153,42 +162,26 @@ namespace cor64.Mips.R4300I
          * Branch Unit Logic
          ********************************************************/
 
-        protected BranchUnit BranchControl => m_BranchUnit;
+        public bool BU_ConditionalPending { get; set; }
 
-        public bool TakeBranch {
-            get => m_BranchUnit.Take;
-            set => m_BranchUnit.Take = value;
-        }
+        public bool BU_ExecuteBranchDelay { get; set; }
 
-        public bool BranchDelay{
-            get => m_BranchUnit.DelaySlot;
-            set => m_BranchUnit.DelaySlot = value;
-        }
+        public bool BU_DelaySlotNext { get; set; }
 
-        public ulong TargetAddress {
-            get => m_BranchUnit.Target;
-            set => m_BranchUnit.Target = value;
-        }
+        public long BU_TargetAddress { get; set; }
 
-        protected bool UnconditionalJump {
-            get => m_BranchUnit.Unconditonal;
-            set => m_BranchUnit.Unconditonal = value;
-        }
+        public bool BU_UnconditionalPending { get; set; }
 
-        public bool NullifyNext {
-            get => m_BranchUnit.NullifyNext;
-            set => m_BranchUnit.NullifyNext = value;
-        }
+        public bool BU_NullifyNext { get; set; }
 
-        public bool WillJump => TakeBranch || UnconditionalJump;
-
-        public bool BranchDelaySlot => BranchDelay;
-
-        public ulong BranchTarget => TargetAddress;
-
-        public void ClearBranchUnit()
+        public void ClearBranchState()
         {
-            m_BranchUnit.ResetAll();
+            BU_ConditionalPending = false;
+            BU_UnconditionalPending = false;
+
+            BU_DelaySlotNext = false;
+            BU_ExecuteBranchDelay = false;
+            BU_NullifyNext = false;
         }
 
         /********************************************************
@@ -199,31 +192,17 @@ namespace cor64.Mips.R4300I
 
         public ControlRegisters Cop0State => m_Cop0Regs;
 
-        public TLBCache TLB => m_TLBCache;
-
         public ExecutionStateR4300I StateR4000I => m_State;
 
         public ExceptionType Exceptions => m_Cop0Regs.Cause.Exception;
 
         public bool IsAddress64 => m_Cop0Regs.Status.IsAddress64;
 
-        public bool IsOperation64 {
-            get {
-                #if CPU_FORCE_32 && !CPU_ALWAYS_64
-                    return false;
-                #else
-                    #if CPU_ALWAYS_64
-                        return true;
-                    #else
-                        return m_Cop0Regs.Status.IsOperation64;
-                    #endif
-                #endif
-            }
-        }
+        public bool IsOperation64 => m_Cop0Regs.Status.IsOperation64;
 
         public Clock CoreClock => m_CoreClock;
 
-        public DataMemory DataMem => m_DataMemory;
+        // public DataMemory DataMem => m_DataMemory;
 
         public sealed override ExecutionState State => m_State;
 
@@ -360,28 +339,9 @@ namespace cor64.Mips.R4300I
         public override void AttachBootManager(BootManager bootManager)
         {
             bootManager.PCWrite += (pc) => PC = pc;
-
-            bootManager.MemWrite += (addr, val) =>
-            {
-                var debugMode = DebugMode;
-                SetDebuggingMode(false);
-
-                /* Incoming values are expected to be big-endian */
-
-                #if LITTLE_ENDIAN
-                m_DataMemory.Data32 = val;
-                #else
-                m_DataMemory.Data32 = val.ByteSwapped();
-                #endif
-
-                m_DataMemory.WriteData(addr, 4);
-
-                SetDebuggingMode(debugMode);
-            };
-
-            bootManager.RegWrite += (off, val) => State.SetGpr64(off, val);
-
-            bootManager.CP0Write += (i, x) => m_Cop0Regs.Write(i, x);
+            bootManager.MemWrite += (addr, val) => PhysicalMemory.U32(addr, val);
+            bootManager.RegWrite += State.SetGpr64;
+            bootManager.CP0Write += m_Cop0Regs.Write;
         }
 
         /********************************************************
@@ -391,155 +351,89 @@ namespace cor64.Mips.R4300I
         #region Memory Logic
 
         /* For testing-purposes */
-        public bool BypassMMU { get; set; }
+        public bool BypassMMU => m_MMU.IsDisabled;
 
-        public override void AttachIStream(Stream memoryStream)
-        {
-            base.AttachIStream(new SimpleVMemStream(this, memoryStream, false));
+        public void SetMMUBypass(bool bypass) {
+            m_MMU.Disable(bypass);
         }
 
-        public void OverrideIStream(Stream memoryStream)
-        {
-            base.AttachIStream(memoryStream);
+        protected bool TryVirtToPhys(bool isWrite, long virtualAddress, out long physicalAddress) {
+            return m_MMU.VirtualToPhysical(isWrite, virtualAddress, out physicalAddress);
         }
 
-        public override void AttachDStream(Stream memoryStream)
-        {
-            m_DataMemory = new DataMemory(new SimpleVMemStream(this, memoryStream, true));
+        protected void TLBTick() {
+            m_MMU.TLB.Tick();
         }
 
-        public void OverrideDStream(DataMemory dataMemory)
+        protected override uint FetchInstruction(long address)
         {
-            m_DataMemory = dataMemory;
+            return PhysicalMemory.U32(address);
         }
 
-        protected DataMemory DMemoryStream => m_DataMemory;
-
-        private long TLBTranslate(long vaddress, bool isStore)
-        {
-            #if DISABLE_TLB_SUPPORT
-            throw new EmuException("TLB not supported");
-            #endif
-
-            var result =  TLB.TranslateVirtualAddress(vaddress, isStore);
-
-            #if DEBUG_TLB_TRANSLATE
-            Log.Debug("TLB Translation: {0:X8} -> {1:X8}", vaddress, result);
-            #endif
-
-            // TLB raised an exception,  don't do anything else
-            if (m_Coprocessor0.TLBException) {
-                throw new TLBRaisedException();
-                // TODO: Trace log should make note
-            }
-
-            return result;
+        public void AttachMemory(N64MemoryController controller) {
+            PhysicalMemory = controller;
         }
 
-        private sealed class SimpleVMemStream : VMemStream
-        {
-            private readonly InterpreterBaseR4300I m_Core;
-            private bool m_UseCache;
-            private bool m_IsDataPath;
-            private readonly uint m_Size = 0xFFFFFFFF;
-            private readonly Stream m_BaseStream;
+        protected TLBCache TLB => m_MMU.TLB;
 
-            public SimpleVMemStream(InterpreterBaseR4300I core, Stream stream, bool isDataPath) : base(stream)
-            {
-                m_BaseStream = stream;
-                m_Core = core;
-                m_IsDataPath = isDataPath;
+        // CLEANUP: We need wrapped memory IO calls to still allow data logging
 
-                if (m_Core.BypassMMU)
-                {
-                    m_Size = (uint)stream.Length;
-                }
-            }
+        // private sealed class SimpleVMemStream : VMemStream
+        // {
+        //     private readonly InterpreterBaseR4300I m_Core;
+        //     private bool m_UseCache;
+        //     private bool m_IsDataPath;
+        //     private readonly uint m_Size = 0xFFFFFFFF;
+        //     private readonly Stream m_BaseStream;
 
-            public override long Length => m_Size;
+        //     public SimpleVMemStream(InterpreterBaseR4300I core, Stream stream, bool isDataPath) : base(stream)
+        //     {
+        //         m_BaseStream = stream;
+        //         m_Core = core;
+        //         m_IsDataPath = isDataPath;
 
-            public override long Position { get; set; }
+        //         if (m_Core.BypassMMU)
+        //         {
+        //             m_Size = (uint)stream.Length;
+        //         }
+        //     }
 
-            public override int Read(byte[] buffer, int offset, int count)
-            {
-                var read = base.Read(buffer, offset, count);
+        //     public override long Length => m_Size;
 
-                if ((m_Core.IsMemTraceActive || m_Core.InstDebugMode != InstructionDebugMode.None) && m_IsDataPath)
-                {
-                    m_Core.TraceMemoryHit((uint)(ulong)m_BaseStream.Position, false, DebugValue(buffer, offset, count));
-                }
+        //     public override int Read(byte[] buffer, int offset, int count)
+        //     {
+        //         var read = base.Read(buffer, offset, count);
 
-                return read;
-            }
+        //         if ((m_Core.IsMemTraceActive || m_Core.InstDebugMode != InstructionDebugMode.None) && m_IsDataPath)
+        //         {
+        //             m_Core.TraceMemoryHit((uint)(ulong)Position, false, DebugValue(buffer, offset, count));
+        //         }
 
-            public override void Write(byte[] buffer, int offset, int count)
-            {
-                base.Write(buffer, offset, count);
+        //         return read;
+        //     }
 
-                if ((m_Core.IsMemTraceActive || m_Core.InstDebugMode != InstructionDebugMode.None) && m_IsDataPath)
-                {
-                    m_Core.TraceMemoryHit((uint)(ulong)m_BaseStream.Position, true, DebugValue(buffer, offset, count));
-                }
-            }
+        //     public override void Write(byte[] buffer, int offset, int count)
+        //     {
+        //         base.Write(buffer, offset, count);
 
-            private String DebugValue(byte[] buffer, int offset, int size)
-            {
-                StringBuilder sb = new StringBuilder();
+        //         if ((m_Core.IsMemTraceActive || m_Core.InstDebugMode != InstructionDebugMode.None) && m_IsDataPath)
+        //         {
+        //             m_Core.TraceMemoryHit((uint)(ulong)Position, true, DebugValue(buffer, offset, count));
+        //         }
+        //     }
 
-                for (int i = 0; i < size; i++)
-                {
-                    sb.Append(buffer[offset + i].ToString("X2"));
-                }
+        //     private String DebugValue(byte[] buffer, int offset, int size)
+        //     {
+        //         StringBuilder sb = new StringBuilder();
 
-                return sb.ToString();
-            }
+        //         for (int i = 0; i < size; i++)
+        //         {
+        //             sb.Append(buffer[offset + i].ToString("X2"));
+        //         }
 
-            protected override long TranslateAddress(long address, bool isStore)
-            {
-                if (m_Core.BypassMMU)
-                    return address;
-
-                m_UseCache = false;
-
-                /* Kernel VMap 32-bit map */
-                // TODO: handle maps for user and supervisor mode
-                // TODO: Should somehow put the mapping logic in conf files
-
-                if (m_Core.m_Coprocessor0.IsSupervisorMode)
-                {
-                    throw new NotSupportedException("Supervisor vmap not yet supported");
-                }
-                else if (m_Core.m_Coprocessor0.IsUserMode)
-                {
-                    throw new NotSupportedException("User vmap not yet supported");
-                }
-                else
-                {
-                    byte index = (byte)((uint)address >> 28);
-
-                    switch (index)
-                    {
-                        default: throw new ArgumentException("invalid vmem address");
-                        case 0x0:
-                        case 0x1:
-                        case 0x2:
-                        case 0x3:
-                        case 0x4:
-                        case 0x5:
-                        case 0x6:
-                        case 0x7: return m_Core.TLBTranslate(address, isStore);
-                        case 0x8:
-                        case 0x9: m_UseCache = true; return address - 0x80000000;
-                        case 0xA: return address & 0x1FFFFFFF;
-                        case 0xB: return address & 0x1FFFFFFF;
-                        case 0xC:
-                        case 0xD:
-                        case 0xE:
-                        case 0xF: return m_Core.TLBTranslate(address, isStore);
-                    }
-                }
-            }
-        }
+        //         return sb.ToString();
+        //     }
+        // }
 
         #endregion
 
@@ -547,23 +441,7 @@ namespace cor64.Mips.R4300I
          * Debugger Interface
          ********************************************************/
 
-        public override string GetGPRName(int i)
-        {
-            return ABI.GetLabel("o32", ABI.RegType.GPR, i);
-        }
-
-        public String DebugMemReadHex(long address, int size)
-        {
-            m_DataMemory.ReadData(address, size);
-            return m_DataMemory.Data64.ToString("X16");
-        }
-
         public override MipsDebugger Debugger => m_Debugger;
-
-        protected void InstructionIgnore(DecodedInstruction inst) {
-            //Log.Debug("Ignoring instruction: {0:X8} {1}", m_Pc, Disassembler.GetFullDisassembly(inst));
-        }
-
 
         public abstract void BitwiseLogic(DecodedInstruction inst);
         public abstract void Add32(DecodedInstruction inst);

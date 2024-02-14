@@ -52,6 +52,7 @@ using cor64.HLE;
     RSPCP2VXOR
 */
 
+// XXX: These only verified by krom tests
 /* Vector Unit Testing
     VSUT: Unsupported
     VADDB: Unsupported
@@ -151,8 +152,8 @@ namespace cor64.Mips.Rsp
         private bool m_lastDoublePrecision = false;
         private bool m_InterruptOnBroke = false;
         private bool m_SkipForcedWait = false;
-
         private readonly ExecutionState m_State = new ExecutionState();
+        private long m_LastFetchAddress;
 
         private TaskType m_SpTaskType;
 
@@ -199,6 +200,17 @@ namespace cor64.Mips.Rsp
             m_VecRegs = rspVecRegs;
         }
 
+        protected override uint FetchInstruction(long address)
+        {
+            return IMEM.U32(address & PC_ALIGN_MASK);
+        }
+
+        public override void AttachMemory(N64MemoryController memory)
+        {
+            base.AttachMemory(memory);
+            Cxd4StaticRsp.SetDMem(DMEM);
+        }
+
         public override void AttachInterface(MipsInterface rcpInterface, SPInterface iface, DPCInterface rdpInterface)
         {
             base.AttachInterface(rcpInterface, iface, rdpInterface);
@@ -221,7 +233,7 @@ namespace cor64.Mips.Rsp
                     Status.StatusFlags &= ~StatusFlags.Broke;
                 }
 
-                if (Status.TestCmdFlags(StatusCmdFlags.ClearIntterupt)) {
+                if (Status.TestCmdFlags(StatusCmdFlags.ClearInterrupt)) {
                     RcpInterface.ClearInterrupt(MipsInterface.INT_SP);
                 }
                 else if (Status.TestCmdFlags(StatusCmdFlags.SetInterrupt)) {
@@ -253,17 +265,42 @@ namespace cor64.Mips.Rsp
                 {
                     // Allow SP to start execution
                     ReportSpTaskType();
-                    Status.ClearCmdFlags();
-                    SetHaltMode(false);
+
+                    // Start HLE graphics task if using HLE graphics
+                    if (HLEGraphicsDevice != null && IsGraphicsTask) {
+                        HLEGraphicsDevice.ExecuteGfxTask();
+                        SetUltraTaskDone();
+                        RspBreak();
+                    }
+                    #if SKIP_ULTRA_AUDIO
+                    else if (IsAudioTask) {
+                        // Audio task skip
+                        RcpInterface.SetInterrupt(MipsInterface.INT_AI, true);
+                        SetUltraTaskDone();
+                        RspBreak();
+                    }
+                    #endif
+                    else {
+                        Status.StatusFlags &= ~StatusFlags.Broke;  // It seems this is expected to be cleared when unhalted
+                        Status.StatusFlags &= ~StatusFlags.Halt;
+                    }
                 }
                 else if (Status.TestCmdFlags(StatusCmdFlags.SetHalt))
                 {
-                    SetHaltMode(true);
+                    Status.StatusFlags |= StatusFlags.Halt;
+                    StopRsp();
                 }
 
                 /* Clear out the written command flags */
                 Status.ClearCmdFlags();
+
+                /* Check RSP can be unhalted */
+                CheckRspCanRun();
             };
+        }
+
+        private void SetUltraTaskDone() {
+            Status.StatusFlags |= StatusFlags.Signal2Set;
         }
 
         private void DebugUltraSignaling() {
@@ -335,10 +372,7 @@ namespace cor64.Mips.Rsp
         }
 
         private void ReportSpTaskType() {
-            DMem.ReadData(0xFC0, 4);
-            core_MemAccessNote = null;
-
-            var type = DMem.Data32;
+            var type = DMEM.U32(0xFC0);
 
             // PrintSpTaskType(type);
 
@@ -353,7 +387,7 @@ namespace cor64.Mips.Rsp
             }
         }
 
-        private void PrintSpTaskType(int type) {
+        private void PrintSpTaskType(uint type) {
             switch (type) {
                 case 1: Log.Debug("Executing Graphics SP task"); break;
                 case 2: Log.Debug("Executing Audio SP task"); break;
@@ -365,6 +399,8 @@ namespace cor64.Mips.Rsp
         }
 
         public bool IsGraphicsTask => m_SpTaskType == TaskType.Graphics;
+
+        public bool IsAudioTask => m_SpTaskType == TaskType.Audio;
 
         public override void Init()
         {
@@ -392,10 +428,11 @@ namespace cor64.Mips.Rsp
 
         // TODO: Step with locking and step with polling
 
-        public override void ManualStart(ulong pc)
+        public override void ManualStart(long pc)
         {
             PC = pc & PC_ALIGN_MASK;
             IsHalted = false;
+            m_HaltWait.Set();
         }
 
         protected void ExecuteNextInst()
@@ -405,12 +442,17 @@ namespace cor64.Mips.Rsp
             {
                 if (BranchDelay)
                 {
-                    BranchDelay = false;
-
                     if (!ExecuteInst())
                     {
                         throw new Exception("Failed to execute instruction in delay slot");
                     }
+
+                    if (IsHalted) {
+                        Interface.SetPC((uint)PC);
+                        return;
+                    }
+
+                    BranchDelay = false;
                 }
 
                 TakeBranch = false;
@@ -425,16 +467,19 @@ namespace cor64.Mips.Rsp
                 {
                     PC += 4;
                     PC &= PC_ALIGN_MASK;
+
+                    if (IsHalted) {
+                        Interface.SetPC((uint)PC);
+                    }
                 }
                 else
                 {
                     throw new Exception(
-                        String.Format("Failed to execute instruction (INV:{3}:OOB:{4}): 0x{0:X8} 0x{1:X8} {2}", 
-                            m_FailedInstruction.Address, 
-                            m_FailedInstruction.Inst.inst, 
+                        String.Format("Failed to execute instruction (INV:{3}): 0x{0:X8} 0x{1:X8} {2}",
+                            PC, 
+                            m_FailedInstruction.Inst.inst,
                             DisassembleFailedInst(),
-                            m_FailedInstruction.IsInvalid,
-                            m_FailedInstruction.IsNull));
+                            m_FailedInstruction.IsInvalid));
                 }
             }
         }
@@ -443,7 +488,7 @@ namespace cor64.Mips.Rsp
         {
             try
             {
-                var dis = Disassembler.GetFullDisassembly(m_FailedInstruction);
+                var dis = Disassembler.Disassemble(m_FailedInstruction);
 
                 if (String.IsNullOrEmpty(dis))
                     return "?";
@@ -464,6 +509,8 @@ namespace cor64.Mips.Rsp
         {
             DecodedInstruction decoded;
 
+            m_LastFetchAddress = PC;
+
             if (m_InjectedInst.HasValue)
             {
                 decoded = m_InjectedInst.Value;
@@ -471,12 +518,12 @@ namespace cor64.Mips.Rsp
             }
             else
             {
-                decoded = Decode();
+                decoded = Decode(PC);
             }
 
             LastReadInst = decoded;
 
-            if (ValidateInstruction(decoded))
+            if (!decoded.IsInvalid)
             {
                 var call = CallTable[decoded];
 
@@ -493,12 +540,13 @@ namespace cor64.Mips.Rsp
                 {
                     CurrentInst = decoded;
 
+                    // Break is executed reguardless of being nullified
                     if (!NullifyNext)
                     {
                         #if !OPTIMAL
                         Debugger.CheckInstructionBreakpoints(CurrentInst);
 
-                        TraceInstruction(decoded, false);
+                        TraceInstruction(m_LastFetchAddress, decoded);
 
                         #endif
 
@@ -510,7 +558,6 @@ namespace cor64.Mips.Rsp
                     else
                     {
                         NullifyNext = false;
-                        TraceInstruction(decoded, true);
                     }
 
                     return true;
@@ -523,7 +570,7 @@ namespace cor64.Mips.Rsp
             }
         }
 
-        [Conditional("DEBUG")]
+        [Conditional("DEBUG"), Conditional("TESTING")]
         private void DebugInstruction(DecodedInstruction instruction)
         {
             if (core_InstDebugMode != InstructionDebugMode.None) {
@@ -537,31 +584,48 @@ namespace cor64.Mips.Rsp
                 // if (memNote != null)
                 Console.WriteLine("RSP {0:X8} {1} {2}",
                     PC,
-                    Disassembler.GetFullDisassembly(instruction),
+                    Disassembler.Disassemble(instruction),
                     memNote ?? ""
                     );
             }
         }
 
-        private void SetHaltMode(bool halted)
-        {
-            IsHalted = halted;
+        // private void SetHaltMode(bool halted)
+        // {
+        //     // XXX: The RSP starts executiong if unhalted, unbroken
 
-            // Log.Debug("New RSP halt status: " + (halted ? "Halted" : "Not Halted"));
+        //     if (halted)
+        //     {
+                
+        //         //m_HaltWait.Reset();
+        //         // m_CpuRspWait.Set();
+        //     }
+        //     else
+        //     {
+        //         Status.StatusFlags &= ~StatusFlags.Halt;
+        //         //m_HaltWait.Set();
+        //         // CpuWaitForFinish();
+        //     }
+        // }
 
-            if (halted)
-            {
-                Status.StatusFlags |= StatusFlags.Halt;
-                m_HaltWait.Reset();
-                // m_CpuRspWait.Set();
-            }
-            else
-            {
-                Status.StatusFlags &= ~StatusFlags.Halt;
-                Status.StatusFlags &= ~StatusFlags.Broke;
+        private void CheckRspCanRun() {
+            if (IsHalted) {
+                if ((Status.StatusFlags & StatusFlags.Halt) == StatusFlags.Halt) {
+                    return;
+                }
+
+                if ((Status.StatusFlags & StatusFlags.Broke) == StatusFlags.Broke) {
+                    return;
+                }
+
+                IsHalted = false;
                 m_HaltWait.Set();
-                // CpuWaitForFinish();
             }
+        }
+
+        private void StopRsp() {
+            IsHalted = true;
+            m_HaltWait.Reset();
         }
 
         public void CpuWaitForFinish() {
@@ -685,9 +749,9 @@ namespace cor64.Mips.Rsp
             // Always true for RSP
             BranchDelay = true;
 
-            if (!TakeBranch) {
-                TargetAddress = 0;
-            }
+            // if (!TakeBranch) {
+            //     TargetAddress = 0;
+            // }
         }
 
         public override void Jump(DecodedInstruction inst)
@@ -701,8 +765,8 @@ namespace cor64.Mips.Rsp
             TargetAddress &= PC_ALIGN_MASK;
 
             if (isLink) {
-                if (isRegister && (inst.Target & 0b11) != 0) {
-                    Writeback(inst.Target, (uint)(PC + 8) & PC_ALIGN_MASK);
+                if (isRegister && inst.Destination != 0) {
+                    Writeback(inst.Destination, (uint)(PC + 8) & PC_ALIGN_MASK);
                 }
                 else {
                     Writeback(31, (uint)(PC + 8) & PC_ALIGN_MASK);
@@ -712,7 +776,7 @@ namespace cor64.Mips.Rsp
 
         public override void Load(DecodedInstruction inst)
         {
-            ulong address;
+            long address;
             int size;
 
             bool upperImm = inst.IsImmediate();
@@ -731,19 +795,17 @@ namespace cor64.Mips.Rsp
 
                 long baseAddress = (long)ReadGPR(inst.Source);
                 long offset = (short)inst.Immediate;
-                address = (ulong)(baseAddress + offset);
+                address = baseAddress + offset;
                 address &= DATA_ALIGN_MASK;
-
-                DMem.ReadData((long)address, size);
 
                 if (unsigned)
                 {
                     switch (size)
                     {
                         default: throw new InvalidOperationException("How did this happen (unsigned)?");
-                        case 1: Writeback(inst.Target, DMem.Data8); break;
-                        case 2: Writeback(inst.Target, DMem.Data16); break;
-                        case 4: Writeback(inst.Target, DMem.Data32); break;
+                        case 1: Writeback(inst.Target, DMEM.U8(address)); break;
+                        case 2: Writeback(inst.Target, DMEM.U16(address)); break;
+                        case 4: Writeback(inst.Target, DMEM.U32(address)); break;
                     }
                 }
                 else
@@ -751,9 +813,9 @@ namespace cor64.Mips.Rsp
                     switch (size)
                     {
                         default: throw new InvalidOperationException("How did this happen?");
-                        case 1: Writeback(inst.Target, (uint)(sbyte)DMem.Data8); break;
-                        case 2: Writeback(inst.Target, (uint)(short)DMem.Data16); break;
-                        case 4: Writeback(inst.Target, (uint)(int)DMem.Data32); break;
+                        case 1: Writeback(inst.Target, (uint)(sbyte)DMEM.U8(address)); break;
+                        case 2: Writeback(inst.Target, (uint)(short)DMEM.U16(address)); break;
+                        case 4: Writeback(inst.Target, (uint)(int)DMEM.U32(address)); break;
                     }
                 }
             }
@@ -768,10 +830,19 @@ namespace cor64.Mips.Rsp
             uint operandA = ReadGPR(inst.Source);
             uint operandB = isImmediate ? (uint)(short)inst.Immediate : ReadGPR(inst.Target);
 
-            if (operandA < operandB)
-            {
-                result = 1;
+            if (inst.IsUnsigned()) {
+                if (operandA < operandB)
+                {
+                    result = 1;
+                }
             }
+            else {
+                if ((int)operandA < (int)operandB) {
+                    result = 1;
+                }
+            }
+
+
 
             Writeback(dest, result);
         }
@@ -812,22 +883,20 @@ namespace cor64.Mips.Rsp
 
         public override void Store(DecodedInstruction inst)
         {
-            ulong address;
+            long address;
             int size = inst.DataSize();
             int baseAddress = (int)ReadGPR(inst.Source);
             int offset = (short)inst.Immediate;
-            address = (ulong)(baseAddress + offset);
+            address = baseAddress + offset;
             address &= DATA_ALIGN_MASK;
 
             switch (size)
             {
                 default: throw new InvalidOperationException("How did this happen?");
-                case 1: DMem.Data8 = (byte)ReadGPR(inst.Target); break;
-                case 2: DMem.Data16 = (ushort)ReadGPR(inst.Target); break;
-                case 4: DMem.Data32 = (uint)ReadGPR(inst.Target); break;
+                case 1: DMEM.U8(address, (byte)ReadGPR(inst.Target)); break;
+                case 2: DMEM.U16(address, (ushort)ReadGPR(inst.Target)); break;
+                case 4: DMEM.U32(address, (uint)ReadGPR(inst.Target)); break;
             }
-
-            DMem.WriteData((long)address, size);
         }
 
         public override void Subtract(DecodedInstruction inst)
@@ -953,7 +1022,7 @@ namespace cor64.Mips.Rsp
 
                             var select = regDest - 8;
 
-                            //Log.Debug("RSP -> RDP Command: {0} {1:X8}", select, value);
+                            // Log.Debug("RSP -> RDP Command: {0} {1:X8}", ABI.GetLabel("o32", ABI.RegType.SpCop0, regDest), value);
                             RdpInterface.RegWriteFromRsp(select, value);
                     	}
                     	else
@@ -1009,10 +1078,20 @@ namespace cor64.Mips.Rsp
 
         public override void Break(DecodedInstruction inst)
         {
+            if (BranchDelay && TakeBranch) {
+                PC = BranchTarget;
+                PC &= PC_ALIGN_MASK;
+            }
+
+            RspBreak();
+        }
+
+        private void RspBreak() {
             /* Break is used to halt the RSP processor */
             Status.StatusFlags |= StatusFlags.Broke;
+            Status.StatusFlags |= StatusFlags.Halt;
 
-            SetHaltMode(true);
+            StopRsp();
 
             if (m_InterruptOnBroke) {
                 RcpInterface.SetInterrupt(MipsInterface.INT_SP, true);
@@ -1037,56 +1116,54 @@ namespace cor64.Mips.Rsp
             var target =  m_VecRegs[inst.Target];
             var element = inst.Inst.lsde;
             var baseAddress = ReadGPR(inst.Source);
-            var raw = inst.Inst.inst;
             // var offset = inst.Offset;
 
             long address;
 
             // From cxd4 RSP, this fixes a triangle issue
-            short offset = (short)((raw & 64) > 0 ? -(short)((~raw % 64) + 1) : (short)(raw % 64));
-
-            SetMemTraceAppendMode(true);
+            short offset = Cxd4StaticRsp.ComputeOffset(inst.Inst.inst);
 
             if (executeFlag != ExecutionFlags.None) {
                 switch (executeFlag) {
                     case ExecutionFlags.Data8: {
                         address = VectorLoadStoreHelper.ComputeAlignedVectorAddress(baseAddress, offset);
-                        VectorLoadStoreHelper.LoadByteIntoVector(DMem, address, target, element);
+                        VectorLoadStoreHelper.LoadByteIntoVector(DMEM, address, target, element);
                         break;
                     }
 
                     case ExecutionFlags.Data16: {
                         offset <<= 1;
                         address = VectorLoadStoreHelper.ComputeAlignedVectorAddress(baseAddress, offset);
-                        VectorLoadStoreHelper.LoadU16IntoVector(DMem, address, target, element);
+                        VectorLoadStoreHelper.LoadU16IntoVector(DMEM, address, target, element);
                         break;
                     }
 
                     case ExecutionFlags.Data32: {
                         offset <<= 2;
                         address = VectorLoadStoreHelper.ComputeAlignedVectorAddress(baseAddress, offset);
-                        VectorLoadStoreHelper.LoadU32IntoVector(DMem, address, target, element);
+                        VectorLoadStoreHelper.LoadU32IntoVector(DMEM, address, target, element);
                         break;
                     }
 
                     case ExecutionFlags.Data64: {
                         offset <<= 3;
                         address = VectorLoadStoreHelper.ComputeAlignedVectorAddress(baseAddress, offset);
-                        VectorLoadStoreHelper.LoadU64IntoVector(DMem, address, target, element);
+                        VectorLoadStoreHelper.LoadU64IntoVector(DMEM, address, target, element);
                         break;
                     }
 
                     case ExecutionFlags.Data128: {
                         offset <<= 4;
                         address = VectorLoadStoreHelper.ComputeAlignedVectorAddress(baseAddress, offset);
-                        VectorLoadStoreHelper.LoadU128IntoVector(DMem, address, target, element);
+                        VectorLoadStoreHelper.LoadU128IntoVector(DMEM, address, target, element);
                         break;
                     }
 
                     case ExecutionFlags.Unsigned: {
-                        offset <<= 3;
-                        address = VectorLoadStoreHelper.ComputeAlignedVectorAddress(baseAddress, offset);
-                        VectorLoadStoreHelper.LoadPacked_Unsigned(DMem, address, target);
+                        // offset <<= 3;
+                        // address = VectorLoadStoreHelper.ComputeAlignedVectorAddress(baseAddress, offset);
+                        // VectorLoadStoreHelper.LoadPacked_Unsigned(DMEM, address, target, element);
+                        Cxd4StaticRsp.LUV(target, (uint)element, offset, baseAddress);
                         break;
                     }
 
@@ -1099,21 +1176,21 @@ namespace cor64.Mips.Rsp
                     case VectorOpFlags.Forth: {
                         offset <<= 4;
                         address = VectorLoadStoreHelper.ComputeAlignedVectorAddress(baseAddress, offset);
-                        VectorLoadStoreHelper.LoadPacked_Forth(DMem, address, target, element);
+                        VectorLoadStoreHelper.LoadPacked_Forth(DMEM, address, target, element);
                         break;
                     }
 
                     case VectorOpFlags.Half: {
                         offset <<= 4;
                         address = VectorLoadStoreHelper.ComputeAlignedVectorAddress(baseAddress, offset);
-                        VectorLoadStoreHelper.LoadPacked_Half(DMem, address, target);
+                        VectorLoadStoreHelper.LoadPacked_Half(DMEM, address, target);
                         break;
                     }
 
                     case VectorOpFlags.Upper: {
                         offset <<= 3;
                         address = VectorLoadStoreHelper.ComputeAlignedVectorAddress(baseAddress, offset);
-                        VectorLoadStoreHelper.LoadPacked_Upper(DMem, address, target);
+                        VectorLoadStoreHelper.LoadPacked_Upper(DMEM, address, target);
                         break;
                     }
                     case VectorOpFlags.Wrap: {
@@ -1123,7 +1200,7 @@ namespace cor64.Mips.Rsp
                     case VectorOpFlags.Transpose: {
                         offset <<= 4;
                         address = VectorLoadStoreHelper.ComputeAlignedVectorAddress(baseAddress, offset);
-                        VectorLoadStoreHelper.LoadTranposed(DMem, address, m_VecRegs, inst.VTarget, element);
+                        VectorLoadStoreHelper.LoadTranposed(DMEM, address, m_VecRegs, inst.VTarget, element);
                         break;
                     }
 
@@ -1135,8 +1212,6 @@ namespace cor64.Mips.Rsp
                     default: throw new EmuException("Invalid RSP VectorLoad Vector Flag");
                 }
             }
-
-            SetMemTraceAppendMode(false);
         }
 
         public override void VectorStore(DecodedInstruction inst)
@@ -1154,48 +1229,46 @@ namespace cor64.Mips.Rsp
 
             long address;
 
-            SetMemTraceAppendMode(true);
-
             if (executeFlag != ExecutionFlags.None) {
                 switch (executeFlag) {
                     case ExecutionFlags.Data8: {
                         address = VectorLoadStoreHelper.ComputeAlignedVectorAddress(baseAddress, offset);
-                        VectorLoadStoreHelper.StoreByteFromVector(DMem, address, target, element);
+                        VectorLoadStoreHelper.StoreByteFromVector(DMEM, address, target, element);
                         break;
                     }
 
                     case ExecutionFlags.Data16: {
                         offset <<= 1;
                         address = VectorLoadStoreHelper.ComputeAlignedVectorAddress(baseAddress, offset);
-                        VectorLoadStoreHelper.StoreU16FromVector(DMem, address, target, element);
+                        VectorLoadStoreHelper.StoreU16FromVector(DMEM, address, target, element);
                         break;
                     }
 
                     case ExecutionFlags.Data32: {
                         offset <<= 2;
                         address = VectorLoadStoreHelper.ComputeAlignedVectorAddress(baseAddress, offset);
-                        VectorLoadStoreHelper.StoreU32FromVector(DMem, address, target, element);
+                        VectorLoadStoreHelper.StoreU32FromVector(DMEM, address, target, element);
                         break;
                     }
 
                     case ExecutionFlags.Data64: {
                         offset <<= 3;
                         address = VectorLoadStoreHelper.ComputeAlignedVectorAddress(baseAddress, offset);
-                        VectorLoadStoreHelper.StoreU64FromVector(DMem, address, target, element);
+                        VectorLoadStoreHelper.StoreU64FromVector(DMEM, address, target, element);
                         break;
                     }
 
                     case ExecutionFlags.Data128: {
                         offset <<= 4;
                         address = VectorLoadStoreHelper.ComputeAlignedVectorAddress(baseAddress, offset);
-                        VectorLoadStoreHelper.StoreU128FromVector(DMem, address, target, element);
+                        VectorLoadStoreHelper.StoreU128FromVector(DMEM, address, target, element);
                         break;
                     }
 
                     case ExecutionFlags.Unsigned: {
                         offset <<= 3;
                         address = VectorLoadStoreHelper.ComputeAlignedVectorAddress(baseAddress, offset);
-                        VectorLoadStoreHelper.StorePacked_Unsigned(DMem, address, target);
+                        VectorLoadStoreHelper.StorePacked_Unsigned(DMEM, address, target);
                         break;
                     }
 
@@ -1208,44 +1281,47 @@ namespace cor64.Mips.Rsp
                     case VectorOpFlags.Forth: {
                         offset <<= 4;
                         address = VectorLoadStoreHelper.ComputeAlignedVectorAddress(baseAddress, offset);
-                        VectorLoadStoreHelper.StorePacked_Forth(DMem, address, target, element);
+                        VectorLoadStoreHelper.StorePacked_Forth(DMEM, address, target, element);
                         break;
                     }
 
                     case VectorOpFlags.Half: {
                         offset <<= 4;
                         address = VectorLoadStoreHelper.ComputeAlignedVectorAddress(baseAddress, offset);
-                        VectorLoadStoreHelper.StorePacked_Half(DMem, address, target); 
+                        VectorLoadStoreHelper.StorePacked_Half(DMEM, address, target); 
                         break;
                     }
 
                     case VectorOpFlags.Upper: {
                         offset <<= 3;
                         address = VectorLoadStoreHelper.ComputeAlignedVectorAddress(baseAddress, offset);
-                        VectorLoadStoreHelper.StorePacked_Upper(DMem, address, target);
+                        VectorLoadStoreHelper.StorePacked_Upper(DMEM, address, target);
                         break;
                     }
                     case VectorOpFlags.Wrap: {
-                        throw new NotSupportedException("SWV is an undocumented opcode");
+                        offset <<= 4;
+                        address = VectorLoadStoreHelper.ComputeAlignedVectorAddress(baseAddress, offset);
+                        VectorLoadStoreHelper.StoreWrapped(DMEM, address, m_VecRegs, inst.VTarget, element);
+                        break;
                     }
 
                     case VectorOpFlags.Transpose: {
                         offset <<= 4;
                         address = VectorLoadStoreHelper.ComputeAlignedVectorAddress(baseAddress, offset);
-                        VectorLoadStoreHelper.StoreTranposed(DMem, address, m_VecRegs, inst.VTarget, element);
+                        VectorLoadStoreHelper.StoreTranposed(DMEM, address, m_VecRegs, inst.VTarget, element);
                         break;
                     }
 
                     case VectorOpFlags.Rest: {
-                        Log.Debug("TODO: SRV");
+                        offset <<= 4;
+                        address = VectorLoadStoreHelper.ComputeAlignedVectorAddress(baseAddress, offset);
+                        VectorLoadStoreHelper.StoreRest(DMEM, address, m_VecRegs, inst.VTarget, element);
                         break;
                     }
 
                     default: throw new EmuException("Invalid RSP VectorStore Vector Flag");
                 }
             }
-
-            SetMemTraceAppendMode(false);
         }
 
         public override void VectorAdd(DecodedInstruction inst) {

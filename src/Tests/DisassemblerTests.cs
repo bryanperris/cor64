@@ -367,13 +367,14 @@ namespace Tests
             var streamOut = assembler.Output;
             streamOut.Position = 0;
 
+            BinaryReader reader = new BinaryReader(streamOut);
+
             /* Put the output stream into a swapped buffer */
             using (streamOut)
             {
                 /* Now we start disassembling */
-                disassembler.SetStreamSource(streamOut);
-                var decode = disassembler.Disassemble(0, 1)[0];
-                var result = decode.IsNull ? "" : disassembler.GetFullDisassembly(decode).Split(' ')[0];
+                var decode = disassembler.Decode(reader.ReadUInt32().ByteSwapped());
+                var result = decode.IsInvalid ? "" : disassembler.Disassemble(decode).Split(' ')[0];
 
                 /* Since FPU format/condition is undetermined, bypass it */
                 if (decode.Op.Family == OperationFamily.Fpu)
@@ -477,15 +478,16 @@ namespace Tests
             var streamOut = assembler.Output;
             streamOut.Position = 0;
 
+            BinaryReader reader = new BinaryReader(streamOut);
+
             /* Put the output stream into a swapped buffer */
             using (streamOut)
             {
                 /* Now we start disassembling */
                 var disassembler = new Disassembler("o32");
-                disassembler.SetStreamSource(streamOut);
-                var decode = disassembler.Disassemble(0, 1)[0];
+                var decode = disassembler.Decode(reader.ReadUInt32().ByteSwapped());
 
-                Assert.AreEqual(opcode, disassembler.GetFullDisassembly(decode).Split(' ')[0]);
+                Assert.AreEqual(opcode, disassembler.Disassemble(decode).Split(' ')[0]);
             }
         }
 

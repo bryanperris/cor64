@@ -1,6 +1,7 @@
 using System.Reflection.Metadata.Ecma335;
 using System.Text;
 using System;
+using cor64.IO;
 
 namespace cor64.HLE {
     public class FatalPrintf : CpuCodeHook {
@@ -13,7 +14,7 @@ namespace cor64.HLE {
             StringBuilder sb = new StringBuilder();
 
             // Get the string pointer
-            var strPointer = ReadArg32(0);
+            var strPointer = (uint)MemHelper.VirtualToPhysical(ReadArg32(0));
 
             // Iterate the string until null terminator
             while (true) {

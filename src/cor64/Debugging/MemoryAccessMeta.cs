@@ -52,6 +52,8 @@ namespace cor64.Debugging
             m_Value += value;
         }
 
+        public string Value => m_Value;
+
         public override string ToString()
         {
             return m_RegionName;

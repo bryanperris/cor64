@@ -1,3 +1,7 @@
 [submodule "src/externals/rsp"]
 	path = src/externals/rsp
 	url = https://github.com/bryanperris/cor64-cxd4-rsp.git
+
+[submodule "src/externals/glide64"]
+    path = src/externals/glide64
+    url = https://github.com/bryanperris/cor64-glide64.git

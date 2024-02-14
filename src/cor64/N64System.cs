@@ -27,7 +27,7 @@ namespace cor64
 
         public N64System()
         {
-            DeviceMemory = new N64MemoryController();
+            SystemMemory = new N64MemoryController();
             //DeviceMemory.UseSafeAccess();
 
             /* Boot Management */
@@ -63,20 +63,21 @@ namespace cor64
         {
             /* Attach cartridge to system */
             m_Cartridge = cartridge;
-            DeviceMemory.MountCartridge(cartridge);
+            SystemMemory.MountCartridge(cartridge);
             DeviceCPU.SetProgramEntryPoint(cartridge.EntryPoint);
 
-            /* Initlaize core memory */
-            DeviceMemory.Init();
-
             /* Attach RCP to memory */
-            DeviceRcp.AttachToMemory(DeviceMemory);
+            DeviceRcp.AttachToMemory(SystemMemory);
 
-            /* Generate the mem map */
-            DeviceMemory.BuildMemMap();
+            /* Initlaize core memory */
+            SystemMemory.Init();
+
+            /* Cartridge verification */
+            // ((MemMappedCart) SystemMemory.Cart).SelfTest(cartridge.RomStream);
 
             /* Init the RDP */
-            DeviceRcp.DeviceRdp.Init();
+            if (DeviceRcp.GraphicsHLEDevice == null)
+                 DeviceRcp.DeviceRdp.Init();
 
             /* Init the RSP */
             DeviceRcp.DeviceRsp.Init();
@@ -85,14 +86,21 @@ namespace cor64
             DeviceRcp.SerialDevice.Init();
 
             /* Attach memory to CPU */
-            DeviceCPU.AttachIStream(DeviceMemory.CreateMemoryStream());
-            DeviceCPU.AttachDStream(DeviceMemory.CreateMemoryStream());
+            DeviceCPU.AttachMemory(SystemMemory);
 
             /* Attach RCP to CPU */
             DeviceCPU.AttachRcp(DeviceRcp);
 
-            /* Hook into Pif DMA (RDRAM -> PIF RAM) */
-            DeviceRcp.SerialDevice.PifRamWrite += CheckPifEvents;
+            /* Hook up joypads */
+            DeviceRcp.SerialDevice.ReadJoycons += UpdateJoyconPif;
+
+            /* Attach DMA engines */
+            SystemMemory.PIRegs.AttachDma();
+            SystemMemory.SPRegs.AttachDma();
+            SystemMemory.SIRegs.AttachDma();
+
+            /* Init the CPU */
+            DeviceCPU.Init();
 
             /* Perform system boot intialization (Motherboard IPl) */
             m_BootManager.BootCartridge(cartridge, true);
@@ -102,19 +110,17 @@ namespace cor64
 
         public N64System BootForTesting() {
             /* Attach RCP to memory */
-            DeviceRcp.AttachToMemory(DeviceMemory);
-
-            /* Initialize system memory */
-            DeviceMemory.Init();
+            DeviceRcp.AttachToMemory(SystemMemory);
 
             if (DeviceCPU != null) {
                 /* Attach memory to CPU */
-                DeviceCPU.AttachIStream(DeviceMemory.CreateMemoryStream());
-                DeviceCPU.AttachDStream(DeviceMemory.CreateMemoryStream());
+                DeviceCPU.AttachMemory(SystemMemory);
 
                 /* Attach RCP to CPU */
                 DeviceCPU.AttachRcp(DeviceRcp);
             }
+            /* Initialize system memory */
+            SystemMemory.Init();
 
             return this;
         }
@@ -133,7 +139,7 @@ namespace cor64
 
         public Video VI => DeviceRcp.VideoInterface;
 
-        public PIFMemory PIF => (PIFMemory) DeviceMemory.Model.PIF;
+        public PIFController PIF => SystemMemory.PIF;
 
         /// <summary>
         /// If an exception is thrown during a tick, call this to cleanup anything aftwards
@@ -155,8 +161,6 @@ namespace cor64
                 {
                     writer.WriteLine("Trace Log Dump:");
 
-                    DeviceCPU.TraceLog.StoppedAt = DeviceCPU.ReadPC();
-
                     var tracelog = DeviceCPU.TraceLog.GenerateTraceLog();
 
                     for (int i = 0; i < tracelog.Count; i++)
@@ -172,7 +176,7 @@ namespace cor64
             }
         }
 
-        private void CheckPifEvents() {
+        private void UpdateJoyconPif() {
              if (m_JoyControllers[0].CheckPending()) {
                 PIF.JoyWriteButtons(0, m_JoyControllers[0].ReadPending());
             }
@@ -182,7 +186,7 @@ namespace cor64
 
         public InterpreterBaseR4300I DeviceCPU { get; private set; }
 
-        public N64MemoryController DeviceMemory { get; }
+        public N64MemoryController SystemMemory { get; }
 
         public RcpCore DeviceRcp { get; } = new RcpCore();
 

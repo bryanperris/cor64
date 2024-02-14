@@ -1,4 +1,5 @@
 using System;
+using cor64.IO;
 using cor64.Mips;
 
 namespace cor64.HLE.OS.V1 {
@@ -15,7 +16,7 @@ namespace cor64.HLE.OS.V1 {
         public override ReturnControl Execute()
         {
             /* Read Arguments */
-            m_ArgThread = ReadArg32(0);
+            m_ArgThread = (uint)MemHelper.VirtualToPhysical(ReadArg32(0));
 
             // TODO: HLE implementation
 

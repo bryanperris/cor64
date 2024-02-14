@@ -9,35 +9,61 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Runtime.Remoting;
 using NUnit.Framework;
+using cor64;
+using NLog;
 
 namespace Tests
 {
     internal sealed class TestableInterpreter : Interpreter, ITestableCore
     {
+        private static readonly Logger Log = LogManager.GetCurrentClassLogger();
         private TestCase m_TestCase;
         private bool m_UseWords;
-		private MemoryStream m_TestDataMemory = new MemoryStream();
+		private N64MemoryStream m_N64MemoryStream;
+        private static readonly N64MemoryController s_N64Memory;
+
+        static TestableInterpreter() {
+            s_N64Memory = new N64MemoryController();
+            s_N64Memory.Init();
+        }
 
         public TestableInterpreter() : base()
         {
         }
 
+        public static void LogActivity(string name) {
+            Log.Info("{0}", name);
+        }
+
         public void Init(TestCase tester)
         {
-            m_TestCase = tester;
+            LogActivity("Init");
 
-            BypassMMU = true;
+            m_TestCase = tester;
+            s_N64Memory.RDRAM.Clear();
+
+            m_N64MemoryStream = new N64MemoryStream(s_N64Memory);
+
+            SetInstructionDebugMode(InstructionDebugMode.Full);
+
+            // Copy the assembled test program into n64 memory
+            var romStream = tester.GetProgram();
+            romStream.Position = 0;
+
+            #if HOST_LITTLE_ENDIAN
+            romStream = new Swap32Stream(romStream);
+            #endif
+
+            m_N64MemoryStream.Position = 0;
+            byte[] buffer = new byte[romStream.Length];
+            romStream.Read(buffer, 0, buffer.Length);
+            m_N64MemoryStream.WriteDirect(buffer, 0, buffer.Length);
+
+            SetMMUBypass(true);
             //AttachIStream(new StreamEx.Wrapper(cor64.DataEndianess.PreByteSwapStream(tester.GetProgram(), cor64.Cartridge.RomEndianess.Big)));
-            AttachIStream(tester.GetProgram());
-			AttachDStream(m_TestDataMemory);
+            AttachMemory(s_N64Memory);
 
             Cop0.REGS.Status.SetFRMode(tester.UseFPUHalfMode);
-
-            /* Inject zeros into data memory */
-            for (int i = 0; i < 16; i++)
-            {
-                m_TestDataMemory.WriteByte(0);
-            }
 
             if (m_TestCase.IsXfer)
             {
@@ -47,18 +73,20 @@ namespace Tests
 
             if (m_TestCase.IsLoadStore && m_TestCase.InjectDMem)
             {
-                Stream s = m_TestDataMemory;
+                // The injected data is always big endian
+                StringBuilder injectedHex = new StringBuilder();
+                injectedHex.Append("Injected Data Memory: ");
+                for (int i = 0; i < m_TestCase.ExpectedBytes.Length; i++) {
+                    long address = N64Endianess.Address8(m_TestCase.ExepectedBytesOffset + i);
 
-                //switch (m_TestCase.ExpectedBytes.Length)
-                //{
-                //    default: break;
-                //    case 2: s = new Swap16Stream(s); break;
-                //    case 4: s = new Swap32Stream(s); break;
-                //    case 8: s = new Swap64Stream(s); break;
-                //}
+                    s_N64Memory.DirectWriteByte(
+                        address,
+                        m_TestCase.ExpectedBytes[i]
+                    );
 
-                s.Position = m_TestCase.ExepectedBytesOffset;
-                s.Write(m_TestCase.ExpectedBytes, 0, m_TestCase.ExpectedBytes.Length);
+                    injectedHex.Append(s_N64Memory.DirectReadByte(m_TestCase.ExepectedBytesOffset + i).ToString("X2"));
+                }
+               Console.WriteLine(injectedHex.ToString());
             }
 
             if (!m_TestCase.IsFpuTest)
@@ -88,6 +116,8 @@ namespace Tests
 
         private void SetFPRValue(int index, dynamic value)
         {
+            LogActivity(nameof(SetFPRValue));
+
             var type = value.GetType();
 
             if (typeof(uint) == type)
@@ -113,6 +143,8 @@ namespace Tests
 
         private void InjectXferSource(TestCase test)
         {
+            LogActivity(nameof(InjectXferSource));
+
             switch (test.XferSource)
             {
                 case RegBoundType.Gpr:
@@ -137,6 +169,8 @@ namespace Tests
 
         public void SetProcessorMode(ProcessorMode mode)
         {
+            LogActivity(nameof(SetProcessorMode));
+
             /* Right now this is just a hack */
             if ((mode & ProcessorMode.Runtime32) == ProcessorMode.Runtime32)
             {
@@ -151,7 +185,13 @@ namespace Tests
 
         public void StepOnce()
         {
+            LogActivity(nameof(StepOnce));
             Step();
+        }
+
+        public override void Step()
+        {
+            base.Step();
         }
 
         private static String L(ulong value)
@@ -164,11 +204,13 @@ namespace Tests
             return value.ToString("X8");
         }
 
-        private static void AssertStreamBytes(Stream source, int offset, byte[] testBuffer)
+        private static void AssertMemory(N64MemoryController memory, long address, byte[] testBuffer)
         {
-            source.Position = offset;
             byte[] readBuffer = new byte[testBuffer.Length];
-            source.Read(readBuffer, 0, readBuffer.Length);
+
+            for (int i = 0; i < readBuffer.Length; i++) {
+                readBuffer[i] = memory.DirectReadByte(N64Endianess.Address8(address + i));
+            }
 
             Assert.AreEqual(
                 BytesToHex(testBuffer),
@@ -189,6 +231,7 @@ namespace Tests
 
         public void TestExpectations()
         {
+            LogActivity(nameof(TestExpectations));
             if ((m_TestCase.ExpectationFlags & TestCase.Expectations.Exceptions) == TestCase.Expectations.Exceptions)
             {
                 if (!m_TestCase.IsFpuTest)
@@ -270,20 +313,20 @@ namespace Tests
 
                 if ((m_TestCase.ExpectationFlags & TestCase.Expectations.BranchTaken) == TestCase.Expectations.BranchTaken)
                 {
-                    Assert.AreEqual(4UL, BranchTarget);
+                    Assert.AreEqual(4UL, BU_TargetAddress);
                 }
                 else
                 {
-                    Assert.AreEqual(0UL, BranchTarget);
+                    Assert.AreEqual(0UL, BU_TargetAddress);
                 }
 
                 if ((m_TestCase.ExpectationFlags & TestCase.Expectations.DelaySlot) == TestCase.Expectations.DelaySlot)
                 {
-                    Assert.True(BranchDelaySlot);
+                    Assert.True(BU_ExecuteBranchDelay);
                 }
                 else
                 {
-                    Assert.False(BranchDelaySlot);
+                    Assert.False(BU_ExecuteBranchDelay);
                 }
 
                 if ((m_TestCase.ExpectationFlags & TestCase.Expectations.Link) == TestCase.Expectations.Link)
@@ -299,7 +342,7 @@ namespace Tests
 
             if (m_TestCase.IsJump)
             {
-                Assert.AreEqual(L(m_TestCase.ExpectedJump), L(BranchTarget));
+                Assert.AreEqual(L(m_TestCase.ExpectedJump), L((ulong)BU_TargetAddress));
 
                 if ((m_TestCase.ExpectationFlags & TestCase.Expectations.Link) == TestCase.Expectations.Link)
                 {
@@ -316,13 +359,14 @@ namespace Tests
             {
                 if ((m_TestCase.ExpectationFlags & TestCase.Expectations.DMemStore) == TestCase.Expectations.DMemStore)
                 {
-                    AssertStreamBytes(m_TestDataMemory, m_TestCase.ExepectedBytesOffset, m_TestCase.ExpectedBytes);
+                    AssertMemory(s_N64Memory, m_TestCase.ExepectedBytesOffset, m_TestCase.ExpectedBytes);
                 }
             }
         }
 
         private void TestGPRExpectations()
         {
+            LogActivity(nameof(TestGPRExpectations));
             if (!m_UseWords)
                 Assert.AreEqual(L((ulong)m_TestCase.Result.Value), L(ReadGPR64(m_TestCase.Result.Key)));
             else
@@ -354,6 +398,7 @@ namespace Tests
 
         private void TestFPRExpectations()
         {
+            LogActivity(nameof(TestFPRExpectations));
             var v = m_TestCase.Result.Value;
 
             switch (m_TestCase.ExpectedFpuType) {

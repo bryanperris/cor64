@@ -45,7 +45,7 @@ namespace cor64.RCP
         ClearHalt             = 0b1,
         SetHalt               = 0b10,
         ClearBroke            = 0b100,
-        ClearIntterupt        = 0b1000,
+        ClearInterrupt        = 0b1000,
         SetInterrupt          = 0b10000,
         ClearSingleStep       = 0b100000,
         SetSingleStep         = 0b1000000,

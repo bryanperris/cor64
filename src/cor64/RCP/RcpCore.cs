@@ -18,6 +18,10 @@ namespace cor64.RCP
         private InterpreterBaseRsp m_Rsp;
         private N64MemoryController m_Memory;
         private DrawProcessor m_Rdp;
+        private cor64.HLE.GraphicsHLEDevice m_HLEGraphicsDevice;
+
+        // Pointer to window of where HLE graphics will be rendered to
+        public IntPtr WindowPtr { get; set; }
 
         public RcpCore()
         {
@@ -35,6 +39,10 @@ namespace cor64.RCP
             m_Rsp = interpreter;
         }
 
+        public void SetHLEGraphicsDevice(cor64.HLE.GraphicsHLEDevice device) {
+            m_HLEGraphicsDevice = device;
+        }
+
         public void AttachToMemory(N64MemoryController controller)
         {
             m_Memory = controller;
@@ -46,34 +54,50 @@ namespace cor64.RCP
             VideoInterface = new Video(controller, RcpInterface);
             RspInterface = new SPInterface(controller);
             ParellelInterface = new ParallelInterface(controller);
-            DisplayProcessorCommandInterface = new DPCInterface(controller);
-            DisplayProcessorSpanInterface = new DummyMemory(DUMMY_SECTION_SIZE, "Display Processor Span Interface");
+            DisplayProcessorCommandInterface = new DPCInterface(controller, RcpInterface);
+            DisplayProcessorSpanInterface = new DummyMemory(DUMMY_SECTION_SIZE, "Display Processor Span Interface", controller);
             AudioInterface = new Audio(controller, RcpInterface);
 
             SerialDevice.AttachInterfaces(RcpInterface);
             ParellelInterface.AttachInterface(RcpInterface);
 
             m_Rsp.AttachInterface(RcpInterface, RspInterface, DisplayProcessorCommandInterface);
+            m_Rsp.AttachMemory(controller);
 
-            m_Rsp.AttachIStream(RspInterface.CreateIMemorySream());
-            m_Rsp.AttachDStream(RspInterface.CreateDMemorySream());
+            m_Rsp.AttachHLEGraphics(this.GraphicsHLEDevice);
 
-            m_Rdp.AttachInterface(RcpInterface, DisplayProcessorCommandInterface, VideoInterface);
-            m_Rdp.AttachMemory(controller.CreateMemoryStream());
+            if (m_HLEGraphicsDevice != null) {
+                // HLE graphics emulation
+                m_HLEGraphicsDevice.AttachInterface(
+                    WindowPtr,
+                    ((MemMappedCart) controller.Cart).GetCartridgePointer(), // Yes a lousy hack for now
+                    RcpInterface,
+                    RspInterface,
+                    DisplayProcessorCommandInterface,
+                    VideoInterface
+                );
+            }
+            else {
+                m_Rdp.AttachInterface(RcpInterface, DisplayProcessorCommandInterface, VideoInterface);
+                m_Rdp.AttachMemory(controller);
+            }
 
-            controller.Model.SPRegs = RspInterface;
-            controller.Model.DPCmdRegs = DisplayProcessorCommandInterface;
-            controller.Model.DPSpanRegs = DisplayProcessorSpanInterface;
-            controller.Model.MIRegs = RcpInterface;
-            controller.Model.VIRegs = VideoInterface;
-            controller.Model.AIRegs = AudioInterface;
-            controller.Model.PIRegs = ParellelInterface;
-            controller.Model.SIRegs = SerialDevice;
+            controller.MountRcpInterfaces(
+                RspInterface,
+                DisplayProcessorCommandInterface, DisplayProcessorSpanInterface,
+                RcpInterface,
+                VideoInterface,
+                AudioInterface,
+                ParellelInterface,
+                SerialDevice
+            );
         }
 
         public InterpreterBaseRsp DeviceRsp => m_Rsp;
 
         public DrawProcessor DeviceRdp => m_Rdp;
+
+        public cor64.HLE.GraphicsHLEDevice GraphicsHLEDevice => m_HLEGraphicsDevice;
 
         public SerialController SerialDevice { get; private set; }
 
@@ -85,9 +109,9 @@ namespace cor64.RCP
 
         public DPCInterface DisplayProcessorCommandInterface { get; private set; }
 
-        public BlockDevice DisplayProcessorSpanInterface { get; private set; }
+        public N64MemoryDevice DisplayProcessorSpanInterface { get; private set; }
 
-        public BlockDevice AudioInterface { get; private set; }
+        public Audio AudioInterface { get; private set; }
 
         public ParallelInterface ParellelInterface { get; private set; }
     }

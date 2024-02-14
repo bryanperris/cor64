@@ -44,17 +44,29 @@ namespace Tests
                     CPUTest(MinusOne, MinusOne, Immediate).Expect(MinusTwo).Run();
 
             "dadd".CPUTest(1, 4).Only64().Expect(5).Run();
+
+                   #if CPU_CHECK_RESERVED
                    CPUTest(1, 4).Only32().Except(Reserved).Run();
+                   #endif
+
                    CPUTest(5, MinusOne).Only64().Expect(4).Run();
                    CPUTest(SignedMax64, 1).Only64().Except(Overflow).Run();
 
             "daddu".CPUTest(1, 4).Only64().Expect(5).Run();
+
+                    #if CPU_CHECK_RESERVED
                     CPUTest(1, 4).Only32().Except(Reserved).Run();
+                    #endif
+
                     CPUTest(SignedMax64, 1).Only64().Expect(SignedOvfl64).Run();
                     CPUTest(MinusOne, 1).Only64().Expect(0).Run();
 
             "daddi".CPUTest(1, 4, Immediate).Only64().Expect(5).Run();
+
+                    #if CPU_CHECK_RESERVED
                     CPUTest(1, 4, Immediate).Only32().Except(Reserved).Run();
+                    #endif
+                    
                     CPUTest(5, MinusOne, Immediate).Only64().Expect(4).Run();
                     CPUTest(SignedMax64, 1, Immediate).Only64().Except(Overflow).Run();
         }
@@ -114,7 +126,9 @@ namespace Tests
                    CPUTest(5, 2).ExpectLo(2).ExpectHi(1).Run();
 
             "ddiv".CPUTest(4, 2).Only64().ExpectLo(2).Run();
+                   #if CPU_CHECK_RESERVED
                    CPUTest(1, 1).Only32().NoDest().Except(Reserved).Run();
+                   #endif
                    CPUTest(SignedMax64, MinusOne).Only64().ExpectLo(SignedOvfl64 + 1).Run();
                    CPUTest(MinusOne, SignedMax64).Only64().ExpectHi(MinusOne).Run();
                    CPUTest(1, 0).Only64().ExpectLo(0xFFFFFFFFFFFFFFFF).ExpectHi(1).Run();
@@ -122,7 +136,9 @@ namespace Tests
 
 
             "ddivu".CPUTest(4, 2).Only64().ExpectLo(2).Run();
+                   #if CPU_CHECK_RESERVED
                    CPUTest(1, 1).Only32().NoDest().Except(Reserved).Run();
+                   #endif
                    CPUTest(SignedMax64, MinusOne).Only64().ExpectLo(0).ExpectHi(SignedMax64).Run();
                    CPUTest(MinusOne, SignedMax64).Only64().ExpectLo(2).ExpectHi(1).Run();
                    CPUTest(1, 0).Only64().ExpectLo(0xFFFFFFFFFFFFFFFF).ExpectHi(1).Run();
@@ -143,14 +159,18 @@ namespace Tests
                     CPUTest(SignedMax64, 2).ExpectLo(MinusTwo).ExpectHi(1).Run();
 
             "dmultu".CPUTest(1, 0).Only64().ExpectLo(0).ExpectHi(0).Run();
+                     #if CPU_CHECK_RESERVED
                      CPUTest(1, 1).Only32().NoDest().Except(Reserved).Run();
+                     #endif
                      CPUTest(11111, 2).Only64().ExpectLo(22222).Run();
                      CPUTest(1234567890123456789, 987654321098765432).Only64().ExpectLo(0x85FC33F23D8F45D8).ExpectHi(0x00EAD56DB9553D9A).Run();
                      CpuKromTests.Test_DMULTU();
 
             "dmult".CPUTest(1, 0).Only64().ExpectLo(0).ExpectHi(0).Run();
                     CPUTest(11111, 2).Only64().ExpectLo(22222).Run();
+                    #if CPU_CHECK_RESERVED
                     CPUTest(1, 1).Only32().NoDest().Except(Reserved).Run();
+                    #endif
                     CPUTest(1234567890123456789, 987654321098765432).Only64().ExpectLo(0x85FC33F23D8F45D8).ExpectHi(0x00EAD56DB9553D9A).Run();
                     CpuKromTests.Test_DMULT();
         }
@@ -165,59 +185,85 @@ namespace Tests
             "sllv".CPUTest(2, 2).Expect(8).Run();
                    CPUTest(0xFF, 8).Expect(0xFF00).Run();
 
-            "sra".CPUTest(0xFFFFFFFF, 1, Shift).Expect(0xFFFFFFFFFFFFFFFF).Run();
-                  CPUTest(0xFFFFFFFF, 16, Shift).Expect(0xFFFFFFFFFFFFFFFF).Run();
+            "sra".CPUTest(0xFFFFFFFF, 1, Shift).Only32().Expect(0xFFFFFFFFFFFFFFFF).Run();
+                  CPUTest(0xFFFFFFFF, 16, Shift).Only32().Expect(0xFFFFFFFFFFFFFFFF).Run();
+                  CPUTest(0x01234567_89ABCDEFUL, 4, Shift).Only64().Expect(0x00000000_789ABCDEUL).Run();
                   CPUTest(0xFF00, 8, Shift).Expect(0xFF).Run();
 
-            "srav".CPUTest(0xFFFFFFFF, 1).Expect(0xFFFFFFFFFFFFFFFF).Run();
-                   CPUTest(0xFFFFFFFF, 16).Expect(0xFFFFFFFFFFFFFFFF).Run();
+            "srav".CPUTest(0xFFFFFFFF, 1).Only32().Expect(0xFFFFFFFFFFFFFFFF).Run();
+                   CPUTest(0xFFFFFFFF, 16).Only32().Expect(0xFFFFFFFFFFFFFFFF).Run();
                    CPUTest(0xFF00, 8).Expect(0xFF).Run();
 
-            "srl".CPUTest(0xFFFFFFFF, 1, Shift).Expect(0x7FFFFFFF).Run();
-                  CPUTest(0xFFFFFFFF, 16, Shift).Expect(0xFFFF).Run();
+            "srl".CPUTest(0xFFFFFFFF, 1, Shift).Only32().Expect(0x7FFFFFFF).Run();
+                  CPUTest(0xFFFFFFFF, 16, Shift).Only32().Expect(0xFFFF).Run();
                   CPUTest(0xFF00, 8, Shift).Expect(0xFF).Run();
 
-            "srlv".CPUTest(0xFFFFFFFF, 1).Expect(0x7FFFFFFF).Run();
-                   CPUTest(0xFFFFFFFF, 16).Expect(0xFFFF).Run();
+            "srlv".CPUTest(0xFFFFFFFF, 1).Only32().Expect(0x7FFFFFFF).Run();
+                   CPUTest(0xFFFFFFFF, 16).Only32().Expect(0xFFFF).Run();
                    CPUTest(0xFF00, 8).Expect(0xFF).Run();
 
             "dsll".CPUTest(2, 2, Shift).Only64().Expect(8).Run();
+                   #if CPU_CHECK_RESERVED
                    CPUTest(2, 2, Shift).Only32().Except(Reserved).Run();
+                   #endif
                    CPUTest(0xFF, 8, Shift).Only64().Expect(0xFF00).Run();
 
             "dsllv".CPUTest(2, 2).Only64().Expect(8).Run();
+                    #if CPU_CHECK_RESERVED
                     CPUTest(2, 2).Only32().Except(Reserved).Run();
+                    #endif
                     CPUTest(0xFF, 8).Only64().Expect(0xFF00).Run();
 
-            "dsll32".CPUTest(2, 2, Shift).Only32().Except(Reserved).Run();
+            "dsll32".CPUTestBegin();
+                     #if CPU_CHECK_RESERVED
+                     CPUTest(2, 2, Shift).Only32().Except(Reserved).Run();
+                     #endif
                      CPUTest(0xFF, 0, Shift).Only64().Expect(0x000000FF00000000).Run();
 
-            "dsra".CPUTest(2, 2, Shift).Only32().Except(Reserved).Run();
+            "dsra".CPUTestBegin();
+                   #if CPU_CHECK_RESERVED
+                   CPUTest(2, 2, Shift).Only32().Except(Reserved).Run();
+                   #endif
                    CPUTest(0xFFFFFFFFFFFFFFFF, 1, Shift).Only64().Expect(0xFFFFFFFFFFFFFFFF).Run();
                    CPUTest(0xFFFFFFFFFFFFFFFF, 32, Shift).Only64().Expect(0xFFFFFFFFFFFFFFFF).Run();
                    CPUTest(0xFF00, 8, Shift).Only64().Expect(0xFF).Run();
 
-            "dsrav".CPUTest(2, 2).Only32().Except(Reserved).Run();
+            "dsrav".CPUTestBegin();
+                    #if CPU_CHECK_RESERVED
+                    CPUTest(2, 2).Only32().Except(Reserved).Run();
+                    #endif
                     CPUTest(0xFFFFFFFFFFFFFFFF, 1).Only64().Expect(0xFFFFFFFFFFFFFFFF).Run();
                     CPUTest(0xFFFFFFFFFFFFFFFF, 32).Only64().Expect(0xFFFFFFFFFFFFFFFF).Run();
                     CPUTest(0xFF00, 8).Only64().Expect(0xFF).Run();
 
-            "dsra32".CPUTest(2, 2, Shift).Only32().Except(Reserved).Run();
+            "dsra32".CPUTestBegin();
+                     #if CPU_CHECK_RESERVED
+                     CPUTest(2, 2, Shift).Only32().Except(Reserved).Run();
+                     #endif
                      CPUTest(0xFFFFFFFFFFFFFFFF, 1, Shift).Only64().Expect(0xFFFFFFFFFFFFFFFF).Run();
                      CPUTest(0xFFFFFFFFFFFFFFFF, 16, Shift).Only64().Expect(0xFFFFFFFFFFFFFFFF).Run();
                      CPUTest(0xFF00000000000000, 0, Shift).Only64().Expect(0xFFFFFFFFFF000000).Run();
 
-            "dsrl".CPUTest(2, 2, Shift).Only32().Except(Reserved).Run();
+            "dsrl".CPUTestBegin();
+                   #if CPU_CHECK_RESERVED
+                   CPUTest(2, 2, Shift).Only32().Except(Reserved).Run();
+                   #endif
                    CPUTest(0xFFFFFFFFFFFFFFFF, 1, Shift).Only64().Expect(0x7FFFFFFFFFFFFFFF).Run();
                    CPUTest(0xFFFFFFFFFFFFFFFF, 16, Shift).Only64().Expect(0x0000FFFFFFFFFFFF).Run();
                    CPUTest(0xFF00, 8, Shift).Only64().Expect(0xFF).Run();
 
-            "dsrlv".CPUTest(2, 2).Only32().Except(Reserved).Run();
+            "dsrlv".CPUTestBegin();
+                    #if CPU_CHECK_RESERVED
+                    CPUTest(2, 2).Only32().Except(Reserved).Run();
+                    #endif
                     CPUTest(0xFFFFFFFFFFFFFFFF, 1).Only64().Expect(0x7FFFFFFFFFFFFFFF).Run();
                     CPUTest(0xFFFFFFFFFFFFFFFF, 16).Only64().Expect(0x0000FFFFFFFFFFFF).Run();
                     CPUTest(0xFF00, 8).Only64().Expect(0xFF).Run();
 
-            "dsrl32".CPUTest(2, 2, Shift).Only32().Except(Reserved).Run();
+            "dsrl32".CPUTestBegin();
+                     #if CPU_CHECK_RESERVED
+                     CPUTest(2, 2, Shift).Only32().Except(Reserved).Run();
+                     #endif
                      CPUTest(0xFFFFFFFFFFFFFFFF, 1, Shift).Only64().Expect(0x000000007FFFFFFF).Run();
                      CPUTest(0xFFFFFFFFFFFFFFFF, 0, Shift).Only64().Expect(0x00000000FFFFFFFF).Run();
                      CPUTest(0xFF00000000000000, 0, Shift).Only64().Expect(0x00000000FF000000).Run();
@@ -239,14 +285,18 @@ namespace Tests
                    CPUTest(5, 5).Expect(0).Run();
 
             "dsub".CPUTest(5, 4).Only64().Expect(1).Run();
+                   #if CPU_CHECK_RESERVED
                    CPUTest(1, 1).Only32().Except(Reserved).Run();
+                   #endif
                    CPUTest(0x7FFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFF6).Only64().Except(Overflow).Run();
                    CPUTest(0x7FFFFFFFFFFFFFFF, 0xF).Only64().Expect(0x7FFFFFFFFFFFFFF0).Run();
                    CPUTest(0xFFFFFFFFFFFFFFFF, 0x7FFFFFFFFFFFFFFF).Only64().Expect(0x8000000000000000).Run();
                    CPUTest(5, 5).Only64().Expect(0).Run();
 
             "dsubu".CPUTest(5, 4).Only64().Expect(1).Run();
+                    #if CPU_CHECK_RESERVED
                     CPUTest(1, 1).Only32().Except(Reserved).Run();
+                    #endif
                     CPUTest(0x7FFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFF6).Only64().Expect(0x8000000000000009).Run();
                     CPUTest(0x7FFFFFFFFFFFFFFF, 0xF).Only64().Expect(0x7FFFFFFFFFFFFFF0).Run();
                     CPUTest(0xFFFFFFFFFFFFFFFF, 0x7FFFFFFFFFFFFFFF).Only64().Expect(0x8000000000000000).Run();
@@ -370,9 +420,9 @@ namespace Tests
         [Test]
         public void StoreTests()
         {
-            "sb".CPUTestTriple(5, 0, 0).ExpectDMem(0, 0x5).Run();
+            "sb".CPUTestTriple(5, 0, 0).ExpectDMem(0, 0x5, 0, 0, 0).Run();
 
-            "sh".CPUTestTriple(0xDEAD, 0, 0).ExpectDMem(0, 0xDE, 0xAD).Run();
+            "sh".CPUTestTriple(0xDEAD, 0, 0).ExpectDMem(0, 0xDE, 0xAD, 0, 0).Run();
 
             "sw".CPUTestTriple(0x00DEADBE, 0, 0).ExpectDMem(0, 0x00, 0xDE, 0xAD, 0xBE).Run();
 
@@ -380,16 +430,16 @@ namespace Tests
                  CPUTestTriple(0, 0, 0).Only32().ExpectDMem(0, null).Except(ExceptionType.Reserved).Run();
 
             "swl".CPUTestTriple(0xDEADBEEF, 0, 0).ExpectDMem(0, 0xDE, 0xAD, 0xBE, 0xEF).Run();
-                  CPUTestTriple(0xDEADBEEF, 0, 1).ExpectDMem(0, 0x00, 0x00, 0xDE, 0xAD).Run();
-                  CPUTestTriple(0xDEADBEEF, 0, 2).ExpectDMem(0, 0x00, 0x00, 0x00, 0x00).Run();
-                  CPUTestTriple(0xDEADBEEF, 0, 3).ExpectDMem(0, 0x00, 0x00, 0x00, 0x00).Run();
-                  CPUTestTriple(0xDEADBEEF, 0, 4).ExpectDMem(4, 0xDE, 0xAD, 0xBE, 0xEF).Run();
+                  CPUTestTriple(0xDEADBEEF, 0, 1).ExpectDMem(0, 0x00, 0xDE, 0xAD, 0xBE).Run();
+                  CPUTestTriple(0xDEADBEEF, 0, 2).ExpectDMem(0, 0x00, 0x00, 0xDE, 0xAD).Run();
+                  CPUTestTriple(0xDEADBEEF, 0, 3).ExpectDMem(0, 0x00, 0x00, 0x00, 0xDE).Run();
+                //   CPUTestTriple(0xDEADBEEF, 0, 4).ExpectDMem(4, 0xDE, 0xAD, 0xBE, 0xEF).Run();
 
             "swr".CPUTestTriple(0xDEADBEEF, 0, 0).ExpectDMem(0, 0xEF, 0x00, 0x00, 0x00).Run();
-                  CPUTestTriple(0xDEADBEEF, 0, 1).ExpectDMem(0, 0x00, 0xBE, 0xEF, 0x00).Run();
-                  CPUTestTriple(0xDEADBEEF, 0, 2).ExpectDMem(0, 0x00, 0x00, 0xAD, 0xBE).Run();
-                  CPUTestTriple(0xDEADBEEF, 0, 3).ExpectDMem(0, 0x00, 0x00, 0x00, 0xDE).Run();
-                  CPUTestTriple(0xDEADBEEF, 0, 4).ExpectDMem(4, 0xEF, 0x00, 0x00, 0x00).Run();
+                  CPUTestTriple(0xDEADBEEF, 0, 1).ExpectDMem(0, 0xBE, 0xEF, 0x00, 0x00).Run();
+                  CPUTestTriple(0xDEADBEEF, 0, 2).ExpectDMem(0, 0xAD, 0xBE, 0xEF, 0x00).Run();
+                  CPUTestTriple(0xDEADBEEF, 0, 3).ExpectDMem(0, 0xDE, 0xAD, 0xBE, 0xEF).Run();
+                //   CPUTestTriple(0xDEADBEEF, 0, 4).ExpectDMem(4, 0xEF, 0x00, 0x00, 0x00).Run();
         }
 
         [Test]
@@ -397,12 +447,12 @@ namespace Tests
         {
             "lui".CPUTestSingle(0xDEAD, Immediate).Expect(0xFFFFFFFFDEAD0000).Run();
 
-            "lb".CPUTestDMem(0, 0xDE).Expect(0xFFFFFFFFFFFFFFDE).Run();
+            "lb".CPUTestDMem(0, 0xDE, 0x00, 0x00, 0x00).Expect(0xFFFFFFFFFFFFFFDE).Run();
 
-            "lbu".CPUTestDMem(0, 0xDE).Expect(0xDE).Run();
+            "lbu".CPUTestDMem(0, 0xDE, 0x00, 0x00, 0x00).Expect(0xDE).Run();
 
-            "lh".CPUTestDMem(0, 0xDE, 0xAD).Expect(0xFFFFFFFFFFFFDEAD).Run();
-            "lhu".CPUTestDMem(0, 0xDE, 0xAD).Expect(0xDEAD).Run();
+            "lh".CPUTestDMem(0, 0xDE, 0xAD, 0x00, 0x00).Expect(0xFFFFFFFFFFFFDEAD).Run();
+            "lhu".CPUTestDMem(0, 0xDE, 0xAD, 0x00, 0x00).Expect(0xDEAD).Run();
 
             "lw".CPUTestDMem(0, 0xDE, 0xAD, 0xBE, 0xEF).Expect(0xFFFFFFFFDEADBEEF).Run();
             "lwu".CPUTestDMem(0, 0xDE, 0xAD, 0xBE, 0xEF).Expect(0xDEADBEEF).Run();

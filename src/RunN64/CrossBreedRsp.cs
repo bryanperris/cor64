@@ -27,6 +27,8 @@ namespace RunN64 {
 
         private const uint PC_ALIGN_MASK = 0xFFC;
 
+        const bool USE_CXD4_DMA = true;
+
         private readonly RspVector[] m_VRegs = new RspVector[32];
 
         public CrossBreedRsp() : base(new Disassembler("o32"))
@@ -278,7 +280,7 @@ namespace RunN64 {
             // Compare VU results between A and B
 
             void PrintState() {
-                Console.WriteLine("DISM: {0}", Disassembler.GetFullDisassembly(inst));
+                Console.WriteLine("DISM: {0}", Disassembler.Disassemble(inst));
                 PrintAcc(m_Snapshot_ACC);
                 PrintVRegs(m_Snapshot_VR);
                 Console.WriteLine("VC0: {0:X4}", m_Snapshot_VC0);
@@ -343,7 +345,7 @@ namespace RunN64 {
 
         public override void Load(DecodedInstruction inst)  => StepCoreA(inst);
 
-        public override void ManualStart(ulong pc)
+        public override void ManualStart(long pc)
         {
             throw new NotSupportedException();
         }
@@ -369,10 +371,11 @@ namespace RunN64 {
 
         public override void TransferReg(DecodedInstruction inst) {
             StepCoreA(inst);
-            
 
             // bool source_yes = false;
             // bool target_yes = false;
+
+            // RegTransferGprHelper(inst, out int regSource, out int regDest);
 
             // /* Source value to copy */
             // switch (inst.Op.XferSource)
@@ -416,6 +419,20 @@ namespace RunN64 {
             //     case RegBoundType.Cp0:
             //         {
             //             target_yes = true;
+
+            //             if (regDest >= 0 && regDest < 8) {
+            //                 switch (regDest) {
+            //                     case 0: target_yes = true; break;
+            //                     case 1: target_yes = true; break;
+            //                     case 2: target_yes = true; break;
+            //                     case 3: target_yes = true; break; // m_WriteLen
+            //                     case 4: target_yes = true; break;
+            //                     case 5: target_yes = true; break;
+            //                     case 6: target_yes = true; break;
+            //                     case 7: target_yes = true; break;
+            //                 }
+            //             }
+
             //             break;
             //         }
 
@@ -438,6 +455,9 @@ namespace RunN64 {
             //     StepCoreA(inst);
             // }
             // else {
+            //     if (source_yes != target_yes) {
+            //         Console.WriteLine("Transfer: {0} -> {1}", inst.Op.XferSource.ToString(), inst.Op.XferTarget.ToString());
+            //     }
             //     StepCoreB(inst);
             // }
         }
@@ -457,13 +477,25 @@ namespace RunN64 {
 
         public override void VectorCompare(DecodedInstruction inst)  => StepCoreA(inst);
 
-        public override void VectorLoad(DecodedInstruction inst)  => StepCoreA(inst);
-
         public override void VectorMove(DecodedInstruction inst)  => StepCoreA(inst);
 
         public override void VectorMultiply(DecodedInstruction inst) => StepCoreA(inst);
 
         public override void VectorReciprocal(DecodedInstruction inst)  => StepCoreA(inst);
+
+        public override void VectorLoad(DecodedInstruction inst) {
+            StepCoreA(inst);
+            // switch (inst.Op.Op) {
+            //     case "lsv": StepCoreA(inst); break;
+            //     case "llv": StepCoreA(inst); break;
+            //     case "ldv": StepCoreA(inst); break;
+            //     case "luv": StepCoreA(inst); break; // issue here
+            //     case "lqv": StepCoreA(inst); break;
+            //     default: StepCoreA(inst); break;
+            // }
+
+            // Console.WriteLine("Vector Load: {0}", inst.Op.Op);
+        }
 
         public override void VectorStore(DecodedInstruction inst) {
             // if (inst.Op.Op == "sdv") {
@@ -473,8 +505,8 @@ namespace RunN64 {
             //     StepCoreB(inst);
             // }
 
+            // StepCoreA(inst);
             StepCoreA(inst);
-            // StepCoreB(inst);
         }
 
         public override void VectorSubtract(DecodedInstruction inst)  => StepCoreA(inst);
@@ -497,19 +529,21 @@ namespace RunN64 {
             base.AttachInterface(rcpInterface, iface, rdpInterface);
             m_CoreA.AttachInterface(rcpInterface, iface, rdpInterface);
             m_CoreB?.AttachInterface(rcpInterface, iface, rdpInterface);
+
+            if (!USE_CXD4_DMA) {
+                iface.RestoreDmaHandlers();
+            }
         }
 
-        public override void AttachDStream(Stream memoryStream)
-        {
-            m_CoreA.AttachDStream(memoryStream);
-            m_CoreB?.AttachDStream(memoryStream);
+        public override void AttachHLEGraphics(cor64.HLE.GraphicsHLEDevice device) {
+            m_CoreA.AttachHLEGraphics(device);
         }
 
-        public override void AttachIStream(Stream memoryStream)
+        public override void AttachMemory(N64MemoryController memory)
         {
-            base.AttachIStream(memoryStream);
-            m_CoreA.AttachIStream(memoryStream);
-            m_CoreB?.AttachIStream(memoryStream);
+            base.AttachMemory(memory);
+            m_CoreA?.AttachMemory(memory);
+            m_CoreB?.AttachMemory(memory);
         }
 
         private void PrintVRegs() {
@@ -564,6 +598,11 @@ namespace RunN64 {
             sb.AppendLine("////////");
 
             Console.WriteLine(sb.ToString());
+        }
+
+        protected override uint FetchInstruction(long address)
+        {
+            throw new NotImplementedException();
         }
 
         public override string Description => "RSP Cross Core";

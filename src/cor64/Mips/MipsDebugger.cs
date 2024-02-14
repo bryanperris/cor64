@@ -29,12 +29,13 @@ namespace cor64.Mips
         public bool IsBreakActive => m_BreakActive;
 
         public virtual void ActivateDebugger() {
-            m_Probe_OnInstruction = (inst) => {
-                if (m_BreakActive) return;
+            // CLEANUP: fix this
+            // m_Probe_OnInstruction = (inst) => {
+            //     if (m_BreakActive) return;
 
-                ThrowBreakpoint(m_InstByCodeBreakpoints.Contains(inst.Inst.inst));
-                ThrowBreakpoint(m_InstByAddressBreakpoints.Contains((uint)inst.Address));
-            };
+            //     ThrowBreakpoint(m_InstByCodeBreakpoints.Contains(inst.Inst.inst));
+            //     ThrowBreakpoint(m_InstByAddressBreakpoints.Contains((uint)inst.Address));
+            // };
 
             m_Probe_OnGprWrite = (i) => {
                 if (m_BreakActive) return;

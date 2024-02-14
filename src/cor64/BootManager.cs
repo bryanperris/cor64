@@ -1,7 +1,9 @@
-﻿using cor64.Mips.R4300I;
+﻿using cor64.IO;
+using cor64.Mips.R4300I;
 using NLog;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -15,7 +17,7 @@ namespace cor64
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
         public event Action<int, ulong> RegWrite;
         public event Action<uint, uint> MemWrite;
-        public event Action<ulong> PCWrite;
+        public event Action<long> PCWrite;
         public event Action<int, ulong> CP0Write;
         public event Action<MMIORegWriteKind, uint> MMIOWrite;
 
@@ -35,7 +37,7 @@ namespace cor64
             MemWrite?.Invoke(address, value);
         }
 
-        private void PC(ulong address)
+        private void PC(long address)
         {
             PCWrite?.Invoke(address);
         }
@@ -50,9 +52,9 @@ namespace cor64
             MMIOWrite?.Invoke(kind, val);
         }
 
-        private void CopyCartBootstrap(Cartridge cartridge)
+        private void CopyIPL3(Cartridge cartridge)
         {
-            /* Copies the cartridge header (head + boot) into RSP data memory */
+            /* Copies the cartridge beginning chunk (head + IPL3) into RSP data memory */
 
             // NOTE: instead of starting at 0x40, just start at 0 and copy everything
             // until the end of the bootloader section
@@ -64,7 +66,7 @@ namespace cor64
             cartridge.RomStream.Read(romData, 0, romData.Length);
             cartridge.RomStream.Position = 0;
 
-            const uint memStart = 0xA4000000;
+            const uint memStart = 0x04000000;
             uint memEnd = memStart + (uint)romData.Length;
 
             unsafe
@@ -75,29 +77,44 @@ namespace cor64
 
                     for (uint addr = memStart; addr < memEnd; addr += 4)
                     {
-                        MWR(addr, *intPtr);
+                        uint romWord = *intPtr;
+
+                        romWord = N64Endianess.U32(romWord);
+
+                        MWR(addr, romWord);
                         intPtr++;
                     }
                 }
             }
 
-            Log.Debug("Copied cartridge header into signal processor data memory");
+            Log.Debug("IPL3 copied into DMEM");
 
             // Note: The IPL3 boostrap from the cartridge clears out all RSP memory after bootup is successful
         }
 
-        public void BootCartridge(Cartridge cartridge, bool bypassIPL)
+        public void BootCartridge(Cartridge cartridge, bool bypassPifRom)
         {
+            /**
+            * 3 stages exist for the IPL which is a combo of the PIF ROM and cartridge bootloader
+            * IPL 1: RCP MMU loads IPL ROM, CPU executes these instructions, copies IPL2 (from cartridge) into RSP IMEM
+            * > the MMU is passing instructions to the CPU as its being executed via the SysAD bus, a slow process
+            * IPL 2: CPU executes instructions, copies IPL3 (from cartridge) into RSP DMEM, computes IPL3 CRC hash, jump/execute IPL3
+            * IPL 3: Last part of boot up sequence, copy 1MB of game code into RDRAM, authenticate it,IPL2/3 get cleared, jumps to game entry point
+            */
+
+            RegionType region = cartridge.Region;
+
+            Log.Info("Cartridge Region: {0}", region.ToString());
+            Log.Info("Cartridge CIC: {0}", cartridge.IPL.ToString(), region.ToString());
+
             // TODO: Some values are hardcoded HW values such as processor versions
 
             /* CoProcessor 0 Initial States HW/SW */
-            WR0(CTS.CP0_REG_RANDOM, 0x0000001F);
             WR0(CTS.CP0_REG_COUNT, 0x00005000);
-            WR0(CTS.CP0_REG_SR, 0x241000E0);
+            WR0(CTS.CP0_REG_SR, 0x34000000);
             WR0(CTS.CP0_REG_CAUSE, 0xB000007C);
             WR0(CTS.CP0_REG_CONFIG, 0x0006E463);
             WR0(CTS.CP0_REG_ERROR_EPC, 0xFFFFFFFF);
-            WR0(CTS.CP0_REG_BADVADDR, 0xFFFFFFFF);
             WR0(CTS.CP0_REG_EPC, 0xFFFFFFFF);
             // WR0(CTS.CP0_REG_CONTEXT, 0x0000005C);
             WR0(CTS.CP0_REG_CONTEXT, 0x007FFFF0);
@@ -107,20 +124,25 @@ namespace cor64
 
             // TODO: FPU revision reg   = 0x00000511;
 
-            if (!bypassIPL)
+            if (!bypassPifRom)
             {
-                Log.Debug("Booting from PIF ROM");
+                /*
+                * Use the hardcoded PIF ROM address
+                * CPU executes IPL1 and talks to CIC input/output lines
+                * IPL1 writes os infomation into PIF RAM at offset 0x24
+                */
+                Log.Info("Booting via PIF ROM");
                 PC(0xBFC00000);
                 return;
             }
+            /* PIF ROM skipped, inject the IPL1 boot values */
 
-            RegionType region = cartridge.Region;
+            Log.Info("Booting via HLE");
 
-            Log.Debug("Skipping system bootstrap, using initial startup state for {1}-{0}", cartridge.IPL.ToString(), region.ToString());
+            // Copy IPL3 into DMEM
+            CopyIPL3(cartridge);
 
-            CopyCartBootstrap(cartridge);
-
-            /* Shared values */
+            /* Shared values between IPL1 variants (PAL, NTSC) */
             WR(06, 0xFFFFFFFFA4001F0C);
             WR(07, 0xFFFFFFFFA4001F08);
             WR(08, 0x00000000000000C0);
@@ -148,7 +170,7 @@ namespace cor64
 
             switch (region)
             {
-                case RegionType.MPAL:
+                case RegionType.MPAL: // Brazil PAL-M
                 case RegionType.PAL:
                     {
                         WR(23, 0x0000000000000006);
@@ -169,13 +191,29 @@ namespace cor64
             switch (cartridge.IPL.Cic)
             {
                 default: break;
-                case SecurityChipsetType.X101: X101Setup(region); break;
-                case SecurityChipsetType.X102: X102Setup(region); break;
-                case SecurityChipsetType.X103: X103Setup(region); break;
-                case SecurityChipsetType.X105: X105Setup(region); break;
-                case SecurityChipsetType.X106: X106Setup(region); break;
+                case LockoutChipType.X101: X101Setup(region); break;
+                case LockoutChipType.X102: X102Setup(region); break;
+                case LockoutChipType.X103: X103Setup(region); break;
+                case LockoutChipType.X105: X105Setup(region); break;
+                case LockoutChipType.X106: X106Setup(region); break;
             }
 
+            // The 6105 de-obfuscates RSP assembly based on IPL2 assembly code
+            if (cartridge.IPL.Cic == LockoutChipType.X105) {
+                var assembly = AssembleIPL2();
+                uint address = 0x04001000;
+                BinaryReader reader = new BinaryReader(assembly);
+
+                for (int i = 0; i < assembly.Length; i+=4) {
+                    var read = reader.ReadUInt32();
+                    // Log.Debug("IPL2 HEX: {0:X8}", read);
+                    MWR(address, read);
+                    address += 4;
+                }
+            }
+
+
+            // Execute IPL3 located in RSP DMEM + $40
             PC(0xA4000040);
         }
 
@@ -250,22 +288,19 @@ namespace cor64
 
         private void X105Setup(RegionType region)
         {
-            WR(01, 0x0000000000000000);
-            WR(02, 0xFFFFFFFFF58B0FBF);
-            WR(03, 0xFFFFFFFFF58B0FBF);
-            WR(04, 0x0000000000000FBF);
-            WR(12, 0xFFFFFFFF9651F81E);
-            WR(13, 0x000000002D42AAC5);
-            WR(15, 0x0000000056584D60);
-            WR(22, 0x0000000000000091);
-            WR(25, 0xFFFFFFFFCDCE565F);
+            // WR(01, 0x0000000000000000);
+            // WR(02, 0xFFFFFFFFF58B0FBF);
+            // WR(03, 0xFFFFFFFFF58B0FBF);
+            // WR(04, 0x0000000000000FBF);
+            // WR(12, 0xFFFFFFFF9651F81E);
+            // WR(13, 0x000000002D42AAC5);
+            // WR(15, 0x0000000056584D60);
+            // WR(22, 0x0000000000000091);
+            // WR(25, 0xFFFFFFFFCDCE565F);
 
-            MWR(0xA4001008, 0x25AD07C0);
-            MWR(0xA400100C, 0x31080080);
-            MWR(0xA4001010, 0x5500FFFC);
-            MWR(0xA4001014, 0x3C0DBFC0);
-            MWR(0xA4001018, 0x8DA80024);
-            MWR(0xA400101C, 0x3C0BB000);
+            WR(11, 0xFFFFFFFFA4000040); /* Temp 3 */
+            WR(29, 0xFFFFFFFFA4001FF0); /* Stack Pointer */
+            WR(31, 0xFFFFFFFFA4001550); /* Return Address */
 
             switch (region)
             {
@@ -273,7 +308,6 @@ namespace cor64
                     {
                         WR(05, 0x000000005493FB9A);
                         WR(14, 0xFFFFFFFFC2C20384);
-                        MWR(0xA4001004, 0x8DA807FC);
                         break;
                     }
                 case RegionType.MPAL:
@@ -282,7 +316,6 @@ namespace cor64
                         WR(05, 0xFFFFFFFFDECAAAD1);
                         WR(14, 0x000000000CF85C13);
                         WR(24, 0x0000000000000002);
-                        MWR(0xA4001004, 0xBDA807FC);
                         break;
                     }
                 default: break;
@@ -319,6 +352,45 @@ namespace cor64
                     }
                 default: break;
             }
+        }
+
+        private static Stream AssembleIPL2() {
+            // This assembles a small snippet of IPL2 required by the CIC-6105
+
+            N64Assembler assembler = new N64Assembler();
+            assembler.SetQuiet();
+
+            // TODO: Want to disable logging related to the assembler here
+
+            /* Assembly Source */
+            var source = new AssemblyTextSource("main");
+            source += "arch n64.cpu";
+            source += "endian msb";
+            source += "lui 13,$BFC0";      // Load address 0xBFC00000 (PIF ROM START)
+            source += "lw 8,$07FC(13)";    // Load word from PIF RAM at offset 0x3C
+            source += "addiu 13,13,$07C0"; // increment address to 0xBFC007C0 (PIF RAM start)
+            source += "andi 8,8,$0080";    // Mask out the flag
+            source += "db $55,$00,$FF,$FC";// bnel 8,0,$FFFC ; Jump if the flag is true
+            source += "lui 13,$BFC0";      // Load 0xBFC00000 into 13 if branch is taken
+            source += "lw 8,$0024(13)";    // Load word from 0x1FC00024 (PIF ROM $24)
+            source += "lui 11,$B000";      // load address 0xB0000000 (PI_BSB_DOM1_LAT_REG)
+
+            /* Assemble into bytes */
+            assembler.AddAssemblySource(source);
+
+            Log.Info("Assembling some IPL2...");
+            assembler.AssembleCode(true);
+            Log.Info("Done!");
+
+            /* Get the output */
+            var streamOut = assembler.Output;
+            streamOut.Position = 0;
+
+            #if HOST_LITTLE_ENDIAN
+            streamOut = new Swap32Stream(streamOut);
+            #endif
+
+            return streamOut;
         }
     }
 }

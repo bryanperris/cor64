@@ -55,13 +55,14 @@ namespace cor64.Mips
             fd = sa;
             tc = (ushort)(imm >> 6);
 
-            switch (rs) {
-                case 16: fmtType = FpuValueType.FSingle; break;
-                case 17: fmtType = FpuValueType.FDouble; break;
-                case 20: fmtType = FpuValueType.Word; break;
-                case 21: fmtType = FpuValueType.Doubleword; break;
-                default: fmtType = FpuValueType.Reserved; break;
-            }
+            fmtType = rs switch
+            {
+                16 => FpuValueType.FSingle,
+                17 => FpuValueType.FDouble,
+                20 => FpuValueType.Word,
+                21 => FpuValueType.Doubleword,
+                _ => FpuValueType.Reserved,
+            };
         }
 
         // Vector operands

@@ -17,7 +17,7 @@ namespace cor64.Rdp {
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
         private DPCInterface m_Interface;
         private MipsInterface m_RcpInterface;
-        private Stream m_Memory;
+        private N64MemoryController m_Memory;
         private DisplayListReader m_DpReader;
         private bool m_DebugDL;
         private Video m_VideoInterface;
@@ -76,9 +76,9 @@ namespace cor64.Rdp {
             m_VideoInterface = videoInterface;
         }
 
-        public virtual void AttachMemory(N64MemoryController.N64MemoryStream stream) {
-            m_Memory = stream;
-            m_DpReader = new DisplayListReader(m_Memory);
+        public virtual void AttachMemory(N64MemoryController memory) {
+            m_Memory = memory;
+            m_DpReader = new DisplayListReader(memory);
         }
 
         internal void NotifyTextureLoad(TexLoadArgs args) {
@@ -86,8 +86,9 @@ namespace cor64.Rdp {
         }
 
         public void ReadTexture(uint rdramAddress, byte[] buffer, int offset, int count) {
-            m_Memory.Position = rdramAddress;
-            m_Memory.Read(buffer, offset, count);
+            for (int i = 0; i < count; i++) {
+                buffer[offset + i] = m_Memory.U8(rdramAddress + i);
+            }
         }
 
         protected virtual void DisplayListHandler(object sender, DPCInterface.DisplayList displayList) {

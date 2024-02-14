@@ -13,7 +13,7 @@ namespace cor64.Mips.R4300I
     {
         private readonly RegUsageCollector m_RegUsageCollector;
 
-        public RuntimeBasicBlock(BaseDisassembler disassembler, ulong address) : base(address)
+        public RuntimeBasicBlock(BaseDisassembler disassembler, long address) : base(address)
         {
             m_RegUsageCollector = new RegUsageCollector(disassembler);
         }

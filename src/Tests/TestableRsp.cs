@@ -4,6 +4,7 @@ using cor64.IO;
 using cor64.Mips.Rsp;
 using cor64.RCP;
 using NUnit.Framework;
+using cor64;
 
 namespace Tests
 {
@@ -86,9 +87,9 @@ namespace Tests
 
             byte[] buffer = new byte[16];
 
-            var source = m_Rsp.DMem.BaseStream;
-            source.Position = address;
-            source.Read(buffer, 0, buffer.Length);
+            for (int i = 0; i < buffer.Length; i++) {
+                buffer[i] = m_Rsp.DMEM.U8(address + i);
+            }
 
             memVec.SetBytesSwapped(buffer);
 
@@ -97,10 +98,10 @@ namespace Tests
 
         private void WriteVec(uint address, RspVector vector) {
             byte[] buffer = vector.GetRawBytesSwapped();
-            
-            var source = m_Rsp.DMem.BaseStream;
-            source.Position = address;
-            source.Write(buffer, 0, buffer.Length);
+
+            for (int i = 0; i < buffer.Length; i++) {
+                m_Rsp.DMEM.U8(address + i, buffer[i]);
+            }
         }
 
         public void TestExpectations()

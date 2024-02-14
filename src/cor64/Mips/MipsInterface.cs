@@ -46,7 +46,7 @@ using NLog;
 
 namespace cor64.Mips
 {
-    public class MipsInterface : PerpherialDevice
+    public class MipsInterface : N64MemoryDevice
     {
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
         private readonly MemMappedBuffer m_Mode = new MemMappedBuffer(4, MemMappedBuffer.MemModel.DUAL_READ_WRITE);
@@ -56,6 +56,8 @@ namespace cor64.Mips
         private readonly BitFiddler m_IntFiddler = new BitFiddler();
         private readonly BitFiddler m_MaskFiddler = new BitFiddler();
         private readonly BitFiddler m_ModeFiddler = new BitFiddler();
+
+        private int[] m_DelayedRcpInterrupts = new int[6];
 
         public const int INT_SP = 0;
         public const int INT_SI = 1;
@@ -73,7 +75,7 @@ namespace cor64.Mips
 
         public MipsInterface(N64MemoryController controller) : base(controller, 0x100000)
         {
-            Map(m_Mode, m_Version, m_Interrupt, m_Mask);
+            StaticMap(m_Mode, m_Version, m_Interrupt, m_Mask);
 
             for (int i = 0; i < INT_DP + 1; i++)
             {
@@ -112,6 +114,27 @@ namespace cor64.Mips
             }
 
             m_Mode.RegisterValue = 0;
+        }
+
+        public void CheckInterrupts() {
+            ProcessMaskClearSet();
+            ModeChanged();
+
+            for (int i = 0; i < m_DelayedRcpInterrupts.Length; i++) {
+                int delayed = m_DelayedRcpInterrupts[i];
+
+                if (delayed > 0) {
+                    delayed--;
+
+                    if (delayed <= 0) {
+                        // Trigger the interrupt
+                        SetInterrupt(i, true);
+                        delayed = 0;
+                    }
+
+                    m_DelayedRcpInterrupts[i] = delayed;
+                }
+            }
         }
 
         public void SetVersion(uint value)
@@ -188,12 +211,32 @@ namespace cor64.Mips
             }
         }
 
+        public void SetDelayInterrupt(int index, int delay) {
+            if (m_DelayedRcpInterrupts[index] <= 0) {
+                m_DelayedRcpInterrupts[index] = delay;
+            }
+        }
+
         public void SetInterrupt(int index, bool value)
         {
+            // if (value){
+            //     switch (index)
+            //     {
+            //         default: break;
+            //         case INT_SP: Log.Debug("SP Interrupt Set Pending"); break;
+            //         case INT_SI: Log.Debug("SI Interrupt Set Pending"); break;
+            //         case INT_AI: Log.Debug("AI Interrupt Set Pending"); break;
+            //         case INT_VI: Log.Debug("VI Interrupt Set Pending"); break;
+            //         case INT_PI: Log.Debug("PI Interrupt Set Pending"); break;
+            //         case INT_DP: Log.Debug("DP Interrupt Set Pending"); break;
+            //     }
+            // }
+
             uint val = value ? 1U : 0;
             uint reg = m_Interrupt.ReadonlyRegisterValue;
             m_IntFiddler.J(index, ref reg, val);
             m_Interrupt.ReadonlyRegisterValue = reg;
+            
         }
 
         public void ForceClearInterrupts() {
@@ -264,5 +307,7 @@ namespace cor64.Mips
         public bool IntMaskDP => ReadMaskBool(INT_DP);
 
         public IntPtr ExportInterruptPtr() => m_Interrupt.ReadPtr;
+
+        public override string Name => "Mips Interface (RCP)";
     }
 }

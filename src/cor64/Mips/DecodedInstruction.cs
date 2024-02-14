@@ -11,17 +11,17 @@ namespace cor64.Mips
         /* Decoded Instruction data */
         private readonly BinaryInstruction m_Inst;
         private readonly Opcode m_Opcode;
-        private readonly ulong m_Address;
-        private readonly bool m_NoOp;
-        private readonly bool m_LastInst;
+        // private readonly long m_Address;
+        // private readonly bool m_NoOp;
+        // private readonly bool m_LastInst;
   
-        internal DecodedInstruction(ulong address, Opcode opcode, BinaryInstruction inst, bool emuNoOps, bool lastOne)
+        internal DecodedInstruction(Opcode opcode, BinaryInstruction inst)
         {
             m_Opcode = opcode;
             m_Inst = inst;
-            m_Address = address;
-            m_NoOp = emuNoOps;
-            m_LastInst = lastOne;
+            // m_Address = address;
+            // m_NoOp = emuNoOps;
+            // m_LastInst = lastOne;
             TagIsDelaySlot = false;
         }
 
@@ -41,7 +41,7 @@ namespace cor64.Mips
 
         public int FloatDest => m_Inst.fd;
 
-        public ulong Address => m_Address;
+        // public long Address => m_Address;
 
         public String Opcode => m_Opcode.Op;
 
@@ -50,11 +50,12 @@ namespace cor64.Mips
         /// <summary>
         /// Indicates the instruction was fetched from valid readable memory
         /// </summary>
-        public bool IsInvalid => m_NoOp;
+        public bool IsInvalid => Op.Family == OperationFamily.Invalid;
 
-        public bool LastOne => m_LastInst;
+        // public bool LastOne => m_LastInst;
 
-        public bool CanFullyDisassemble => !IsInvalid && !IsNull;
+        // public bool CanFullyDisassemble => !IsInvalid && !IsNull;
+        // public bool CanFullyDisassemble => !IsNull;
 
         public bool IsFloatingType => Format == FpuValueType.FSingle || Format == FpuValueType.FDouble;
 
@@ -93,6 +94,6 @@ namespace cor64.Mips
         public int VDest => m_Inst.vd;
         public int Offset => m_Inst.offset;
 
-        public bool IsNull => m_Opcode.Family == OperationFamily.Null;
+        // public bool IsNull => m_Opcode.Family == OperationFamily.Invalid;
     }
 }

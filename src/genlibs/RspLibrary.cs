@@ -10,17 +10,19 @@ namespace genlibs {
         private readonly static string BASEDIR = Path.Combine(Environment.CurrentDirectory, "rsp");
         private readonly static string OUTDIR = Path.Combine(BASEDIR, "..", "..", "RunN64", "External", "Rsp");
 
-        public override void Postprocess(Driver driver, ASTContext ctx)
+        public RspLibrary()
         {
-
         }
 
-        public override void Preprocess(Driver driver, ASTContext ctx)
+        public void Postprocess(Driver driver, ASTContext ctx)
         {
-            
         }
 
-        public override void Setup(Driver driver)
+        public void Preprocess(Driver driver, ASTContext ctx)
+        {
+        }
+
+        public void Setup(Driver driver)
         {
             if (Directory.Exists(OUTDIR))
                 Directory.Delete(OUTDIR, true);
@@ -38,7 +40,7 @@ namespace genlibs {
             module.OutputNamespace = "RunN64.External.Rsp";
         }
 
-        public override void SetupPasses(Driver driver)
+        public void SetupPasses(Driver driver)
         {
             
         }

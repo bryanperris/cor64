@@ -21,32 +21,29 @@ namespace cor64.Mips
     public abstract class BaseInterpreter
     {
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
-        private ulong m_Pc;
-        private Stream m_IMemory;
-        private ulong m_ProgramStart;
+        private long m_Pc;
+        protected IMemoryAccess m_Memory;
+        private long m_ProgramStart;
         protected Profiler m_Profiler = new Profiler();
-
-        private bool m_MemTraceAppendMode;
-        private bool m_MemTraceFirstOne;
 
         public event Action<DecodedInstruction> TraceStep;
 
         protected BaseInterpreter(BaseDisassembler disassembler)
         {
             Disassembler = disassembler;
-            
+
             TraceLog = new ProgramTrace(disassembler)
             {
                 FilterInterruptHandlers = true
             };
         }
 
-        public virtual void SafeSetPC(ulong address)
+        public virtual void SafeSetPC(long address)
         {
             m_Pc = address;
         }
 
-        protected ulong PC {
+        protected long PC {
             get => m_Pc;
 
             set {
@@ -54,7 +51,7 @@ namespace cor64.Mips
             }
         }
 
-        public ulong ReadPC()
+        public long ReadPC()
         {
             return m_Pc;
         }
@@ -63,7 +60,7 @@ namespace cor64.Mips
         /// Call this to determine when the program's bootloader is finished
         /// </summary>
         /// <param name="address"></param>
-        public void SetProgramEntryPoint(ulong address)
+        public void SetProgramEntryPoint(long address)
         {
             InBootMode = true;
             m_ProgramStart = address;
@@ -86,12 +83,6 @@ namespace cor64.Mips
             }
         }
 
-        [Conditional("DEBUG")]
-        protected void SetMemTraceAppendMode(bool doAppend) {
-            m_MemTraceAppendMode = doAppend;
-            m_MemTraceFirstOne = true;
-        }
-
         protected void BeginInstructionProfile(DecodedInstruction inst)
         {
             m_Profiler.StartSession(inst.Op);
@@ -111,14 +102,8 @@ namespace cor64.Mips
 
         public abstract void Step();
 
-        public virtual void AttachIStream(Stream memoryStream)
-        {
-            m_IMemory = memoryStream;
-            Disassembler.SetStreamSource(memoryStream);
-        }
 
-        public abstract void AttachDStream(Stream memory);
-
+        // CLEANUP: Shouldn't be in this base class
         public abstract void AttachBootManager(BootManager bootManager);
 
         public abstract MipsDebugger Debugger { get; }
@@ -127,11 +112,14 @@ namespace cor64.Mips
         {
             InBootMode = false;
             Log.Debug("**** Program Entry Point Hit ****");
+            TraceLog.MakeEntryNote(PC);
         }
 
-        protected DecodedInstruction Decode()
+        protected abstract uint FetchInstruction(long address);
+
+        protected DecodedInstruction Decode(long physicalAddress)
         {
-            DecodedInstruction decode = Disassembler.Disassemble(m_Pc);
+            DecodedInstruction decode = Disassembler.Decode(FetchInstruction(physicalAddress));
 
             if (InBootMode)
             {
@@ -144,49 +132,44 @@ namespace cor64.Mips
             return decode;
         }
 
-        protected void TraceInstruction(DecodedInstruction decode, bool nullifed, bool inInterrupt)
+        protected void TraceInstruction(long address, DecodedInstruction decode)
         {
-            if (TraceMode != ProgramTrace.TraceMode.None && decode.Op.Family != OperationFamily.Null && IsTraceActive)
+            if (TraceMode != ProgramTrace.TraceMode.None && decode.Op.Family != OperationFamily.Invalid && IsTraceActive)
             {
-                TraceLog.AppendInstruction(decode, nullifed, inInterrupt);
+                TraceLog.AppendInstruction(address, decode);
                 TraceStep?.Invoke(decode);
             }
         }
 
-        protected void TraceInstruction(DecodedInstruction decode, bool nullifed)
-        {
-            TraceInstruction(decode, nullifed, false);
+        protected void TraceInterrupt() {
+            if (TraceMode != ProgramTrace.TraceMode.None && IsTraceActive)
+            {
+                TraceLog.Interrupt();
+            }
         }
 
         protected void TraceMemoryHit(ulong address, bool isWrite, String val)
         {
             // TODO: Trace append mode
             if (IsMemTraceActive)
-                TraceLog.AddInstructionMemAccess(address, isWrite, val, m_MemTraceAppendMode, m_MemTraceFirstOne);
+                TraceLog.TraceMemoryAccess(address, isWrite, val);
 
-            if (core_InstDebugMode != InstructionDebugMode.None) {
-                if (m_MemTraceFirstOne || !m_MemTraceAppendMode || core_MemAccessNote == null)
-                    core_MemAccessNote = new MemoryAccessMeta(address, isWrite, val);
-                else
-                    core_MemAccessNote.AppendValue(val);
-            }
+            // if (core_InstDebugMode != InstructionDebugMode.None) {
+            //     if (m_MemTraceFirstOne || !m_MemTraceAppendMode || core_MemAccessNote == null)
+            //         core_MemAccessNote = new MemoryAccessMeta(address, isWrite, val);
+            //     else
+            //         core_MemAccessNote.AppendValue(val);
+            // }
 
-            m_MemTraceFirstOne = false;
+            // m_MemTraceFirstOne = false;
         }
 
         public virtual String GetGPRName(int i) {
             return i.ToString();
         }
 
-        protected bool ValidateInstruction(DecodedInstruction decoded)
-        {
-            return !decoded.IsInvalid && !decoded.IsNull;
-        }
-
         protected bool ComputeBranchCondition(bool isDword, ulong source, ulong target, RegBoundType copSelect,  ArithmeticOp compareOp)
         {
-            bool condition = false;
-
             bool EQ_ZERO()
             {
                 return source == 0;
@@ -244,19 +227,18 @@ namespace cor64.Mips
                 }
             }
 
-            switch (compareOp)
+            bool condition = compareOp switch
             {
-                default: throw new NotSupportedException("MIPS does not support this branch operation");
-                case ArithmeticOp.EQUAL: condition = (source == target); break;
-                case ArithmeticOp.NOT_EQUAL: condition = (source != target); break;
-                case ArithmeticOp.GREATER_THAN: condition = GT_ZERO(); break;
-                case ArithmeticOp.LESS_THAN: condition = LT_ZERO(); break;
-                case ArithmeticOp.GREATER_THAN_OR_EQUAL: condition = (EQ_ZERO() || GT_ZERO()); break;
-                case ArithmeticOp.LESS_THAN_OR_EQUAL: condition = (EQ_ZERO() || LT_ZERO()); break;
-                case ArithmeticOp.FALSE: condition = COP_FLAG(false); break;
-                case ArithmeticOp.TRUE:  condition = COP_FLAG(true); break;
-            }
-
+                ArithmeticOp.EQUAL => source == target,
+                ArithmeticOp.NOT_EQUAL => source != target,
+                ArithmeticOp.GREATER_THAN => GT_ZERO(),
+                ArithmeticOp.LESS_THAN => LT_ZERO(),
+                ArithmeticOp.GREATER_THAN_OR_EQUAL => EQ_ZERO() || GT_ZERO(),
+                ArithmeticOp.LESS_THAN_OR_EQUAL => EQ_ZERO() || LT_ZERO(),
+                ArithmeticOp.FALSE => COP_FLAG(false),
+                ArithmeticOp.TRUE => COP_FLAG(true),
+                _ => throw new NotSupportedException("MIPS does not support this branch operation"),
+            };
             return condition;
         }
 
@@ -332,7 +314,7 @@ namespace cor64.Mips
         protected InstructionDebugMode core_InstDebugMode;
 
         protected MemoryAccessMeta core_MemAccessNote;
-        
+
         public void SetInstructionDebugMode(InstructionDebugMode mode)
         {
             core_InstDebugMode = mode;
@@ -353,7 +335,5 @@ namespace cor64.Mips
         protected bool EnableCp1 { get; set; } = true;
 
         protected bool EnableCp2 { get; set; } = true;
-
-        protected Stream IMemoryStream => m_IMemory;
     }
 }

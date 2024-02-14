@@ -1,3 +1,4 @@
+using System.Text;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System;
@@ -9,71 +10,43 @@ using NLog;
 namespace cor64.Rdp {
     public class DisplayListReader {
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
-        private Stream m_Stream;
+        private readonly N64MemoryController m_PhysicalMemory;
         
 
         /// <summary>
         /// Reads Display Lists from big-endian memory sources
         /// </summary>
         /// <param name="source"></param>
-        public DisplayListReader(Stream source) {
-            m_Stream = source;
+        public DisplayListReader(N64MemoryController memory) {
+            m_PhysicalMemory = memory;
         }
 
         public IReadOnlyList<RdpCommand> ReadDisplayList(long address, int size) {
-            List<RdpCommand> commands = new List<RdpCommand>();
+            List<RdpCommand> commands = new();
             int count = 0;
-
-            m_Stream.Position = address;
-
-            #if LITTLE_ENDIAN
-            var swappedStream = new Swap64Stream(new Swap32Stream(m_Stream));
-            #else
-            var swappedStream = new Swap64Stream(m_Stream);
-            #endif
-
-            var swappedReader = new BinaryReader(swappedStream);
 
             while (count < size) {
                 /* Read the command type */
                 /* Always mask out the upper 2 unused bits (in case its signed) */
 
-                var pos = m_Stream.Position;
-
-                ulong firstRow = swappedReader.ReadUInt64();
-                // Log.Debug("RDP First Row: {0:X16}", firstRow);
-                int commandId = (int)(firstRow >> 56) & 0b00111111;
-                m_Stream.Position = pos;
+                int commandId = m_PhysicalMemory.U8(address) & 0x3F;
 
                 // Log.Debug("RDP Command ID: " + commandId.ToString("X"));
 
                 RdpCommandType type = DisplayListDecoder.Decode(commandId);
 
-                /* Convert from Big-Endian to Little-Endia */
                 byte[] data = new byte[type.Size];
 
-                unsafe {
-                    fixed (byte* ptr = &data[0]) {
-                        for (int i = 0; i < (data.Length / 8); i++) {
-                            var read = swappedReader.ReadUInt64();
-
-                            /* The first 2 upper bits are never used, mask them out in case of sign extensions */
-                            if (i == 0) {
-                                read &= 0x3FFFFFFFFFFFFFFF;
-                            }
-
-                            ulong *newPtr = (ulong *)ptr + i;
-                            *newPtr = read;
-                            m_Stream.Position += 8;
-                        }
-                    }
+                // The RDP command class expects the command in reverse order
+                for (int i = 0; i < data.Length; i++) {
+                    long addr = (address + i) ^ 7;
+                    data[i] = m_PhysicalMemory.U8(addr);
                 }
 
-                var command = new RdpCommand(type, data);
-
-                commands.Add(command);
+                commands.Add(new RdpCommand(type, data));
 
                 count += data.Length;
+                address += type.Size;
             }
 
             return commands;

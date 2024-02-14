@@ -15,6 +15,10 @@ namespace genlibs
             Console.Write("RSP Library ... ");
             ConsoleDriver.Run(new RspLibrary());
             Console.WriteLine("Done!");
+
+            Console.Write("GLide64 Library ... ");
+            ConsoleDriver.Run(new Glide64Library());
+            Console.WriteLine("Done!");
         }
     }
 }

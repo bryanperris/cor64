@@ -10,35 +10,34 @@ namespace cor64.Mips
     public static class CoreUtils
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static ulong ComputeBranchTargetOffset(uint targetImm)
+        public static long ComputeBranchTargetOffset(uint targetImm)
         {
             /* Compute the target address the real way */
 
             /* Process it as a 64-bit value */
             /* Sign extend first */
-            ulong target = (ulong)(short)targetImm;
+            long target = (short)targetImm;
 
             /* Word alignment */
             target <<= 2;
 
             /* Combine the sign extension with the shifted offset */
-            return (target & ~0x3FFFFUL) | (target & 0x3FFFF); 
+            return (target & ~0x3FFFFL) | (target & 0x3FFFF);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static ulong ComputeBranchPC(bool dwordMode, ulong pc, ulong targetOffset)
+        public static long ComputeBranchPC(bool dwordMode, long pc, long targetOffset)
         {
-            ulong target = targetOffset;
+            long target = targetOffset;
 
             if (!dwordMode)
             {
-                /* Mask out the upper 32-bits in 32-bit mode */
-                target &= 0xFFFFFFFF;
-                target = (uint)((int)pc + (int)targetOffset);
+                target = (int)pc + (int)targetOffset;
+                target &= 0xFFFFFFFF; /* Mask out the upper 32-bits in 32-bit mode */
             }
             else
             {
-                target = (ulong)((long)pc + (long)targetOffset);
+                target = pc + targetOffset;
             }
 
             target += 4;
@@ -47,9 +46,9 @@ namespace cor64.Mips
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static ulong ComputeTargetPC(bool isRegister, ulong pc, ulong source, uint targetImm)
+        public static long ComputeTargetPC(bool isRegister, long pc, long source, uint targetImm)
         {
-            ulong target = 0;
+            long target = 0;
 
             if (!isRegister)
             {

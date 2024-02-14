@@ -99,10 +99,10 @@ namespace cor64.BareMetal
             Byte[] asmBytes = new Byte[asmStream.Length];
             asmStream.Read(asmBytes, 0, asmBytes.Length);
 
-            UpdateRomChecksum(SecurityChipsetType.X102);
+            UpdateRomChecksum(LockoutChipType.X102);
         }
 
-        public void UpdateRomChecksum(SecurityChipsetType cicType) {
+        public void UpdateRomChecksum(LockoutChipType cicType) {
             Byte[] buffer = new Byte[CartridgeRomChecksum.InputSize];
             Output.Position = 0;
             Output.Read(buffer, 0, buffer.Length);

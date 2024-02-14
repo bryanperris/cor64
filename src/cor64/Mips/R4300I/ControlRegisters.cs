@@ -19,19 +19,31 @@ namespace cor64.Mips.R4300I
         public CauseRegister Cause { get; } = new CauseRegister();
         public StatusRegister Status { get; } = new StatusRegister();
 
+        public TLBRegisters TLBRegs { get; } = new TLBRegisters();
+
         private const uint CAUSE_MASK = 0x00000300;
         private const uint STATUS_MASK = 0xFE20FFFF;
 
         private uint m_LocalCount;
 
-        public ControlRegisters(TLBCache tlbCache = null)
+        public event Action<int> TLBRegisterWrite;
+
+        public ControlRegisters()
         {
             m_Registers = new ulong[SIZE];
             m_WriteMap = new Action<int, ulong>[SIZE];
             m_ReadMap = new Func<int, ulong>[SIZE];
 
+            m_Registers[CTS.CP0_REG_CONFIG] = 0x7006E463;
+
             for (int i = 0; i < SIZE; i++)
             {
+                if (TLBRegs.IsTLBRegister(i)) {
+                    m_ReadMap[i] = TLBRegs.RegisterRead;
+                    m_WriteMap[i] = TLBRegs.RegisterWrite;
+                    continue;
+                }
+
                 if (i == CTS.CP0_REG_CAUSE)
                 {
                     m_ReadMap[i] = (_) => Cause.Value;
@@ -67,38 +79,10 @@ namespace cor64.Mips.R4300I
                     m_ReadMap[i] = (_) => m_Registers[31];
                 }
                 else if (i == CTS.CP0_REG_CONFIG) {
-                    m_ReadMap[i] = (_) => 0x7006E463;
-                    m_WriteMap[i] = VoidWrite;
-                }
-                else if (tlbCache != null && i == CTS.CP0_REG_ENTRY_HI) {
-                    m_ReadMap[i] = (_) => tlbCache.EntryHi;
-                    m_WriteMap[i] = (_, x) => tlbCache.EntryHi = x;
-                }
-                else if (tlbCache != null && i == CTS.CP0_REG_ENTRY_LO_0) {
-                    m_ReadMap[i] = (_) => tlbCache.EntryLo0;
-                    m_WriteMap[i] = (_, x) => tlbCache.EntryLo0 = x;
-                }
-                else if (tlbCache != null && i == CTS.CP0_REG_ENTRY_LO_1) {
-                    m_ReadMap[i] = (_) => tlbCache.EntryLo1;
-                    m_WriteMap[i] = (_, x) => tlbCache.EntryLo1 = x;
-                }
-                else if (tlbCache != null && i == CTS.CP0_REG_INDEX) {
-                    m_ReadMap[i] = (_) => tlbCache.Index;
-                    m_WriteMap[i] = (_, x) => tlbCache.Index = x;
-                }
-                else if (tlbCache != null && i == CTS.CP0_REG_PAGEMASK) {
-                    m_ReadMap[i] = (_) => tlbCache.PageMask;
-                    m_WriteMap[i] = (_, x) => tlbCache.PageMask = x;
-                }
-                else if (tlbCache != null && i == CTS.CP0_REG_RANDOM) {
-                    m_ReadMap[i] = (_) => tlbCache.Random;
-                    m_WriteMap[i] = (_, x) => tlbCache.Random = x;
-                }
-                else if (tlbCache != null && i == CTS.CP0_REG_WIRED) {
-                    m_ReadMap[i] = (_) => tlbCache.Wired;
-                    m_WriteMap[i] = (_, x) => {
-                        tlbCache.Wired = x;
-                        tlbCache.WireSetNotify();
+                    m_ReadMap[i] = (_) => m_Registers[CTS.CP0_REG_CONFIG];
+                    m_WriteMap[i] = (_,x) => {
+                        m_Registers[CTS.CP0_REG_CONFIG] &= ~0xFUL;
+                        m_Registers[CTS.CP0_REG_CONFIG] |= x & 0xF;
                     };
                 }
                 else
@@ -107,6 +91,11 @@ namespace cor64.Mips.R4300I
                     m_WriteMap[i] = (o, x) => m_Registers[o] = x;
                 }
             }
+        }
+
+        private void TLBRegWrite(int i, ulong value) {
+            m_Registers[i] = value;
+            TLBRegisterWrite?.Invoke(i);
         }
 
         public ulong Read(int i)

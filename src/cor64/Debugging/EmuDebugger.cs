@@ -16,14 +16,44 @@ namespace cor64.Debugging
         private readonly N64System m_Target;
         private long m_TheadCount;
 
-        public event Action<DmaEvent> SpDmaWrite;
+        public event Action<DmaEvent> DmaOperation;
         public event Action DebugBreak;
         public event Action DebugContinue;
 
+        public enum DmaType {
+            Unknown,
+            SignalProcessor,
+            ParallelInterface,
+            SerialInterface
+        }
+
         
-        public struct DmaEvent {
-            public uint address;
-            public int size;
+        // public struct DmaEvent {
+
+        //     public uint address;
+        //     public int size;
+        // }
+
+        public class DmaEvent {
+            public DmaType HwType { get; init; }
+            public uint Source { get; init; }
+            public uint Dest { get; init; }
+            public bool FromRDRAM { get; init; }
+            public int Size { get; init; }
+
+            internal DmaEvent(
+                DmaType type,
+                uint src,
+                uint dst,
+                bool fromRdram,
+                int size
+            ) {
+                HwType = type;
+                Source = src;
+                Dest = dst;
+                FromRDRAM = fromRdram;
+                Size = size;
+            }
         }
 
         public EmuDebugger(N64System target)
@@ -83,30 +113,31 @@ namespace cor64.Debugging
 
         public bool StepRspNext { get; private set; }
 
-        [Conditional("DEBUG")]
-        public void ReportDmaFinish(string type, bool toRcp, uint source, uint dest, int size)
+        public void ReportDmaFinish(DmaType type, bool fromRdram, uint source, uint dest, int size)
         {
-            switch (type) {
-                case "SP": {
-                    if (toRcp) {
-                         SpDmaWrite?.Invoke(new DmaEvent { address = dest, size = size });
-                    }
-                    break;
-                }
+            // #if DEBUG_DMA_CMDS || DEBUG_DMA_CMDS_RSP_ONLY
 
-                default: break;
-            }
+            // #if DEBUG_DMA_CMDS_RSP_ONLY
+            // if (type == DmaType.SignalProcessor) {
+            // #endif
 
-            #if DEBUG_DMA_CMDS
+            // if (fromRdram) {
+            //     Log.Debug("{0} DMA: {1:X8} [RDRAM] to {2:X8} [RCP] size={3:X8}", type.ToString(), source, dest, size);
+            // }
+            // else {
+            //     Log.Debug("{0} DMA: {1:X8} [RCP] to {2:X8} [RDRAM] size={3:X8}", type.ToString(), source, dest, size);
+            // }
 
-            if (toRcp) {
-                Log.Debug("{0} DMA: {1:X8} [RDRAM] to {2:X8} [RCP] size={3:X8}", type, source, dest, size);
-            }
-            else {
-                Log.Debug("{0} DMA: {1:X8} [RCP] to {2:X8} [RDRAM] size={3:X8}", type, source, dest, size);
-            }
+            // #if DEBUG_DMA_CMDS_RSP_ONLY
+            // }
+            // #endif
 
-            #endif
+            // #endif
+
+            // if (!CoreConfig.Current.WorkbenchMode)
+            //     return;
+
+            // DmaOperation?.Invoke(new DmaEvent(type, source, dest, fromRdram, size));
         }
 
         [Conditional("DEBUG")]

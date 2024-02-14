@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 
 namespace cor64
 {
+    // CLEANUP: the byteswapping static stuff, N64Endianess should all be here
     public static class CommonExtensions
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

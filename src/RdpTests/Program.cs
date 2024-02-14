@@ -32,7 +32,9 @@ namespace RdpTests
             var displayList = Asm.AssembleDisplayList(asmName);
 
             // Write the display list bytes into beginning of RDRAM
-            system.DeviceMemory.Write(0, displayList, 0, displayList.Length);
+            for (int i = 0; i < displayList.Length; i++) {
+                system.SystemMemory.U8(0, displayList[i]);
+            }
 
             // Setup the DP interface
             system.DeviceRcp.DisplayProcessorCommandInterface.DirectDLSetup(0, displayList.Length);

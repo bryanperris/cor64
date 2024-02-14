@@ -5,15 +5,11 @@
     <ProjectReference Include="..\cor64.BareMetal\cor64.BareMetal.csproj" />
   </ItemGroup>
   <PropertyGroup>
-    <TargetFramework>net5.0</TargetFramework>
+    <TargetFramework>net7.0</TargetFramework>
     <IsPackable>false</IsPackable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <OutputPath>../../bin</OutputPath>
-  </PropertyGroup>
-  <!-- Emulator debugging compiler flags -->
-  <PropertyGroup>
-    <!-- <DefineConstants>$(DefineConstants);LITTLE_ENDIAN</DefineConstants> -->
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="**\*.asm" />

@@ -18,6 +18,7 @@ using RunN64.Graphics;
 using cor64.BareMetal;
 using cor64.Debugging;
 using cor64.Rdp.Renderers;
+using cor64.IO;
 
 namespace RunN64
 {
@@ -31,6 +32,11 @@ namespace RunN64
         private Cartridge m_Cartridge;
         private SingleThreadHost m_EmuHost;
         private GLWindow m_FramebufferWindow;
+        private ScriptHost m_Scripts = new ScriptHost();
+
+        static Emulator() {
+            N64Endianess.PrintEndianess();
+        }
 
         public void SetupLogging()
         {
@@ -70,6 +76,10 @@ namespace RunN64
             LogManager.Configuration = configuration;
         }
 
+        private void LoadScripts() {
+            m_Scripts.LoadScript(FileEnv.GetScriptPath("rsp_dissect_tool"));
+        }
+
         private Cartridge MountCartridge(String path)
         {
 
@@ -105,9 +115,32 @@ namespace RunN64
             }
         }
 
+        private static String ResolvePath(String path) {
+
+            if (String.IsNullOrEmpty(path)) {
+                return "";
+            }
+
+            if (path.StartsWith("$PROJ$")) {
+                path = path.Replace("$PROJ$", Environment.CurrentDirectory);
+            }
+
+            path = Path.GetFullPath(path);
+
+            if (!File.Exists(path)) {
+                return null;
+            }
+            else {
+                return path;
+            }
+        }
+
         public void Start()
         {
-            if (!File.Exists(Configuration.RomFilepath))
+            Configuration.RomFilepath = ResolvePath(Configuration.RomFilepath);
+            Configuration.ElfFilepath = ResolvePath(Configuration.ElfFilepath);
+
+            if (Configuration.RomFilepath == null)
             {
                 throw new EmuException("Invalid cartridge rom path was provided");
             }
@@ -119,12 +152,14 @@ namespace RunN64
 
             PhaseMsg("System Initialization");
 
-            if (Configuration.UseInterpreter) {
-                m_CpuEngine = new Interpreter();
-            }
-            else {
-                m_CpuEngine = new ILRecompiler();
-            }
+            m_CpuEngine = new Interpreter();
+
+            // if (Configuration.UseInterpreter) {
+            //     m_CpuEngine = new Interpreter();
+            // }
+            // else {
+            //     m_CpuEngine = new ILRecompiler();
+            // }
 
             if (!String.IsNullOrEmpty(Configuration.ElfFilepath))
             {
@@ -139,26 +174,27 @@ namespace RunN64
             }
 
             m_CpuEngine.SetDebuggingMode(true);
-            // m_CpuEngine.SetInstructionDebugMode(InstructionDebugMode.ProgramOnly);
+            // m_CpuEngine.SetInstructionDebugMode(InstructionDebugMode.Full);
             // m_CpuEngine.SetTraceMode(ProgramTrace.TraceMode.ProgramOnly);
-            // m_CpuEngine.TraceLog.Details = ProgramTrace.TraceDetails.MemoryAccess;
-            // m_CpuEngine.TraceLog.EnableLogVerfication();
+            m_CpuEngine.TraceLog.Details = ProgramTrace.TraceDetails.MemoryAccess;
+            m_CpuEngine.TraceLog.EnableFullTracing = true;
+            m_CpuEngine.TraceLog.DisableAdvancedTraceReduction = true;
 
             // m_CpuEngine.CoreDbg.AppendInstBreakpointByAddr(0x80326A68);
 
-            // m_System.Dbg.SpDmaWrite += (dma) => {
-            //     if (!(dma.address >= 0x04001000 && dma.address < 0x04002000)) {
+            // m_System.Dbg.DmaOperation += (dma) => {
+            //     if (dma.HwType != EmuDebugger.DmaType.SignalProcessor || !dma.FromRDRAM || !(dma.Dest >= 0x04001000 && dma.Dest < 0x04002000)) {
             //         return;
             //     }
 
-            //     // Convert to a local IMEM RSP address
-            //     var dmaAddress = dma.address - 0x04001000;
+            //     // Convert to a local Dest RSP address
+            //     var dmaAddress = dma.Dest - 0x04001000;
 
             //     Log.Debug("Dumping RSP UCode: {0:X8}", dmaAddress);
 
             //     using MemoryStream code = new();
 
-            //     m_System.Dbg.CodePrinter.Print_RspCode(code, dmaAddress, dma.size / 4);
+            //     m_System.Dbg.CodePrinter.Print_RspCode(code, dmaAddress, dma.Size / 4);
             //     code.Position = 0;
 
             //     var hashGen = MD5.Create();
@@ -182,9 +218,23 @@ namespace RunN64
             // m_System.DeviceRcp.SetRdpDevice(new DummyRdp());
             m_System.DeviceRcp.DeviceRdp.SetDLDebug(true);
 
+            if (m_System.DeviceRcp.DeviceRdp is MadCatRdp madcat)
+            {
+                // madcat.DebugLaserLines = true;
+                // madcat.DebugColorSpans = true;
+            }
+
             // Alternative RSP cores
             // m_System.DeviceRcp.SetRspDevice(new ModRsp());
             // m_System.DeviceRcp.SetRspDevice(new CrossBreedRsp());
+
+            // HLE Graphics
+            m_System.DeviceRcp.WindowPtr = IntPtr.Zero;
+
+            // GLide64
+            ModGLide64 glidePlugin = new ModGLide64();
+            glidePlugin.AttachRenderBackend();
+            m_System.DeviceRcp.SetHLEGraphicsDevice(glidePlugin);
 
             // m_System.DeviceRcp.DeviceRdp.Load += (s, texinfo) => {
             //     Log.Debug("Dumping RDP Texture: {0:X8} {1}", texinfo.RdramAddress, texinfo.Size);
@@ -197,7 +247,13 @@ namespace RunN64
             // };
 
             Log.Info("Signal Processor Engine: {0}", m_System.DeviceRcp.DeviceRsp.Description);
-            Log.Info("Rasterizer Engine: {0}", m_System.DeviceRcp.DeviceRdp.Description);
+
+            if (m_System.DeviceRcp.GraphicsHLEDevice != null) {
+                Log.Info("HLE Graphics Engine: {0}", m_System.DeviceRcp.GraphicsHLEDevice.Description);
+            }
+            else {
+                Log.Info("Rasterizer Engine: {0}", m_System.DeviceRcp.DeviceRdp.Description);
+            }
 
             m_System.Boot(m_Cartridge);
 
@@ -207,6 +263,17 @@ namespace RunN64
 
             m_EmuHost = new SingleThreadHost(m_System);
             m_EmuHost.Break += OnBreak;
+
+            if (WorkbenchMode) {
+                m_System.Dbg.Break();
+            }
+
+            // LoadScripts();
+
+            // m_FramebufferWindow.OnFrame += () => {
+            //     m_Scripts.ExecuteOnFrame();
+            // };
+
             m_EmuHost.Start();
         }
 
@@ -214,7 +281,7 @@ namespace RunN64
         {
             Thread fbThread = new Thread(() =>
             {
-                m_FramebufferWindow = new GLWindow(m_System, WorkbenchMode);
+                m_FramebufferWindow = new GLWindow(m_System, WorkbenchMode, m_Scripts);
                 m_FramebufferWindow.Start();
                 Console.WriteLine("Emulator will now close");
                 m_EmuHost.SignalExit();
@@ -265,7 +332,11 @@ namespace RunN64
             Log.Debug("\n********* Emulator State *********\n");
 
             using (MemoryStream stateStream = new()) {
+                StreamWriter writer = new StreamWriter(stateStream);
                 StatePrinter.Print_R4300I_General(m_System, stateStream);
+                writer.WriteLine();
+                writer.Flush();
+                StatePrinter.Print_RSP_General(m_System, stateStream);
                 stateStream.Position = 0;
                 StreamReader reader = new(stateStream);
                 Log.Debug(reader.ReadToEnd());
@@ -305,5 +376,7 @@ namespace RunN64
         public N64System System => m_System;
 
         public bool WorkbenchMode { get; set; }
+
+        public String CpuDebugTraceFile { get; set; }
     }
 }

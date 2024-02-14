@@ -69,10 +69,10 @@ namespace cor64.Mips
             return new Opcode(null, 0, 0, tableFamily, 0, 0, 0, 0, 0);
         }
 
-        public static Opcode DefineNull()
+        public static Opcode DefineInvalidOp()
         {
             Count++;
-            return new Opcode(null, 0, 0, OperationFamily.Null, 0, 0, 0, 0, 0);
+            return new Opcode(null, 0, 0, OperationFamily.Invalid, 0, 0, 0, 0, 0);
         }
 
         public static CallTable CreateCallTable() {
@@ -116,7 +116,7 @@ namespace cor64.Mips
 
     public enum OperationFamily
     {
-        Null,   // Unimplemented type of opcode
+        Invalid,   // Unimplemented type of opcode
         Branch, // Branches and jumps
         Load,   // Load values from memory
         Store,  // Store values to memory

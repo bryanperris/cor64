@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace cor64
 {
-    public class BitFiddler64
+    public sealed class BitFiddler64
     {
         private readonly List<_Field> m_Fields = new List<_Field>();
 
@@ -32,31 +32,53 @@ namespace cor64
             source = value | (source & ~field.mask);
         }
 
+        public ulong Transform(int fieldId, ulong source, ulong value)
+        {
+            Inject(fieldId, ref source, value);
+            return source;
+        }
+
         public void J(int fieldId, ref ulong source, ulong value)
         {
             Inject(fieldId, ref source, value);
         }
 
-        public void J(int fieldId, ref ulong source, bool value) {
+        public ulong T(int fieldId, ulong source, ulong value)
+        {
+            J(fieldId, ref source, value);
+            return value;
+        }
+
+        public void J(int fieldId, ref ulong source, bool value)
+        {
             if (value)
                 Inject(fieldId, ref source, 1UL);
             else
                 Inject(fieldId, ref source, 0UL);
         }
 
-        public ulong Extract(int fieldId, ref ulong source)
+        public ulong T(int fieldId, ulong source, bool value)
+        {
+            if (value)
+                return Transform(fieldId, source, 1UL);
+            else
+                return Transform(fieldId, source, 0UL);
+        }
+
+        public ulong Extract(int fieldId, ulong source)
         {
             var field = m_Fields[fieldId];
             return (field.mask & source) >> field.shift;
         }
 
-        public ulong X(int fieldId, ref ulong source)
+        public ulong X(int fieldId, ulong source)
         {
-            return Extract(fieldId, ref source);
+            return Extract(fieldId, source);
         }
 
-        public bool XB(int fieldId, ref ulong source) {
-            var x = X(fieldId, ref source);
+        public bool XB(int fieldId, ulong source)
+        {
+            var x = X(fieldId, source);
             return x != 0;
         }
     }

@@ -15,7 +15,6 @@ namespace cor64
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
         private bool m_Disposed;
         private readonly UnmanagedBuffer m_RomBuffer;
-        private readonly CartridgeBlock m_CartridgeBlock;
 
         public const int BootSize = 4032;
         public const int HeaderSize = 0x40;
@@ -44,7 +43,7 @@ namespace cor64
         }
 
         private static Stream GetGameReadableSource(RomEndianess endianess, Stream source) {
-            #if LITTLE_ENDIAN
+            #if HOST_LITTLE_ENDIAN
             return GetSwappedStreamLE(endianess, source);
             #else
             return GetSwappedStreamBE(endianess, source);
@@ -149,14 +148,6 @@ namespace cor64
                 uint v = reader.ReadUInt32();
                 writer.Write(v);
             }
-
-            m_RomBuffer = new UnmanagedBuffer((int)RomStream.Length);
-            byte[] buffer = new byte[RomStream.Length];
-            RomStream.Position = 0;
-            RomStream.Read(buffer, 0, buffer.Length);
-            m_RomBuffer.CopyInto(buffer);
-
-            m_CartridgeBlock = new CartridgeBlock(m_RomBuffer, buffer.Length);
 
             // XXX: For now we have a memory copy of the ROM in memory twice
         }
@@ -307,15 +298,15 @@ namespace cor64
             alg.Initialize();
             alg.ComputeHash(bootSection);
 
-            SecurityChipsetType type = SecurityChipsetType.Unknown;
+            LockoutChipType type = LockoutChipType.Unknown;
 
             switch (alg.CrcValue)
             {
-                case 0x6170A4A1: type = SecurityChipsetType.X101; break;
-                case 0x90BB6CB5: type = SecurityChipsetType.X102; break;
-                case 0x0B050EE0: type = SecurityChipsetType.X103; break;
-                case 0x98BC2C86: type = SecurityChipsetType.X105; break;
-                case 0xACC8580A: type = SecurityChipsetType.X106; break;
+                case 0x6170A4A1: type = LockoutChipType.X101; break;
+                case 0x90BB6CB5: type = LockoutChipType.X102; break;
+                case 0x0B050EE0: type = LockoutChipType.X103; break;
+                case 0x98BC2C86: type = LockoutChipType.X105; break;
+                case 0xACC8580A: type = LockoutChipType.X106; break;
                 default:
                     {
                         Log.Warn("Unknown IPL Hash: " + alg.CrcValue.ToString("X8"));
@@ -340,7 +331,7 @@ namespace cor64
 
                     var ipl = GetIPLType(streamBe);
 
-                    if (ipl.Cic == SecurityChipsetType.Unknown)
+                    if (ipl.Cic == LockoutChipType.Unknown)
                     {
                         continue;
                     }
@@ -370,11 +361,6 @@ namespace cor64
             }
 
             return RomEndianess.Unknown;
-        }
-
-        public BlockDevice GetBlockDevice()
-        {
-            return m_CartridgeBlock;
         }
 
         protected virtual void Dispose(bool disposing)

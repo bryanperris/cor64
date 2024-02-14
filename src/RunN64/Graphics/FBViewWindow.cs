@@ -22,9 +22,8 @@ namespace RunN64.Graphics {
         public const int N64_MAX_RESOLUTION_Y = 480;
 
         private IntPtr m_ImGuiTextFB;
-        private Texture m_VFramebufferStageTex;
-        private Texture m_VFramebufferTex;
-
+        private Texture m_RdramTexture;
+        private Texture m_N64RenderOutput;
         private int m_FramebufferColorMode = 0;
         private bool m_IsRGB8888 = true;
 
@@ -50,7 +49,8 @@ namespace RunN64.Graphics {
                     ImGuiWindowFlags.NoScrollbar |
                     ImGuiWindowFlags.NoDecoration |
                     ImGuiWindowFlags.NoMove |
-                    ImGuiWindowFlags.NoBackground
+                    ImGuiWindowFlags.NoBackground |
+                    ImGuiWindowFlags.NoResize
                 );
             }
 
@@ -58,16 +58,16 @@ namespace RunN64.Graphics {
         }
 
         private void GenerateFramebufferTex(int width, int height) {
-            m_VFramebufferStageTex = m_Context.ResourceFactory.CreateTexture(TextureDescription.Texture2D((uint)width, (uint)height, 1, 1, Veldrid.PixelFormat.R8_G8_B8_A8_UNorm, TextureUsage.Staging));
-            m_VFramebufferTex =      m_Context.ResourceFactory.CreateTexture(TextureDescription.Texture2D((uint)width, (uint)height, 1, 1, Veldrid.PixelFormat.R8_G8_B8_A8_UNorm, TextureUsage.Sampled));
-            m_ImGuiTextFB = m_Renderer.GetOrCreateImGuiBinding(m_Context.ResourceFactory, m_VFramebufferTex);
+            m_RdramTexture = m_Context.ResourceFactory.CreateTexture(TextureDescription.Texture2D((uint)width, (uint)height, 1, 1, PixelFormat.R8_G8_B8_A8_UNorm, TextureUsage.Staging));
+            m_N64RenderOutput = m_Context.ResourceFactory.CreateTexture(TextureDescription.Texture2D((uint)width, (uint)height, 1, 1, PixelFormat.R8_G8_B8_A8_UNorm, TextureUsage.Sampled));
+            m_ImGuiTextFB = m_Renderer.GetOrCreateImGuiBinding(m_Context.ResourceFactory, m_N64RenderOutput);
         }
 
-        public void PrepareResources(CommandList list) {
+        public void CopyRdramToGPU(CommandList list) {
             list.CopyTexture(
-                m_VFramebufferStageTex, 0, 0, 0, 0, 0,
-                m_VFramebufferTex, 0, 0, 0, 0, 0,
-                m_VFramebufferStageTex.Width, m_VFramebufferStageTex.Height, 1, 1
+                m_RdramTexture, 0, 0, 0, 0, 0,
+                m_N64RenderOutput, 0, 0, 0, 0, 0,
+                m_RdramTexture.Width, m_RdramTexture.Height, 1, 1
             );
         }
 
@@ -77,13 +77,13 @@ namespace RunN64.Graphics {
                 m_FramebufferColorMode = m_VideoInterface.ControlReg.GetPixelMode();
                 var mode = m_FramebufferColorMode == VideoControlReg.PIXELMODE_32BPP;
 
-                if (mode != m_IsRGB8888 || m_VFramebufferStageTex.Width != m_VideoInterface.Width || m_VFramebufferStageTex.Height != m_VideoInterface.Height) {
+                if (mode != m_IsRGB8888 || m_RdramTexture.Width != m_VideoInterface.Width || m_RdramTexture.Height != m_VideoInterface.Height) {
 
                     if (m_VideoInterface.Width >= 1 && m_VideoInterface.Height >= 1) {
                         m_IsRGB8888 = mode;
 
-                        m_VFramebufferStageTex.Dispose();
-                        m_VFramebufferTex.Dispose();
+                        m_RdramTexture.Dispose();
+                        m_N64RenderOutput.Dispose();
 
                         GenerateFramebufferTex(m_VideoInterface.Width, m_VideoInterface.Height);
                     }
@@ -108,13 +108,13 @@ namespace RunN64.Graphics {
 
         private bool IsFBReadActive => m_VideoInterface.IsVideoActive && !m_System.DeviceRcp.DisplayProcessorCommandInterface.IsBusy;
 
-        public unsafe void UpdateFramebufferTex() {
-            var mp = m_Context.Map(m_VFramebufferStageTex, MapMode.Write);
+        public unsafe void StageRdramTexture() {
+            var mp = m_Context.Map(m_RdramTexture, MapMode.Write);
 
             if (IsFBReadActive)
             {
                 if (m_IsRGB8888) {
-                    #if LITTLE_ENDIAN
+                    #if HOST_LITTLE_ENDIAN
                     uint * src = (uint*)m_VideoInterface.FramebufferPtr;
                     uint * dst = (uint*)mp.Data;
 
@@ -123,9 +123,8 @@ namespace RunN64.Graphics {
                         src++;
                         dst++;
                     }
-
                     #else
-                    System.Buffer.MemoryCopy((void*)m_VideoInterface.FramebufferPtr, (void*)mp.Data, mp.SizeInBytes, mp.SizeInBytes);
+                    Buffer.MemoryCopy((void*)m_VideoInterface.FramebufferPtr, (void*)mp.Data, mp.SizeInBytes, mp.SizeInBytes);
                     #endif
                 }
                 else {
@@ -136,12 +135,17 @@ namespace RunN64.Graphics {
                     ushort * readPtr = (ushort *)m_VideoInterface.FramebufferPtr;
                     uint * writePtr = (uint *)mp.Data;
 
-                    for (uint i = 0; i < mp.SizeInBytes; i+=4) {
+                    int readOffset = 0;
+                    int off = 1;
 
-                        #if LITTLE_ENDIAN
-                        uint read = *readPtr;
+                    for (uint i = 0; i < mp.SizeInBytes; i+=4) {
+                        #if HOST_LITTLE_ENDIAN
+                        /// NATIVE-ENDIANESS: LITTLE
+                        uint read = *(readPtr + off + readOffset++);
+                        off = -off;
                         #else
-                        uint read = (*readPtr).ByteSwapped();
+                        // NATIVE-ENDIANESS: BIG (GL_RGBA8888 on BE is always little endian)?
+                        uint read = (*(readPtr + readOffset++)).ByteSwapped();
                         #endif
 
                         // Big Endian
@@ -159,8 +163,6 @@ namespace RunN64.Graphics {
 
                         // ABGR 8888
                         *writePtr = 0xFF000000 | (b << 16) | (g << 8) | r;
-
-                        readPtr++;
                         writePtr++;
                     }
                 }
@@ -172,7 +174,7 @@ namespace RunN64.Graphics {
                 }
             }
 
-            m_Context.Unmap(m_VFramebufferStageTex);
+            m_Context.Unmap(m_RdramTexture);
         }
 
         public void UpdatePosition(Vector2 position) {

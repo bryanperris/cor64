@@ -11,15 +11,12 @@ namespace cor64.Mips.R4300I.TLB
         private readonly BitFiddler64 m_BitFiddler = new BitFiddler64();
 
         private const int F_ASID = 0;
-        private const int F_VPN2_32 = 1;
-        private const int F_VPN2_64 = 2;
-        private const int F_REGION = 3;
-
+        private const int F_VPN2 = 1;
+        private const int F_REGION = 2;
 
         public EntryHiRegister() {
             /* ASID */    m_BitFiddler.DefineField(0, 8);
-            /* VPN2 32 */ m_BitFiddler.DefineField(13, 19);
-            /* VPN2 64 */ m_BitFiddler.DefineField(13, 27);
+            /* VPN2 */ m_BitFiddler.DefineField(13, 27);
             /* Region */  m_BitFiddler.DefineField(62, 2);
         }
 
@@ -32,35 +29,24 @@ namespace cor64.Mips.R4300I.TLB
             return m_Value;
         }
 
-        public byte ASID {
-            get => (byte)m_BitFiddler.X(F_ASID, ref m_Value);
+        public uint ASID {
+            get => (uint)m_BitFiddler.X(F_ASID, m_Value);
             set => m_BitFiddler.J(F_ASID, ref m_Value, value);
         }
 
-        public uint GetVPN2(bool isOp64, int offsetSize) {
-            uint vpn2 = 0;
-
-            if (isOp64) {
-                vpn2 = (uint)m_BitFiddler.X(F_VPN2_64, ref m_Value);
-            }
-            else {
-                vpn2 = (uint)m_BitFiddler.X(F_VPN2_32, ref m_Value);
-            }
-
-            vpn2 <<= 13; // Turn it into the mapped virtual base address
-            vpn2 >>= offsetSize; // Get the VPN2 based on page mask
-
-            return vpn2;
+        public uint VPN2 {
+            get => (uint)m_BitFiddler.X(F_VPN2, m_Value);
+            set => m_BitFiddler.J(F_VPN2, ref m_Value, value);
         }
 
-        public void SetVPN2(uint vpn2) {
-            m_BitFiddler.J(F_VPN2_64, ref m_Value, vpn2);
+        public byte Region {
+            get => (byte)m_BitFiddler.X(F_REGION, m_Value);
+            set => m_BitFiddler.J(F_REGION, ref m_Value, value);
         }
 
-        public EntryHiRegister MakeCacheCopy() {
-            var copy = new EntryHiRegister();
-            copy.Write(Read());
-            return copy;
+        public override string ToString()
+        {
+            return $"ASID: {ASID:X4} VPN2: {VPN2:X8} REGION: {Region:X2}";
         }
     }
 }

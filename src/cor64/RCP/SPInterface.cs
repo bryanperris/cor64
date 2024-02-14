@@ -100,7 +100,7 @@ namespace cor64.RCP
     #define	SP_SET_CPUSIGNAL	SP_SET_SIG4
     #define	SP_STATUS_CPUSIGNAL	SP_STATUS_SIG4
 	 */
-    public class SPInterface : PerpherialDevice
+    public class SPInterface : N64MemoryDevice
     {
         private readonly static Logger Log = LogManager.GetCurrentClassLogger();
         private readonly MemMappedBuffer m_SPMemory = new MemMappedBuffer(0x2000);
@@ -117,6 +117,8 @@ namespace cor64.RCP
 
         private readonly MemMappedBuffer[] m_RegSelects;
 
+        private readonly DmaEngine m_DmaEngine = new DmaEngine("SP");
+
         private readonly BitFiddler m_SizeFiddler = new BitFiddler();
         private const int SIZE_FIELD_LEN = 0;
         private const int SIZE_FIELD_COUNT = 1;
@@ -129,6 +131,17 @@ namespace cor64.RCP
         private readonly EventWaitHandle m_CpuRspWait = new EventWaitHandle(false, EventResetMode.ManualReset);
 
         public class MemExports {
+        public MemExports(IntPtr rDRAMPtr, IntPtr dMEMPtr, IntPtr dramAddressPtr, IntPtr writeLenPtr, IntPtr fullPtr, IntPtr semaphorePtr, IntPtr bistPtr) 
+        {
+            this.RDRAMPtr = rDRAMPtr;
+            this.DMEMPtr = dMEMPtr;
+            this.DramAddressPtr = dramAddressPtr;
+            this.WriteLenPtr = writeLenPtr;
+            this.FullPtr = fullPtr;
+            this.SemaphorePtr = semaphorePtr;
+            this.BistPtr = bistPtr;
+   
+        }
             public IntPtr RDRAMPtr { get; }
             public IntPtr IMEMPtr { get; }
             public IntPtr DMEMPtr { get; }
@@ -162,18 +175,20 @@ namespace cor64.RCP
 
         public SPInterface(N64MemoryController controller) : base (controller, 0x100000)
         {
-            Map(m_SPMemory);
-            Map(0x3E000);
-            Map(m_SpMemAddress, m_DramAddress, m_ReadLen, m_WriteLen, m_Status, m_Full, m_Busy, m_Semaphore);
-            Map(0x3FFE0);
-            Map(m_PC, m_Bist);
+            StaticMap(m_SPMemory);
+            StaticMap(0x3E000);
+            StaticMap(m_SpMemAddress, m_DramAddress, m_ReadLen, m_WriteLen, m_Status, m_Full, m_Busy, m_Semaphore);
+            StaticMap(0x3FFE0);
+            StaticMap(m_PC, m_Bist);
 
             Status = new SPStatusRegister(m_Status);
 
-            m_PC.Write += () => PCSet?.Invoke(m_PC.RegisterValue);
+            m_PC.Write += () => {
+                m_PC.RegisterValue &= 0xFFC;
+                PCSet?.Invoke(m_PC.RegisterValue);
+            };
 
-            m_ReadLen.Write += ReadLengthWrite;
-            m_WriteLen.Write += WriteLengthWrite;
+            RestoreDmaHandlers();
 
             m_RegSelects = new MemMappedBuffer[] {
                 m_SpMemAddress,   // $c0
@@ -209,6 +224,34 @@ namespace cor64.RCP
             m_SizeFiddler.DefineField(0, 12);
             m_SizeFiddler.DefineField(12, 8);
             m_SizeFiddler.DefineField(20, 12);
+
+            m_DramAddress.Write += () => {
+                if (m_DramAddress.RegisterValue == 0x000174C0 || m_DramAddress.RegisterValue == 0x0007C440) {
+                    Console.WriteLine("yooooooooo");
+                    throw new Exception();
+                }
+            };
+        }
+
+        public override void AttachDma() {
+            m_DmaEngine.AttachMemory(ParentController.RDRAM, ParentController.SPRegs);
+        }
+
+        public void DmaReadOverride(Action callback) {
+            m_ReadLen.ClearWriters();
+            m_ReadLen.Write += callback;
+        }
+
+        public void DmaWriteOverride(Action callback) {
+            m_WriteLen.ClearWriters();
+            m_WriteLen.Write += callback;
+        }
+
+        public void RestoreDmaHandlers() {
+            m_ReadLen.ClearWriters();
+            m_WriteLen.ClearWriters();
+            m_ReadLen.Write += ReadLengthWrite;
+            m_WriteLen.Write += WriteLengthWrite;
         }
 
         public void RegWriteFromRsp(int select, uint value) {
@@ -229,42 +272,58 @@ namespace cor64.RCP
             m_DramAddress.RegisterValue &= ~7U;
             m_SpMemAddress.RegisterValue &= ~3U;
 
-            uint len = m_WriteLen.RegisterValue;
-            uint size = m_SizeFiddler.X(SIZE_FIELD_LEN, ref len) + 1;
-            uint count = m_SizeFiddler.X(SIZE_FIELD_COUNT, ref len) + 1;
-            uint skip = m_SizeFiddler.X(SIZE_FIELD_SKIP, ref len);
+            uint register = m_WriteLen.RegisterValue;
+            uint len = (m_SizeFiddler.X(SIZE_FIELD_LEN, ref register) + 1) | 7;
+            uint count = m_SizeFiddler.X(SIZE_FIELD_COUNT, ref register) + 1;
+            uint skip = m_SizeFiddler.X(SIZE_FIELD_SKIP, ref register);
 
-            // Log.Debug("SP DMA Write: {3:X8} Len={0}, Count={1}, Skip={2}", size, count, skip, len);
+            // Log.Debug("SP DMA Write: {3:X8} Len={0}, Count={1}, Skip={2}", len, count, skip, len);
 
-            if (size == 1) {
-                size = 7;
-            }
+            m_DmaEngine.StartMonitoring(false, m_SpMemAddress.RegisterValue, m_DramAddress.RegisterValue, (int)len);
 
-            if (skip % 8 != 0) {
-                skip = 0;
-            }
+            // if (skip % 8 != 0) {
+            //     skip = 0;
+            // }
 
             // Force length alignment
-            size = (size + 7U) & ~7U;
+            // size = (size + 7U) & ~7U;
 
             // Check for length overflowing
-            if (((m_SpMemAddress.RegisterValue & 0xFFF) + size) > 0x1000) {
-                size = 0x1000 - (m_SpMemAddress.RegisterValue & 0xFFF);
-            }
+            // if (((m_SpMemAddress.RegisterValue & 0xFFF) + size) > 0x1000) {
+            //     size = 0x1000 - (m_SpMemAddress.RegisterValue & 0xFFF);
+            // }
+
+            // skip += len;
+
+            // do {
+            //     uint i = 0;
+            //     count--;
+            //     do {
+            //         uint srcOffset = (count * len + (m_SpMemAddress.RegisterValue + i)) & 0x00001FF8;
+            //         uint dstOffset = (count * skip + (m_DramAddress.RegisterValue + i)) & 0x00FFFFF8;
+            //         i += 8;
+            //         if (dstOffset > 0x007FFFFFU) continue;
+            //         m_DmaEngine.DirectCopy_RcpToDram((int)srcOffset, (int)dstOffset, 8);
+            //     }
+            //     while (i < len);
+            // } while (count > 0);
 
             for (; count > 0; count--) {
-                DestAddress = m_DramAddress.RegisterValue & 0x007FFFFC;
-                SourceAddress =  0x04000000 | (m_SpMemAddress.RegisterValue & 0x00001FFC);
+                DestAddress = m_DramAddress.RegisterValue & 0x007FFFF8;
+                SourceAddress = m_SpMemAddress.RegisterValue & 0x00001FF8;
 
-                TransferBytes((int)size);
+                byte[] block = new byte[len];
 
-                EmuDebugger.Current.ReportDmaFinish("SP", false, SourceAddress, DestAddress, (int)size);
+                m_DmaEngine.ReadRcp((int)SourceAddress, block, 0, (int)len);
+                m_DmaEngine.WriteDram((int)DestAddress, block, 0, (int)len);
 
-                m_DramAddress.RegisterValue += size + skip;
-                m_SpMemAddress.RegisterValue += size;
+                m_DramAddress.RegisterValue += len;
+                m_SpMemAddress.RegisterValue += len;
             }
 
             ClearDmaBusy();
+
+            m_DmaEngine.StopMonitoring();
         }
 
         /// <summary>
@@ -279,6 +338,9 @@ namespace cor64.RCP
             uint size = m_SizeFiddler.X(SIZE_FIELD_LEN, ref len) + 1;
             uint count = m_SizeFiddler.X(SIZE_FIELD_COUNT, ref len) + 1;
             uint skip = m_SizeFiddler.X(SIZE_FIELD_SKIP, ref len);
+
+            m_DmaEngine.StartMonitoring(true, m_DramAddress.RegisterValue, m_SpMemAddress.RegisterValue, (int)len);
+
 
             // Log.Debug("SP DMA Read: {3:X8} Len={0}, Count={1}, Skip={2}", size, count, skip, len);
 
@@ -300,17 +362,20 @@ namespace cor64.RCP
 
             for (; count > 0; count--) {
                 SourceAddress = m_DramAddress.RegisterValue & 0x007FFFFC;
-                DestAddress =  0x04000000 | (m_SpMemAddress.RegisterValue & 0x00001FFC);
+                DestAddress =  m_SpMemAddress.RegisterValue & 0x00001FFC;
 
-                TransferBytes((int)size);
+                byte[] block = new byte[size];
 
-                EmuDebugger.Current.ReportDmaFinish("SP", true, SourceAddress, DestAddress, (int)size);
+                m_DmaEngine.ReadDram((int)SourceAddress, block, 0, block.Length);
+                m_DmaEngine.WriteRcp((int)DestAddress, block, 0, block.Length);
 
                 m_DramAddress.RegisterValue += size + skip;
                 m_SpMemAddress.RegisterValue += size;
             }
 
             ClearDmaBusy();
+
+            m_DmaEngine.StopMonitoring();
         }
 
         private void ClearDmaBusy() {
@@ -360,5 +425,7 @@ namespace cor64.RCP
         }
 
         public MemExports ExportPointers() => new MemExports(this);
+
+        public override string Name => "SP Interface";
     }
 }

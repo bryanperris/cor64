@@ -5,6 +5,7 @@ using NLog.Config;
 using NLog.Targets;
 using cor64;
 using cor64.BareMetal;
+using cor64.IO;
 using NLog.Filters;
 
 namespace Tests
@@ -15,6 +16,8 @@ namespace Tests
         public void Setup()
         {
             Console.SetOut(TestContext.Progress);
+
+            N64Endianess.PrintEndianess();
 
             LoggingConfiguration configuration = new LoggingConfiguration();
 

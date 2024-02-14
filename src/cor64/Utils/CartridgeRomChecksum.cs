@@ -10,9 +10,9 @@ namespace cor64.Utils
         public const Int32 InputSize = 0x101000;
 
         private byte[] m_Hashcode = new byte[8];
-        private SecurityChipsetType m_CicType;
+        private LockoutChipType m_CicType;
 
-		public CartridgeRomChecksum(SecurityChipsetType type)
+		public CartridgeRomChecksum(LockoutChipType type)
         {
             m_CicType = type;
         }
@@ -20,7 +20,12 @@ namespace cor64.Utils
         protected override void HashCore(byte[] source, int ibStart, int cbSize)
         {
             /* The source buffer must be converted to little-endian from big-endian */
+            #if !HOST_LITTLE_ENDIAN
             BinaryReader arrayReader = new BinaryReader(new Swap32Stream(new MemoryStream(source)));
+            #else
+            BinaryReader arrayReader = new BinaryReader(new MemoryStream(source));
+            #endif
+
             BinaryWriter hashWriter = new BinaryWriter(new MemoryStream(m_Hashcode));
 
             if (cbSize < InputSize)
@@ -30,11 +35,11 @@ namespace cor64.Utils
 
             switch (m_CicType)
             {
-				case SecurityChipsetType.X101:
-				case SecurityChipsetType.X102: seed = 0xF8CA4DDC; break;
-				case SecurityChipsetType.X103: seed = 0xA3886759; break;
-				case SecurityChipsetType.X105: seed = 0xDF26F436; break;
-				case SecurityChipsetType.X106: seed = 0x1FEA617A; break;
+				case LockoutChipType.X101:
+				case LockoutChipType.X102: seed = 0xF8CA4DDC; break;
+				case LockoutChipType.X103: seed = 0xA3886759; break;
+				case LockoutChipType.X105: seed = 0xDF26F436; break;
+				case LockoutChipType.X106: seed = 0x1FEA617A; break;
                 default: return;
             }
 
@@ -60,7 +65,7 @@ namespace cor64.Utils
                 if (t2 > read) t2 ^= r;
                 else t2 ^= t6 ^ read;
 
-				if (m_CicType == SecurityChipsetType.X105)
+				if (m_CicType == LockoutChipType.X105)
                 {
                     long oldPos = arrayReader.BaseStream.Position;
                     arrayReader.BaseStream.Position = 0x40 + 0x0710 + (i & 0xFF);
@@ -73,12 +78,12 @@ namespace cor64.Utils
                 }
             }
 
-			if (m_CicType == SecurityChipsetType.X103)
+			if (m_CicType == LockoutChipType.X103)
             {
                 hashWriter.Write((UInt32)((t6 ^ t4) + t3));
                 hashWriter.Write((UInt32)((t5 ^ t2) + t1));
             }
-			else if (m_CicType == SecurityChipsetType.X106)
+			else if (m_CicType == LockoutChipType.X106)
             {
                 hashWriter.Write((UInt32)((t6 * t4) + t3));
                 hashWriter.Write((UInt32)((t5 * t2) + t1));

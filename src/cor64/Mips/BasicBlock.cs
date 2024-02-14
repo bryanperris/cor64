@@ -10,7 +10,7 @@ namespace cor64.Mips
     {
         private List<TRecord> m_RecordSet;
 
-        protected BasicBlock(ulong address)
+        protected BasicBlock(long address)
         {
             Address = address;
             m_RecordSet = new List<TRecord>();
@@ -23,17 +23,20 @@ namespace cor64.Mips
 
         public TRecord GetLastInst() => m_RecordSet[^1];
 
-        public virtual void UndoLastAppend() {
+        public virtual void UndoLastAppend()
+        {
             m_RecordSet.RemoveAt(m_RecordSet.Count - 1);
         }
 
         public int Size => m_RecordSet.Count;
 
-        public ulong Address { get; protected set; }
+        public long Address { get; protected set; }
 
-        public ulong EndAddress {
-            get {
-                return Address + ((ulong)Size * 4);
+        public long EndAddress
+        {
+            get
+            {
+                return Address + (Size * 4);
             }
         }
 

@@ -18,11 +18,10 @@ namespace cor64.Mips.R4300I
         private bool m_TLBRefillException;
         private bool m_XTLBRefillExcepetion;
         private bool m_CacheErr;
-        private bool m_NMI;
+        private bool m_NMIReset;
         private MipsInterface m_Interface;
         private bool m_SoftReset;
         private bool m_Direct;
-        private bool m_TLBRaisedException = false;
         private bool m_Syscall = false;
         private bool m_Break = false;
         private bool m_Trap = false;
@@ -43,7 +42,7 @@ namespace cor64.Mips.R4300I
 
         private bool m_EnableTimer = false;
 
-        public ulong ExceptionHandlerAddress { get; private set; }
+        public long ExceptionHandlerAddress { get; private set; }
 
         public SystemController(ControlRegisters cop0State, ExecutionState state)
         {
@@ -62,7 +61,6 @@ namespace cor64.Mips.R4300I
         {
             CR.SetException(isStore ? ExceptionType.TLBStore : ExceptionType.TLBLoad);
             // TODO: Set CE
-            m_TLBRaisedException = true;
             m_TLBRefillException = true;
         }
 
@@ -70,7 +68,6 @@ namespace cor64.Mips.R4300I
         {
             CR.SetException(isStore ? ExceptionType.TLBStore : ExceptionType.TLBLoad);
             // TODO: Set CE
-            m_TLBRaisedException = true;
             m_TLBRefillException = true;
         }
 
@@ -92,9 +89,9 @@ namespace cor64.Mips.R4300I
             m_Direct = true;
         }
 
-        public void SetNonMaskableInterrupt()
+        public void SetNMIReset()
         {
-            m_NMI = true;
+            m_NMIReset = true;
         }
 
         public void MipsTimerTick(ulong count)
@@ -154,7 +151,7 @@ namespace cor64.Mips.R4300I
             return REGS.CpuRegRead(i);
         }
 
-        private bool ActiveNMException {
+        public bool IsNonMaskablePending {
             // TODO: Should compute this at the write of any of these flags 
             get {
                 return m_Syscall ||
@@ -211,7 +208,7 @@ namespace cor64.Mips.R4300I
             }
         }
 
-        private void SignalServiceNeeded(ulong pc, ulong target, bool isErrorException, bool isDelaySlot) {
+        private void SignalServiceNeeded(long pc, long target, bool isErrorException, bool isDelaySlot) {
                 #if DEBUG_INTERRUPTS
                 Log.Debug("Execute Interrupt Handler");
                 #endif
@@ -221,31 +218,45 @@ namespace cor64.Mips.R4300I
 
                 var selectedEPC = isErrorException ? CTS.CP0_REG_ERROR_EPC : CTS.CP0_REG_EPC;
 
+                // Sign extension for 64-bit mode
+                if (SR.IsOperation64) {
+                    pc = (int)pc;
+                }
+
                 if (isDelaySlot)
                 {
-                    REGS.Write(selectedEPC, pc - 4);
+                    REGS.Write(selectedEPC, (ulong)(pc - 4));
                     CR.SetBranchDelayBit();
                 }
                 else
                 {
-                    REGS.Write(selectedEPC, pc);
+                    REGS.Write(selectedEPC, (ulong)pc);
+                    CR.ClearBranchDelayBit();
                 }
 
                 #if DEBUG_INTERRUPTS
-                Log.Debug("PC to return {0:X8} after servicing interrupt/exception", REGS.CpuRegRead(error ? CTS.CP0_REG_ERROR_EPC : CTS.CP0_REG_EPC));
+                Log.Debug("PC to return {0:X8} after servicing interrupt/exception", REGS.CpuRegRead(isErrorException ? CTS.CP0_REG_ERROR_EPC : CTS.CP0_REG_EPC));
                 #endif
 
                 ExceptionHandlerAddress = target;
-                m_TLBRaisedException = false;
 
                 // Ready for servicing
                 ServicingRequred = true;
         }
 
-        public void CheckInterrupts(ulong pc, bool isDelaySlot) {
+        private uint _VecAddress(uint offset) {
+            if (m_Direct) {
+                return offset;
+            }
+            else {
+                return 0x80000000 + offset;
+                // TODO: Should respect the bootstrap vectors flag
+            }
+        }
+
+        public void CheckInterrupts(long pc, bool isDelaySlot) {
             // Reset some cause bits
             CR.ClearCe();
-            CR.ClearBranchDelayBit();
 
             // TODO: Should precompute based during the write to this flag
             //       Use vars for interrupt_cacheTarget, interrupt_target
@@ -263,27 +274,26 @@ namespace cor64.Mips.R4300I
             CheckTimerInterrupt();
             CheckRcpInterrupt();
 
-            if (m_Direct) {
-                SignalServiceNeeded(pc, 0, false, isDelaySlot);
-            }
-
-            else if (m_NMI) {
-                m_NMI = false;
+            /* Hard Reset */
+            if (m_NMIReset) {
+                m_NMIReset = false;
+                // TODO Respect the m_Direct flag for testing
                 SignalServiceNeeded(pc, 0xBFC00000, true, isDelaySlot);
             }
 
-            /* Reset button has been pushed, set its interrupt */
+            /* Soft Reset (via the reset button) */
             else if (m_SoftReset)
             {
                 m_SoftReset = false;
                 CR.SetInterruptPending(INTERRUPT_RESET);
+                // TODO Respect the m_Direct flag for testing
                 SignalServiceNeeded(pc, 0xBFC00000, false, isDelaySlot);
             }
 
             /* Normal interrupts */
             else if (InterruptsEnabled && (CR.InterruptPending & SR.InterruptMask) != 0) {
                     CR.SetException(ExceptionType.Interrupt, false);
-                    SignalServiceNeeded(pc, 0x80000180, false, isDelaySlot);
+                    SignalServiceNeeded(pc, _VecAddress(0x180), false, isDelaySlot);
 
                     // #if DEBUG_INTERRUPTS
                     // Log.Debug("IP: {0:X8} SR: {1:X8} = {2}", CR.InterruptPending, SR.InterruptMask, executeHandler);
@@ -293,10 +303,9 @@ namespace cor64.Mips.R4300I
             CR.ClearThrownException();
         }
 
-        public void CheckExceptions(ulong pc, bool isDelaySlot) {
+        public void CheckExceptions(long pc, bool isDelaySlot) {
             // Reset some cause bits
             CR.ClearCe();
-            CR.ClearBranchDelayBit();
 
             // if (SR.TestFlags(StatusRegister.StatusFlags.UseBootstrapVectors))
             // {
@@ -309,55 +318,63 @@ namespace cor64.Mips.R4300I
             //     target = 0x80000000;
             // }
 
-            if (ActiveNMException || CR.ExceptionThrown) {
+            if (IsNonMaskablePending) {
+                // TODO: make non maskable exceptions just enumerable since only one can be happen at a time
+
                 /* 32-bit TLB Exception */
                 if (m_TLBRefillException)
                 {
                     m_TLBRefillException = false;
-                    SignalServiceNeeded(pc, 0x80000080, false, isDelaySlot);
+                    #if DEBUG_TLB
+                    Log.Debug("32-bit TLB exeception thrown");
+                    #endif
+                    SignalServiceNeeded(pc, _VecAddress(0x80), false, isDelaySlot);
                 }
 
                 /* 64-bit TLB Exception */
                 else if (m_XTLBRefillExcepetion)
                 {
+                    #if DEBUG_TLB
+                    Log.Debug("64-bit TLB exeception thrown");
+                    #endif
                     m_XTLBRefillExcepetion = false;
-                    SignalServiceNeeded(pc, 0x80000080, false, isDelaySlot);
+                    SignalServiceNeeded(pc,  _VecAddress(0x80), false, isDelaySlot);
                 }
 
                 /* CPU Cache Error */
                 else if (m_CacheErr)
                 {
                     m_CacheErr = false;
-                    SignalServiceNeeded(pc, 0x80000100, true, isDelaySlot);
+                    SignalServiceNeeded(pc, _VecAddress(0x100), true, isDelaySlot);
                 }
 
                 /* SYSCALL: Non maskable exception */
                 else if (m_Syscall) {
                     m_Syscall = false;
-                    SignalServiceNeeded(pc, 0x80000180, false, isDelaySlot);
+                    SignalServiceNeeded(pc, _VecAddress(0x180), false, isDelaySlot);
                 }
 
                 /* BREAK: Non maskable exception */
                 else if (m_Break) {
                     m_Break = false;
-                    SignalServiceNeeded(pc, 0x80000180, false, isDelaySlot);
+                    SignalServiceNeeded(pc, _VecAddress(0x180), false, isDelaySlot);
                 }
 
                 /* TRAP: Non maskable exception */
                 else if (m_Trap) {
                     m_Trap = false;
-                    SignalServiceNeeded(pc, 0x80000180, false, isDelaySlot);
+                    SignalServiceNeeded(pc, _VecAddress(0x180), false, isDelaySlot);
                 }
-
-                /* MIPS General Exception */
-                else if (CR.ExceptionThrown)
-                {
-                    Log.Debug("MIPS threw an exception: {0}", CR.Exception);
-                    SignalServiceNeeded(pc, 0x80000180, false, isDelaySlot);
-                }
-
-                CR.ClearThrownException();
             }
+
+            /* MIPS Maskable Exception */
+            else if (CR.ExceptionThrown)
+            {
+                // Log.Debug("MIPS threw an exception: {0}", CR.Exception);
+                SignalServiceNeeded(pc, _VecAddress(0x180), false, isDelaySlot);
+            }
+
+            CR.ClearThrownException();
         }
 
         public bool IsKernelMode => SR.ModeBits == 0;
@@ -368,18 +385,9 @@ namespace cor64.Mips.R4300I
 
         public bool IsOperation64 => SR.IsOperation64;
 
-        public bool TLBException => m_TLBRaisedException;
-
         public void RaiseMipsException(ExceptionType type) {
             State.LLBit = false; // All exceptions cause atomic operations to fail
             CR.SetException(type);
-
-            switch (type) {
-                case ExceptionType.TLBLoad:
-                case ExceptionType.TLBMod:
-                case ExceptionType.TLBStore: m_TLBRaisedException = true; break;
-                default: break;
-            }
         }
 
         public void SyscallException() {

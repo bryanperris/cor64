@@ -51,6 +51,10 @@ namespace Tests
             return s_LastOpcode.CPUTest();
         }
 
+        public static void CPUTestBegin(this String opcode) {
+            s_LastOpcode = opcode;
+        }
+
         public static TestCase CPUTest(this String opcode, ulong operandA, ulong operandB, ParamType type = ParamType.Normal)
         {
             s_LastOpcode = opcode;
@@ -179,6 +183,13 @@ namespace Tests
 
         public static void Run(this TestCase testCase, bool toggleBreakpoint)
         {
+            #if !CPU_CHECK_RESERVED
+            if (testCase.Test32 && testCase.ExpectedExceptions == ExceptionType.Reserved) {
+                Console.WriteLine("Skipping 32-bit reserved test");
+                return;
+            }
+            #endif
+
             AsmHelper.AssembleMipsTestCase(testCase, toggleBreakpoint);
 
             for (int i = 0; i < s_InterpreterList.Count; i++)
@@ -209,6 +220,8 @@ namespace Tests
                 }
 
                 /* Test in 32-bit kernel mode */
+                /// XXX: Not much reason to be testing 32-bit mode...
+                #if ALLOW_32BIT_TESTS
                 if (testCase.Test32 && !testCase.IsFpuTest)
                 {
                     testCase.GetProgram().Position = 0;
@@ -222,6 +235,7 @@ namespace Tests
                     testableCore.StepOnce();
                     testableCore.TestExpectations();
                 }
+                #endif
             }
         }
     }

@@ -14,27 +14,26 @@ namespace cor64.Mips
             void ModifyFormat(String newFormat);
         }
 
-        private delegate String OperandFormatter(OperandType t, String operands, String abi, BinaryInstruction inst, ulong address, ISymbolProvider symbolProvider);
+        private delegate String OperandFormatter(OperandType t, String operands, String abi, BinaryInstruction inst, ISymbolProvider symbolProvider);
 
         private class OperandFormat : IOperandFormat
         {
             private String format;
             private readonly int size;
-            private OperandFormatter formatter;
             public OperandType type;
 
             public OperandFormat(int size, String format, OperandFormatter formatter)
             {
                 this.size = size;
                 this.format = format;
-                this.formatter = formatter;
+                Formatter = formatter;
             }
 
             public string Format => format;
 
             public int Size => size;
 
-            public OperandFormatter Formatter => formatter;
+            public OperandFormatter Formatter { get; }
 
             public void ModifyFormat(string newFormat)
             {
@@ -43,11 +42,11 @@ namespace cor64.Mips
 
             public object Clone()
             {
-                return new OperandFormat(size, format, formatter);
+                return new OperandFormat(size, format, Formatter);
             }
         }
 
-        private static readonly OperandFormatter m_MainFormatter = (t, s, abi, inst, addr, sym) =>
+        private static readonly OperandFormatter m_MainFormatter = (t, s, abi, inst, sym) =>
         {
             s = s.Replace("rd", ABI.GetLabel(abi, ABI.RegType.GPR, inst.rd));
             s = s.Replace("rt", ABI.GetLabel(abi, ABI.RegType.GPR, inst.rt));
@@ -58,9 +57,9 @@ namespace cor64.Mips
             return s;
         };
 
-        private static readonly OperandFormatter m_Cop1Formatter = (t, s, abi, inst, addr, sym) =>
+        private static readonly OperandFormatter m_Cop1Formatter = (t, s, abi, inst, sym) =>
         {
-            s = m_MainFormatter(t, s, abi, inst, addr, sym);
+            s = m_MainFormatter(t, s, abi, inst, sym);
             s = s.Replace("ft", ABI.GetLabel(abi, ABI.RegType.Cop1, inst.ft));
             s = s.Replace("fd", ABI.GetLabel(abi, ABI.RegType.Cop1, inst.fd));
             s = s.Replace("fs", ABI.GetLabel(abi, ABI.RegType.Cop1, inst.fs));
@@ -68,24 +67,24 @@ namespace cor64.Mips
             return s;
         };
 
-        private static readonly OperandFormatter m_CodeFormatter = (t, s, abi, inst, addr, sym) =>
+        private static readonly OperandFormatter m_CodeFormatter = (t, s, abi, inst, sym) =>
         {
             uint code = inst.inst >> 6;
             code &= 0xFFFFF;
             return s.Replace("code", "$" + code.ToString("X8"));
         };
 
-        private static readonly OperandFormatter m_Cop0Formatter = (t, s, abi, inst, addr, sym) =>
+        private static readonly OperandFormatter m_Cop0Formatter = (t, s, abi, inst, sym) =>
         {
-            s = m_MainFormatter(t, s, abi, inst, addr, sym);
+            s = m_MainFormatter(t, s, abi, inst, sym);
             s = s.Replace("spcop0", ABI.GetLabel(abi, ABI.RegType.SpCop0, inst.rd));
             s = s.Replace("cop0", ABI.GetLabel(abi, ABI.RegType.Cop0, inst.rd));
             return s;
         };
 
-        private static readonly OperandFormatter m_VuFormatter = (t, s, abi, inst, addr, sym) =>
+        private static readonly OperandFormatter m_VuFormatter = (t, s, abi, inst, sym) =>
         {
-            s = m_MainFormatter(t, s, abi, inst, addr, sym);
+            s = m_MainFormatter(t, s, abi, inst, sym);
             s = s.Replace("vs", ABI.GetLabel(abi, ABI.RegType.VU, inst.vs));
             s = s.Replace("vt", ABI.GetLabel(abi, ABI.RegType.VU, inst.vt));
             s = s.Replace("vd", ABI.GetLabel(abi, ABI.RegType.VU, inst.vd));
@@ -97,50 +96,29 @@ namespace cor64.Mips
             return s;
         };
 
-        private static readonly OperandFormatter m_BranchFormatter = (t, s, abi, inst, addr, sym) =>
+        private static readonly OperandFormatter m_BranchFormatter = (t, s, abi, inst, sym) =>
         {
-            String symbol = "";
-
             if (t == OperandType.JUMP)
             {
                 var offset = (int)inst.target;
-                var off = (int)addr & 0xF0000000;
 
-                offset <<= 2;
-                offset = (int)((uint)offset | off);
+                // offset *= 4;
 
-                if (sym != null)
-                    symbol = sym.GetSymbol((uint)offset);
-
-                if (String.IsNullOrEmpty(symbol))
-                    return s.Replace("target", "$" + offset.ToString("X8"));
-                else
-                    return s.Replace("target", symbol);
+                return s.Replace("target", "$" + offset.ToString("X4"));
             }
             else
             {
                 var offset = (short)inst.imm;
-                var off = (short)addr;
 
-                if (offset > 0)
-                    off *= -1;
+                // offset *= 4;
 
-                offset <<= 2;
-                offset += off;
+                s = s.Replace("offset", "$" + offset.ToString("X4"));
 
-                if (sym != null)
-                    symbol = sym.GetSymbol((uint)(offset + 4));
-
-                if (String.IsNullOrEmpty(symbol))
-                    s = s.Replace("offset", "$" + offset.ToString("X4"));
-                else
-                    s = s.Replace("offset",  symbol);
-
-                return m_MainFormatter(t, s, abi, inst, addr, sym);
+                return m_MainFormatter(t, s, abi, inst, sym);
             }
         };
 
-        private static readonly OperandFormatter m_BczFormatter = (t, s, abi, inst, addr, sym) =>
+        private static readonly OperandFormatter m_BczFormatter = (t, s, abi, inst, sym) =>
         {
             s = s.Replace("offset", "$" + inst.imm.ToString("X4"));
             return s;
@@ -208,19 +186,16 @@ namespace cor64.Mips
         }
 
 
-        public static String Decode(String abi, BinaryInstruction inst, IOperandFormat format, ulong address, ISymbolProvider symbolProvider)
+        public static String Decode(String abi, BinaryInstruction inst, IOperandFormat format, ISymbolProvider symbolProvider)
         {
-            var fmt = format as OperandFormat;
-
-            if (fmt != null && fmt.Formatter != null && fmt.Size > 0)
+            if (format is OperandFormat fmt && fmt.Formatter != null && fmt.Size > 0)
             {
-                return fmt.Formatter(fmt.type, fmt.Format, abi, inst, address, symbolProvider);
+                return fmt.Formatter(fmt.type, fmt.Format, abi, inst, symbolProvider);
             }
             else
             {
                 return format.Format;
             }
         }
-
     }
 }

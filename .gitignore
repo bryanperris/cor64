@@ -5,5 +5,14 @@ package-lock.json
 dist
 paket-files
 mono_crash.mem*
-build
+.nuke/temp
 .tmp/
+build/CMakeFiles
+build/.cmake
+build/build.ninja
+build/cmake_install.cmake
+build/CMakeCache.txt
+build/compile_commands.json
+.cache
+
+build/rules.ninja

@@ -2,15 +2,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net5.0</TargetFramework>
+    <TargetFramework>net7.0</TargetFramework>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <OutputPath>../../bin</OutputPath>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ServerGarbageCollection>false</ServerGarbageCollection>
-  </PropertyGroup>
-  <!-- Emulator debugging compiler flags -->
-  <PropertyGroup>
-    <!-- <DefineConstants>$(DefineConstants);LITTLE_ENDIAN</DefineConstants> -->
   </PropertyGroup>
   <ItemGroup>
     <None Update="config.json">

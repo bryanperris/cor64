@@ -1,3 +1,4 @@
+using System.Security.AccessControl;
 using System;
 using System.IO;
 using cor64.Mips;
@@ -38,6 +39,7 @@ namespace RunN64
                 s_Emulator.WorkbenchMode = options.WorkbenchMode;
                 s_Emulator.Configuration = JsonConvert.DeserializeObject<Config>(File.ReadAllText("config.json"));
                 s_Emulator.SetupLogging();
+                s_Emulator.CpuDebugTraceFile = FileEnv.WorkingDir + Path.DirectorySeparatorChar + "cpu_tracelog_debug.log";
 
                 Console.ForegroundColor = ConsoleColor.Green;
                 Log.Info("****************************************");
@@ -145,7 +147,7 @@ namespace RunN64
                     }
 
 
-                    Log.Error("Last Instruction: " + s_Emulator.System.DeviceCPU.Disassembler.GetFullDisassembly(s_Emulator.System.DeviceCPU.CurrentInst));
+                    Log.Error("Last Instruction: " + s_Emulator.System.DeviceCPU.Disassembler.Disassemble(s_Emulator.System.DeviceCPU.CurrentInst));
 
                     s_Emulator.DumpStateToLog();
 

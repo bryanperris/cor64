@@ -1,6 +1,6 @@
 namespace cor64 {
     public class IPLType {
-        public IPLType(SecurityChipsetType cic, uint hashcode) {
+        public IPLType(LockoutChipType cic, uint hashcode) {
             Cic = cic;
             HashCode = hashcode;
             Seed = 0;
@@ -9,26 +9,26 @@ namespace cor64 {
             switch (cic)
             {
                 default: break;
-				case SecurityChipsetType.X101:
-				case SecurityChipsetType.X102: Seed = 0x3F; break;
-				case SecurityChipsetType.X103: Seed = 0x78; break;
-				case SecurityChipsetType.X105: Seed = 0x91; break;
-				case SecurityChipsetType.X106: Seed = 0x85; break;
+				case LockoutChipType.X101:
+				case LockoutChipType.X102: Seed = 0x3F; break;
+				case LockoutChipType.X103: Seed = 0x78; break;
+				case LockoutChipType.X105: Seed = 0x91; break;
+				case LockoutChipType.X106: Seed = 0x85; break;
             }
 
             switch (cic)
             {
-				case SecurityChipsetType.Custom: Name = "Custom CIC"; break;
-				case SecurityChipsetType.X101:   Name = "CIC-X101"; break;
-				case SecurityChipsetType.X102:   Name = "CIC-X102"; break;
-				case SecurityChipsetType.X103:   Name = "CIC-X103"; break;
-				case SecurityChipsetType.X105:   Name = "CIC-X105"; break;
-				case SecurityChipsetType.X106:   Name = "CIC-X106"; break;
+				case LockoutChipType.Custom: Name = "Custom CIC"; break;
+				case LockoutChipType.X101:   Name = "CIC-NUS-X101"; break;
+				case LockoutChipType.X102:   Name = "CIC-NUS-X102"; break;
+				case LockoutChipType.X103:   Name = "CIC-NUS-X103"; break;
+				case LockoutChipType.X105:   Name = "CIC-NUS-X105"; break;
+				case LockoutChipType.X106:   Name = "CIC-NUS-X106"; break;
                 default: break;
             }
         }
 
-        public SecurityChipsetType Cic { get; }
+        public LockoutChipType Cic { get; }
 
         public uint HashCode { get; }
 

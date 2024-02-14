@@ -15,20 +15,19 @@ namespace cor64.Rdp.LLE {
 
         private const uint RDRAM_MASK = 0x00FFFFFF;
 
-        public Rdram(N64MemoryController.N64MemoryStream rdramStream) {
+        public Rdram(N64MemoryStream rdramStream) {
             m_Hidden = rdramStream;
-
             m_IdxLim8 = (uint)(rdramStream.Length - 1);
             m_IdxLim16 = (m_IdxLim8 >> 1) & 0xFFFFFFFFU;
             m_IdxLim32 = (m_IdxLim8 >> 2) & 0xFFFFFFFFU;
-
             m_BaseStream = rdramStream;
 
-            #if LITTLE_ENDIAN
-            m_MemoryStream = rdramStream;
-            #else
+            // CLEANUP: little-endian mode is bugged
+            // #if HOST_LITTLE_ENDIAN
+            // m_MemoryStream = rdramStream;
+            // #else
             m_MemoryStream = new SwapAutoStream(rdramStream);
-            #endif
+            // #endif
 
             m_Reader = new BinaryReader(m_MemoryStream);
             m_Writer = new BinaryWriter(m_MemoryStream);
@@ -45,7 +44,7 @@ namespace cor64.Rdp.LLE {
             return (byte)m_BaseStream.ReadByte();
         }
 
-        private void WriteRdram8(uint address, byte value) {
+        public void WriteRdram8(uint address, byte value) {
             m_MemoryStream.Position = address;
             m_BaseStream.WriteByte(value);
         }
@@ -93,16 +92,17 @@ namespace cor64.Rdp.LLE {
             }
         }
 
-        public byte ReadIdx8Fast(uint address) {
-            #if LITTLE_ENDIAN
-            return ReadRdram8(address);
-            #else
-            return ReadRdram8(address ^ 3);
-            #endif
-        }
+        // public byte ReadIdx8Fast(uint address) {
+        //     #if HOST_LITTLE_ENDIAN
+        //     return ReadRdram8(address);
+        //     #else
+        //     return ReadRdram8(address ^ 3);
+        //     #endif
+        // }
 
         public void WriteIdx8(uint address, byte value) {
             address &= RDRAM_MASK;
+
             if (ValidIdx8(address)) {
                 WriteRdram8(address, value);
             }

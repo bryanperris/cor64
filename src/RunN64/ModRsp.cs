@@ -84,6 +84,11 @@ namespace RunN64 {
             Status.StatusFlags = StatusFlags.Halt;
         }
 
+        protected override uint FetchInstruction(long address)
+        {
+            throw new NotImplementedException();
+        }
+
         public unsafe override void AttachInterface(MipsInterface rcpInterface, SPInterface iface, DPCInterface rdpInterface)
         {
             base.AttachInterface(rcpInterface, iface, rdpInterface);
@@ -93,7 +98,14 @@ namespace RunN64 {
                 iface.SetPC((uint)PC);
                 // Log.Debug("RSP PC Set: {0:X8}", PC);
             };
-            
+
+            iface.DmaReadOverride(() => {
+                R.DmaRead();
+            });
+
+            iface.DmaWriteOverride(() => {
+                R.DmaWrite();
+            });
 
             Status.Change += () =>
             {
@@ -108,7 +120,7 @@ namespace RunN64 {
                 if (Status.IsCmdEmpty)
                     return;
 
-                if (Status.TestCmdFlags(StatusCmdFlags.ClearIntterupt)) {
+                if (Status.TestCmdFlags(StatusCmdFlags.ClearInterrupt)) {
                     RcpInterface.ClearInterrupt(MipsInterface.INT_SP);
                 }
                 else if (Status.TestCmdFlags(StatusCmdFlags.SetInterrupt)) {
@@ -194,8 +206,7 @@ namespace RunN64 {
         }
 
         private void DebugInst(uint pc, uint inst) {
-            var decoded = Disassembler.Decode(pc, pc + 8, inst);
-            Console.WriteLine("RSP {0:X8} {1:X8} {2}", pc, inst, Disassembler.GetFullDisassembly(decoded));
+            Console.WriteLine("RSP {0:X8} {1:X8} {2}", pc, inst, Disassembler.Disassemble(pc, Disassembler.Decode(inst)));
         }
 
         private void ProcessFlag(StatusCmdFlags c, StatusCmdFlags s, StatusFlags f) {
@@ -209,7 +220,7 @@ namespace RunN64 {
             }
         }
 
-        public override void SafeSetPC(ulong address)
+        public override void SafeSetPC(long address)
         {
             base.SafeSetPC(address);
             Interface.SetPC((uint)address);
@@ -258,7 +269,7 @@ namespace RunN64 {
             throw new NotImplementedException();
         }
 
-        public override void ManualStart(ulong pc)
+        public override void ManualStart(long pc)
         {
             throw new NotImplementedException();
         }

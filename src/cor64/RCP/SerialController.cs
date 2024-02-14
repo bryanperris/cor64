@@ -3,6 +3,7 @@ using cor64.Mips;
 using cor64.IO;
 using NLog;
 using cor64.Debugging;
+using cor64.PIF;
 
 /*
  0x0480 0000 to 0x048F FFFF  Serial interface (SI) registers:
@@ -33,7 +34,7 @@ using cor64.Debugging;
 */
 
 namespace cor64.RCP {
-    public class SerialController : PerpherialDevice{
+    public class SerialController : N64MemoryDevice{
         private MipsInterface m_RcpInterface;
 
         private readonly static Logger Log = LogManager.GetCurrentClassLogger();
@@ -43,23 +44,24 @@ namespace cor64.RCP {
         private readonly MemMappedBuffer m_PifWrite64Reg = new MemMappedBuffer(4, MemMappedBuffer.MemModel.SINGLE_WRITEONLY);
         private readonly MemMappedBuffer m_StatusReg = new MemMappedBuffer();
 
-        private const uint SIZE = 64;
-        private const uint ADDR = 0x1FC007C0;
+        private readonly DmaEngine m_DmaEngine = new DmaEngine("SI");
+        private readonly PIFController m_PIF;
 
-        public event Action PifRamWrite;
+        private const int SIZE = 64;
+        private const uint ADDR = 0x1FC007C0;
+        private const int OFFSET = 0x7C0;
+
+        public event Action ReadJoycons;
 
         public SerialController(N64MemoryController controller) : base(controller, 0x100000)
         {
-            Map(m_DramAddressReg, m_PifRead64Reg);
-            Map(8);
-            Map(m_PifWrite64Reg);
-            Map(4);
-            Map(m_StatusReg);
+            m_PIF = controller.PIF;
 
-            m_DramAddressReg.Write += () => {
-                m_DramAddressReg.RegisterValue &= 0x00FFFFFF;
-                m_DramAddressReg.RegisterValue &= ~3U;
-            };
+            StaticMap(m_DramAddressReg, m_PifRead64Reg);
+            StaticMap(8);
+            StaticMap(m_PifWrite64Reg);
+            StaticMap(4);
+            StaticMap(m_StatusReg);
 
             m_StatusReg.Write += StatusChanged;
 
@@ -70,8 +72,14 @@ namespace cor64.RCP {
             m_PifWrite64Reg.Write += PifDmaWrite;
         }
 
+        public override string Name => "Serial Interface";
+
         public void AttachInterfaces(MipsInterface rcpInterface) {
             m_RcpInterface = rcpInterface;
+        }
+
+        public override void AttachDma() {
+            m_DmaEngine.AttachMemory(ParentController.RDRAM, ParentController.PIF);
         }
 
         public void Init() {
@@ -89,31 +97,53 @@ namespace cor64.RCP {
         }
 
         private void PifDmaWrite() {
-            // RDRAM <- PIF RAM
-            SourceAddress = ADDR;
-            DestAddress = m_DramAddressReg.RegisterValue;
+            // RDRAM -> PIF RAM
 
-            TransferBytes((int)SIZE);
-            EmuDebugger.Current.ReportDmaFinish("PIF", false, SourceAddress, DestAddress, (int)SIZE);
+            uint dram = m_DramAddressReg.RegisterValue & 0x1FFFFFFF;
 
-            m_DramAddressReg.RegisterValue += SIZE;
+            // Log.Debug("WR64 = {0:X8}", m_PifWrite64Reg.RegisterValue);
+
+            m_DmaEngine.StartMonitoring(true, dram, OFFSET, SIZE);
+
+            m_DmaEngine.DirectCopy_DramToRcp((int)dram, OFFSET, SIZE);
+            // m_PIF.ReadCommandByte();
+            // PrintRam();
+
+            m_DmaEngine.StopMonitoring();
+
             m_RcpInterface.SetInterrupt(MipsInterface.INT_SI, true);
             m_StatusReg.ReadonlyRegisterValue |= 0x1000;
         }
 
         private void PifDmaRead() {
-            // RDRAM -> PIF RAM
-            SourceAddress = m_DramAddressReg.RegisterValue;
-            DestAddress = ADDR;
+            // PIF RAM -> RDRAM
 
-            TransferBytes((int)SIZE);
-            EmuDebugger.Current.ReportDmaFinish("PIF", true, SourceAddress, DestAddress, (int)SIZE);
+            uint dram = m_DramAddressReg.RegisterValue & 0x1FFFFFFF;
 
-            m_DramAddressReg.RegisterValue += SIZE;
+            // The PIF command is read before DMA starts
+            // VR4300 preps PIF RAM (command + argument)
+            // PIF process's the request, the response is written back into PIF RAM before the DMA transfer
+            m_PIF.ReadCommandByte();
+            ReadJoycons?.Invoke();
+            m_PIF.ProcessPifCommands();
+
+            m_DmaEngine.StartMonitoring(false, OFFSET, dram, SIZE);
+
+            m_DmaEngine.DirectCopy_RcpToDram(OFFSET, (int)dram, SIZE);
+
+            m_DmaEngine.StopMonitoring();
+
             m_RcpInterface.SetInterrupt(MipsInterface.INT_SI, true);
             m_StatusReg.ReadonlyRegisterValue |= 0x1000;
+        }
 
-            PifRamWrite?.Invoke();
+        private void PrintRam() {
+            Console.WriteLine("\n------------------------------");
+            var ram = m_PIF.ReadRam();
+            for (int i = 0; i < 64; i++) {
+                Console.Write(ram[i].ToString("X2"));
+            }
+            Console.WriteLine("\n------------------------------\n");
         }
     }
 }

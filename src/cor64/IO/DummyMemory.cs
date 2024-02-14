@@ -5,30 +5,19 @@ using NLog;
 
 namespace cor64.IO
 {
-	public class DummyMemory : BlockDevice
+	public class DummyMemory : N64MemoryDevice
     {
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
-		private readonly long m_Size;
+		private readonly int m_Size;
         private readonly string m_DummyName;
 
-        public DummyMemory(long size, String dummyName)
+        public DummyMemory(int size, String dummyName, N64MemoryController controller) : base(controller, size)
         {
-			m_Size = size;
             m_DummyName = dummyName;
         }
 
-		public override long Size => m_Size;
+        public override string Name => m_DummyName;
 
-        public sealed override void Read(long position, byte[] buffer, int offset, int count)
-		{
-			Array.Clear(buffer, offset, count);
-            Log.Info("Dummy read access: {0:X8} {1}", position, new MemoryAccessMeta((uint)BaseAddress, false, null).ToString());
-		}
-
-        public sealed override void Write(long position, byte[] buffer, int offset, int count)
-		{
-            var hex = HexTools.ToHex(buffer, offset, count);
-            //Log.Debug("Dummy write access: {0:X8} {1} {2}", position, hex, new MemoryAccessMeta((uint)BaseAddress, false).ToString());
-        }
+        // WIP: Attach dummy read or write notification handlers for debugging
 	}
 }

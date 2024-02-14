@@ -19,6 +19,7 @@ The following R4000 instructions are not present in the RSP instruction set:
 • SYNC, (this instruction is intended for multiprocessor systems)
 • BCzF, BCzT (all branch-on-coprocessor instructions)
 • TGE, TGEU, TLT, TLTU, TEQ, TNE, TGEI, TGEIU, TLTI, TLTIU,TEQI, TNEI, (all TRAP instructions)
+  Actually LWU does exist on the RSP, works exactly like LW
 */
 
 /*
@@ -65,7 +66,7 @@ namespace cor64.Mips.Rsp
             ADDI,    ADDIU,  SLTI,  SLTIU, ANDI,  ORI,   XORI,  LUI,
             COP0,    NULL,   COP2,  NULL,  NULL,  NULL,  NULL,  NULL,
             NULL,    NULL,   NULL,  NULL,  NULL,  NULL,  NULL,  NULL,
-            LB,      LH,     NULL,  LW,    LBU,   LHU,   NULL,  NULL,
+            LB,      LH,     NULL,  LW,    LBU,   LHU,   NULL,  LW,
             SB,      SH,     NULL,  SW,    NULL,  NULL,  NULL,  NULL,
             NULL,    NULL,   LWC2,  NULL,  NULL,  NULL,  NULL,  NULL,
             NULL,    NULL,   SWC2,  NULL,  NULL,  NULL,  NULL,  NULL

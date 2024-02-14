@@ -9,6 +9,8 @@ using System.Text.RegularExpressions;
 using System.Diagnostics;
 using NLog;
 
+// TODO: We shouldn't have BassSharp direclty log to the LogManager, it should be wrapped so logging could be turned off
+
 namespace cor64.BassSharp
 {
     public abstract partial class Bass
@@ -44,6 +46,8 @@ namespace cor64.BassSharp
         private int m_NextLabelCounter = 1;
         private bool m_Strict;
         private readonly Dictionary<long, String> m_Symbols = new Dictionary<long, string>();
+
+        protected bool Quiet { get; set; } = false;
 
 
         public Stream Output => m_Target.GetStream();
@@ -155,7 +159,7 @@ namespace cor64.BassSharp
 
                     if (m != null) {
                         Source(RequestCodeSource(m));
-                        Log.Debug("Added source: {0}", m);
+                        if (!Quiet) Log.Debug("Added source: {0}", m);
                     }
                     else {
                         m_Program.Add(
@@ -188,19 +192,19 @@ namespace cor64.BassSharp
             m_Strict = strict;
 
             m_Phase = Phase.Analyze;
-            Log.Trace("Analyze Start!");
+            if (!Quiet)Log.Trace("Analyze Start!");
             Analyze();
-            Log.Trace("Analyze Done!");
+            if (!Quiet)Log.Trace("Analyze Done!");
 
             m_Phase = Phase.Query;
-            Log.Trace("Execute Query Start!");
+            if (!Quiet)Log.Trace("Execute Query Start!");
             Execute();
-            Log.Trace("Execute Query Done!");
+            if (!Quiet)Log.Trace("Execute Query Done!");
 
             m_Phase = Phase.Write;
-            Log.Trace("Execute Write Start!");
+            if (!Quiet)Log.Trace("Execute Write Start!");
             Execute();
-            Log.Trace("Execute Write Done!");
+            if (!Quiet)Log.Trace("Execute Write Done!");
         }
 
         public long Pc => m_Origin + m_Base;
@@ -282,7 +286,7 @@ namespace cor64.BassSharp
         
         protected void DebugPrint(String message, params Object[] args) {
             if (ExtraDebugMessages) {
-                Log.Debug(message, args);
+                if (!Quiet) Log.Debug(message, args);
             }
         }
 

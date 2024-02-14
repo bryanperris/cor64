@@ -46,7 +46,7 @@ using System.Threading.Tasks;
 
 namespace cor64.RCP
 {
-    public class RdramInterface : PerpherialDevice
+    public class RdramInterface : N64MemoryDevice
     {
         private MemMappedBuffer m_Mode = new MemMappedBuffer(4);
         private MemMappedBuffer m_Config = new MemMappedBuffer(4);
@@ -59,10 +59,12 @@ namespace cor64.RCP
 
         public RdramInterface(N64MemoryController controller) : base(controller, 0x100000)
         {
-            Map(m_Mode, m_Config, m_CurrentLoad, m_Select, m_Refresh, m_Latency, m_ReadError, m_WriteError);
+            StaticMap(m_Mode, m_Config, m_CurrentLoad, m_Select, m_Refresh, m_Latency, m_ReadError, m_WriteError);
 
             // Use this to force the IPL to skip RDRAM configruation
             //m_Select.ReadPtr.AsType_32Swp(1);
         }
+
+        public override string Name => "Rdram Interface";
     }
 }

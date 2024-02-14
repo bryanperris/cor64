@@ -19,7 +19,7 @@ namespace cor64.BassSharp
 
                 m_Symbols.Add(data, scopedName);
 
-                Log.Debug("Symbol Added: {0}:{1}", scopedName, data);
+                Log.Debug("Symbol Added: {0} = {1:X8}", scopedName, data);
             }
         }
     }

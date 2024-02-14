@@ -27,10 +27,14 @@ namespace cor64
         public IDictionary<String, NamedAssemblySource> AssemblySources => m_Sources;
         public Stream AssembledStream => m_Target.Output;
 
+        public void SetQuiet() {
+            Quiet = true;
+        }
+
         public void AddAssemblySource(NamedAssemblySource source)
         {
             m_Sources.Add(source.Name, source);
-            Log.Debug("Added source: " + source.Name);
+            if (!Quiet) Log.Debug("Added source: " + source.Name);
         }
 
         private sealed class StreamTarget : ITarget

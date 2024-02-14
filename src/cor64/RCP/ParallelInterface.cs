@@ -1,4 +1,5 @@
-﻿using cor64.Debugging;
+﻿using System.Diagnostics;
+using cor64.Debugging;
 using cor64.IO;
 using cor64.Mips;
 using NLog;
@@ -60,7 +61,7 @@ namespace cor64.RCP
            (RW): [1:0] domain 2 device R/W release duration
         0x0460 0034 to 0x046F FFFF  Unused
     */
-    public class ParallelInterface : PerpherialDevice
+    public class ParallelInterface : N64MemoryDevice
     {
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
         private MipsInterface m_RcpInterface;
@@ -78,13 +79,15 @@ namespace cor64.RCP
         private MemMappedBuffer m_Dom2Pgs = new MemMappedBuffer(4);
         private MemMappedBuffer m_Dom2Rls = new MemMappedBuffer(4);
 
+        private readonly DmaEngine m_DmaEngine = new DmaEngine("PI");
+
         public ParallelInterface(N64MemoryController controller) : base(controller, 0x100000)
         {
             m_ReadLen.Write += ReadLengthWrite;
             m_WriteLen.Write += WriteLengthWrite;
             m_Status.Write += StatusWrite;
 
-            Map(
+            StaticMap(
                 m_DramAddress, m_CartAddress, m_ReadLen, m_WriteLen,
                 m_Status,
                 m_Dom1Lat, m_Dom1Pwd, m_Dom1Pgs, m_Dom1Rls,
@@ -93,6 +96,10 @@ namespace cor64.RCP
 
         public void AttachInterface(MipsInterface rcpInterface) {
             m_RcpInterface = rcpInterface;
+        }
+
+        public override void AttachDma() {
+            m_DmaEngine.AttachMemory(ParentController.RDRAM, ParentController.Cart);
         }
 
         private void StatusWrite() {
@@ -119,50 +126,96 @@ namespace cor64.RCP
 
         private void WriteLengthWrite()
         {
-            m_DramAddress.RegisterValue &= 0x00FFFFFF;
-            m_DramAddress.RegisterValue &= ~1U;
-            m_CartAddress.RegisterValue &= ~1U;
+            uint dest = m_DramAddress.RegisterValue & 0x7FFFFE;
+            uint source = m_CartAddress.RegisterValue & 0xFFFFFFE;
+            int length = ((int)m_WriteLen.RegisterValue & 0xFFFFFF) + 1;
 
-            SourceAddress = m_CartAddress.RegisterValue;
-            DestAddress = m_DramAddress.RegisterValue;
-            int size = (int)m_WriteLen.RegisterValue + 1;
+            m_DmaEngine.StartMonitoring(false, source, dest, length);
 
-            // Force length alignment
-            // size = (size + 7U) & ~7U;
+            // PI_WR_LEN_REG has a weird behavior when read back. It almost always
+            // reads as 0x7F, with the only exception of very short transfers (<= 8
+            // bytes) where the actual value is affected by the DRAM alignment. This
+            // is just for full accuracy, nobody is probably relying on this value.
+            m_WriteLen.RegisterValue = 0x7F;
+            if (length <= 8)
+                m_WriteLen.RegisterValue -= m_DramAddress.RegisterValue & 7;
 
-            if ((size % 8) == 0) {
-                var off = (int)(DestAddress % 8);
+            // PI DMA has an internal cache of 128 bytes ("a block"). Data is fetched
+            // from ROM and then copied to RDRAM. The first block is handled "specially":
+            // if the RDRAM address is not a multiple of 8, the block is shorter so
+            // that the RDRAM address becomes a multiple of 8 afterwards, and a faster
+            // code-path is triggered (possibly, 64-bit transfers to RDRAM).
+            // This is visible because this feature is actually broken: there are two
+            // bugs lingering, so that in the end Nintendo documented that only
+            // 8-bytes aligned transfers were possible.
+            byte[] block = new byte[128];
+            bool firstBlock = true;
 
-                if (off != 0) {
-                    // target address ends with 4
-                    // if (off == 4 && (DestAddress & 4) == 4) {
-                    //     off -= 4;
-                    // }
+            int register_dram = (int)m_DramAddress.RegisterValue;
+            int register_cart = (int)m_CartAddress.RegisterValue;
 
-                    TransferBytesUnaligned(size - off);
+            while (length > 0)
+            {
+                dest = (uint)register_dram & 0x7FFFFEU;
+                int misalign = (int)dest & 0x7;
+
+                int cur_len = length;
+                int block_len = 128 - misalign;
+                if (cur_len > block_len)
+                    cur_len = block_len;
+
+                // Decrease length (for next block). After first block, odd sizes
+                // are round up.
+                length -= cur_len;
+                if ((length & 1) == 1) length += 1;
+
+                // Fetch block from ROM. ROM is always fetched as 16-bit words,
+                // so round up the actual transfer.
+                source = (uint)register_cart & 0xFFFFFFEU;
+                int rom_fetch_len = (cur_len + 1) & ~1;
+                m_DmaEngine.ReadRcp((int)source, block, 0, rom_fetch_len);
+                register_cart += rom_fetch_len;
+
+                // Writeback to RDRAM. Here come the lions.
+                if (firstBlock)
+                {
+                    // HARDWARE BUG #1: in the first block, there's an off-by-one, so the
+                    // length is actually rounded up to even size just for the last byte.
+                    // Notice that ROM transfers are rounded up anyway, so this additional
+                    // byte was already fetched from ROM.
+                    if (cur_len == block_len - 1)
+                        cur_len++;
+
+                    // HARDWARE BUG #2: the length of data written back is decreased by the
+                    // RDRAM misalignment. This is wrong because cur_len was already
+                    // clamped to the block length, so this actually ends up leaving a
+                    // hole in RDRAM of non-transferred data at the end of the first block.
+                    cur_len -= misalign;
+                    if (cur_len < 0)
+                        cur_len = 0;
                 }
-                else {
-                    TransferBytes(size);
-                }
+
+                m_DmaEngine.WriteDram((int)dest, block, 0, cur_len);
+                register_dram += cur_len;
+                register_dram = (register_dram + 7) & ~7;
+
+                firstBlock = false;
             }
-            else {
-                TransferBytesUnaligned(size);
-            }
 
-            EmuDebugger.Current.ReportDmaFinish("PI", false, SourceAddress, DestAddress, size);
-
-            m_DramAddress.RegisterValue += (uint)size+1;
-            m_CartAddress.RegisterValue += (uint)size+1;
-
-            // Some strange address alignment/shift happens here
+            m_DramAddress.RegisterValue = (uint)register_dram;
+            m_CartAddress.RegisterValue = (uint)register_cart;
 
             m_RcpInterface.SetInterrupt(MipsInterface.INT_PI, true);
-            m_Status.ReadonlyRegisterValue |= 8;
+            // m_Status.ReadonlyRegisterValue |= 8;
+
+            m_DmaEngine.StopMonitoring();
         }
 
         private void ReadLengthWrite()
         {
-            m_DramAddress.RegisterValue &= 0x00FFFFFF;
+            m_DramAddress.RegisterValue &= ~0x80000000U;
+            m_CartAddress.RegisterValue &= ~0x10000000U;
+
             m_DramAddress.RegisterValue &= ~1U;
             m_CartAddress.RegisterValue &= ~1U;
 
@@ -170,25 +223,31 @@ namespace cor64.RCP
             DestAddress = m_CartAddress.RegisterValue;
             int size = (int)m_WriteLen.RegisterValue + 1;
 
+            m_DmaEngine.StartMonitoring(true, SourceAddress, DestAddress, size);
+
+            byte[] buffer = new byte[size];
+            m_DmaEngine.ReadDram((int)SourceAddress, buffer, 0, buffer.Length);
+            m_DmaEngine.WriteRcp((int)DestAddress, buffer, 0, buffer.Length);
+
             // Force length alignment
             // size = (size + 7U) & ~7U;
 
-            if ((size % 8) == 0) {
-                var off = (int)(DestAddress % 8);
+            // if ((size % 8) == 0) {
+            //     var off = (int)(DestAddress % 8);
 
-                if (off != 0) {
-                    TransferBytesUnaligned(size - off);
-                }
-                else {
-                    TransferBytes(size);
-                }
-            }
-            else {
-                TransferBytesUnaligned(size);
-            }
+            //     if (off != 0) {
+            //         TransferBytesUnaligned(size - off);
+            //     }
+            //     else {
+            //         TransferBytes(size);
+            //     }
+            // }
+            // else {
+            //     TransferBytesUnaligned(size);
+            // }
 
 
-            EmuDebugger.Current.ReportDmaFinish("PI", true, SourceAddress, DestAddress, size);
+            m_DmaEngine.StopMonitoring();
 
             m_DramAddress.RegisterValue += (uint)size;
             m_CartAddress.RegisterValue += (uint)size;
@@ -203,7 +262,9 @@ namespace cor64.RCP
             // Some strange address alignment/shift happens here
 
             m_RcpInterface.SetInterrupt(MipsInterface.INT_PI, true);
-            m_Status.ReadonlyRegisterValue |= 8;
+            // m_Status.ReadonlyRegisterValue |= 8;
         }
+
+        public override string Name => "Parallel Interface";
     }
 }

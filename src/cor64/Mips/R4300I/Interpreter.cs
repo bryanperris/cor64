@@ -11,6 +11,7 @@ using System.Diagnostics;
 using System.Threading;
 using cor64.HLE;
 using cor64.HLE.OS;
+using cor64.HLE.Debug;
 
 namespace cor64.Mips.R4300I
 {
@@ -20,20 +21,16 @@ namespace cor64.Mips.R4300I
         private bool m_WarnInfiniteJump;
         private DecodedInstruction? m_InjectedInst;
         private bool m_TakenException;
-        private ulong? m_InfiniteJumpAddress;
-        private readonly Dictionary<ulong, CpuCodeHook> m_Hooks = new();
-
+        private long? m_InfiniteJumpAddress;
+        private bool m_ExceptionReturn;
+        private readonly Dictionary<long, CpuCodeHook> m_Hooks = new();
+        private long m_LastFetchAddress;
 
         public Interpreter(string abi = "o32") : base(new Disassembler(abi))
         {
             #if CPU_PROFILER
             StartedWithProfiler = true;
             #endif
-        }
-
-        private static long L(ulong v)
-        {
-            return (long)v;
         }
 
         private bool IsReserved(DecodedInstruction inst)
@@ -55,9 +52,10 @@ namespace cor64.Mips.R4300I
         {
             base.EntryPointHit();
 
-            OSHooks_1.AddHooks(this, m_Hooks);
+            DebugHooks.AddHooks(this, m_Hooks);
 
-            //m_Hooks.Add(0x8018D298, new FatalPrintf(this));
+            // OSHooks_1.AddHooks(this, m_Hooks);
+            // m_Hooks.Add(0x8018D298, new FatalPrintf(this));
         }
 
         public override string Description => "MIPS Interpreter";
@@ -68,12 +66,8 @@ namespace cor64.Mips.R4300I
             if (Cop0.ServicingRequred && (Cop0State.Status.ErrorLevel || Cop0State.Status.ExceptionLevel)) {
                 Cop0.ServicingRequred = false;
 
-                // Clear out the branch state
-                TakeBranch = false;
-                BranchDelay = false;
-                UnconditionalJump = false;
-                TargetAddress = 0;
-                NullifyNext = false;
+                // Clear the branch state
+                ClearBranchState();
 
                 PC = Cop0.ExceptionHandlerAddress;
 
@@ -90,6 +84,10 @@ namespace cor64.Mips.R4300I
                 }
 
                 m_TakenException = true;
+
+                #if DEBUG
+                TraceInterrupt();
+                #endif
 
                 return true;
             }
@@ -155,22 +153,14 @@ namespace cor64.Mips.R4300I
 
             PC &= 0xFFFFFFFF;
 
-            // Must do this since PC increments after executed inst
-            PC -= 4;
-
             m_TakenException = false;
             State.LLBit = false;
+            m_ExceptionReturn = true;
         }
 
         public override void Step()
         {
-            try {
-                ExecuteNext();
-            }
-            catch (TLBRaisedException) {
-                // Do nothing, exception should be serviced on the next issued Step()
-                Log.Debug("TLB Raised an exception");
-            }
+            ExecuteNext();
         }
 
         private bool ExecuteNext() {
@@ -182,41 +172,54 @@ namespace cor64.Mips.R4300I
             }
             #endif
 
-            #if !DISABLE_CPU_HOOKS
+            TLBTick();
+
+            // Check if the system controller detects pending events
+            Cop0.CheckInterrupts(PC, BU_ExecuteBranchDelay);
+
+            // Check if the CPU should start service handling
+            CheckIfNeedServicing();
+
+            /* Virtual To Physical */
+            if (!TryVirtToPhys(false, PC, out long physicalAddress))
+            {
+                // Exception raised during fetch stage
+                // Return right away, let the exception handler work on the next step
+                return true;
+            }
+
+            bool hleJump = false;
+
+            // CLEANUP: Move this into a conditional method?
+            #if ENABLE_CPU_HOOKS
             if (m_Hooks.TryGetValue(PC, out CpuCodeHook hook))
             {
                 var result = hook.Execute();
 
                 if (result == CpuCodeHook.ReturnControl.HLECall) {
-                    TakeBranch = false;
-                    BranchDelay = false;
-                    UnconditionalJump = false;
-                    TargetAddress = 0;
-                    NullifyNext = false;
-
-                    return true;
+                    // Execute a 'jr ra' branch
+                    CurrentInst = Disassembler.Decode(0x03E00008);
+                    hleJump = true;
+                }
+                else {
+                    CurrentInst = DecodeNext(physicalAddress);
                 }
             }
-            #endif
-
-            var inDelaySlot = WillJump && BranchDelay;
-
-            // In Delay Slot
-            if (inDelaySlot) {
-                BranchDelay = false;
+            else {
+                CurrentInst = DecodeNext(physicalAddress);
             }
 
-            // Check if the system controller detects pending events
-            Cop0.CheckInterrupts(PC, inDelaySlot);
+            #else
 
-            // Check if the CPU should start service handling
-            CheckIfNeedServicing();
+            CurrentInst = DecodeNext(physicalAddress);
 
-            CurrentInst = DecodeNext();
+            #endif
+
+            m_LastFetchAddress = PC;
 
             Cop0.MipsTimerTick(1);
 
-            if (!ValidateInstruction(CurrentInst))
+            if (CurrentInst.IsInvalid)
                 return false;
 
             var instHandler = CallTable[CurrentInst];
@@ -229,7 +232,7 @@ namespace cor64.Mips.R4300I
             #endif
 
             #if DEBUG
-            TraceInstruction(CurrentInst, false, m_TakenException);
+            TraceInstruction(PC, CurrentInst);
             #endif
 
             /* --- EXECUTE INSTRUCTION HANDLER */
@@ -253,36 +256,56 @@ namespace cor64.Mips.R4300I
 
             /* --------------------------------- */
 
+            // Returned from vector routine via ERET
+            // We don't do anything else, because we have to
+            // still execute the interrupted instruction
+            if (m_ExceptionReturn) {
+                m_ExceptionReturn = false;
+                return true;
+            }
+
             // Checked for rasied exceptions
-            Cop0.CheckExceptions(PC, inDelaySlot);
+            Cop0.CheckExceptions(PC, BU_ExecuteBranchDelay);
 
             // Check if the CPU should start service handling
-            if (!CheckIfNeedServicing()) {
-                // Shift PC to next instruction
-                PC += 4;
+            if (!hleJump) {
+                if (!CheckIfNeedServicing()) {
+                    // Shift PC to next instruction
+                    PC += 4;
+                }
             }
 
-            // perform the branching
-            if (!NullifyNext && WillJump && !BranchDelay) {
+            BU_ExecuteBranchDelay = false;
+
+            // Peform the branch or jump if conditions are met
+            if (hleJump || ((BU_ConditionalPending || BU_UnconditionalPending) && !BU_DelaySlotNext)) {
                 /* Should always be a word-aligned relative PC jump */
                 /* Always force 32-bit addresses */
-                PC = (uint)TargetAddress;
-
-                TakeBranch = false;
-                UnconditionalJump = false;
+                PC = (uint)BU_TargetAddress;
+                BU_ConditionalPending = false;
+                BU_UnconditionalPending = false;
+                return true;
             }
 
-            // Nullify the delay slot (branch likely not taken)
-            if (NullifyNext) {
-                TraceInstruction(CurrentInst, true, m_TakenException);
-                NullifyNext = false;
-                PC += 4; // Move PC to inst after delay slot
+            // The delay slot is next
+            if (BU_DelaySlotNext) {
+
+                if (BU_NullifyNext) {
+                    BU_ExecuteBranchDelay = false;
+                    BU_DelaySlotNext = false;
+                    BU_NullifyNext = false;
+                    PC += 4; // Move PC to inst after delay slot
+                }
+                else {
+                    BU_DelaySlotNext = false;
+                    BU_ExecuteBranchDelay = true;
+                }
             }
 
             return true;
         }
 
-        private DecodedInstruction DecodeNext() {
+        private DecodedInstruction DecodeNext(long physicalAddress) {
             if (m_InjectedInst.HasValue)
             {
                 var decoded = m_InjectedInst.Value;
@@ -291,11 +314,11 @@ namespace cor64.Mips.R4300I
             }
             else
             {
-                return Decode();
+                return Decode(physicalAddress);
             }
         }
 
-        private void DebugInstruction(DecodedInstruction instruction, ulong pc, bool inInt)
+        private void DebugInstruction(DecodedInstruction instruction, long pc, bool inInt)
         {
             if (core_InstDebugMode != InstructionDebugMode.None)
             {
@@ -318,12 +341,19 @@ namespace cor64.Mips.R4300I
                         core_MemAccessNote = null;
                     }
 
+                    String type = inInt ? "INTR" : (InBootMode ? "BOOT" : "PROG");
+
+                    #if TESTING
+                    type = "TEST";
+                    #endif
+
                     // if (memNote != null)
-                    Console.WriteLine("CPU {0:X8} |{1}| {2} {3}",
+                    Console.WriteLine("CPU {0:X8} {4:X8} |{1}| {2} {3}",
                         pc,
-                        inInt ? "INTR" : (InBootMode ? "BOOT" : "PROG"),
-                        Disassembler.GetFullDisassembly(instruction),
-                        memNote ?? ""
+                        type,
+                        Disassembler.Disassemble(pc, instruction),
+                        memNote ?? "",
+                        instruction.Inst.inst
                         );
                 }
             }
@@ -334,7 +364,7 @@ namespace cor64.Mips.R4300I
             if (inst.Op.Family == OperationFamily.Fpu || inst.Op.Family == OperationFamily.LoadFpu || inst.Op.Family == OperationFamily.StoreFpu) {
                 Console.WriteLine("FPU {0:X8} {1}",
                     PC,
-                    Disassembler.GetFullDisassembly(inst)
+                    Disassembler.Disassemble(inst)
                     );
             }
         }
@@ -344,93 +374,47 @@ namespace cor64.Mips.R4300I
             m_InjectedInst = inst;
         }
 
-        private void ConvertFromSingle(int source, int dest, ExecutionFlags flags)
+        private void ConvertToSingle(FpuValueType format, int source, int dest)
         {
-            float value = ReadFPR_S(source);
-
-            if ((flags & ExecutionFlags.DataS) == ExecutionFlags.DataS)
-            {
-                // TODO: Throw invalid exception
-                throw new InvalidOperationException("float32 to float32");
-            }
-            else if ((flags & ExecutionFlags.DataD) == ExecutionFlags.DataD)
-            {
-                WriteFPR_D(dest, (double)value);
-            }
-            else if ((flags & ExecutionFlags.Data64) == ExecutionFlags.Data64)
-            {
-                WriteFPR_DW(dest, (ulong)value);
-            }
-            else
-            {
-                WriteFPR_W(dest, (uint)value);
+            switch (format) {
+                case FpuValueType.FSingle: throw new InvalidOperationException("float32 to float32");
+                case FpuValueType.FDouble: WriteFPR_S(dest, (float)ReadFPR_D(source)); break;
+                case FpuValueType.Word: WriteFPR_S(dest, (int)ReadFPR_W(source)); break;
+                case FpuValueType.Doubleword:  WriteFPR_S(dest, (long)ReadFPR_DW(source)); break;
+                default: throw new InvalidOperationException("cannot convert to reserved format");
             }
         }
 
-        private void ConvertFromDouble(int source, int dest, ExecutionFlags flags)
+        private void ConvertToDouble(FpuValueType format, int source, int dest)
         {
-            double value = ReadFPR_D(source);
-
-            if ((flags & ExecutionFlags.DataS) == ExecutionFlags.DataS)
-            {
-                WriteFPR_S(dest, (float)value);
-            }
-            else if ((flags & ExecutionFlags.DataD) == ExecutionFlags.DataD)
-            {
-                // TODO: Throw invalid exception
-                throw new InvalidOperationException("float64 to float64");
-            }
-            else if ((flags & ExecutionFlags.Data64) == ExecutionFlags.Data64)
-            {
-                WriteFPR_DW(dest, (ulong)(long)value);
-            }
-            else
-            {
-                WriteFPR_W(dest, (uint)(long)value);
+            switch (format) {
+                case FpuValueType.FSingle: WriteFPR_D(dest, ReadFPR_S(source)); break;
+                case FpuValueType.FDouble: throw new InvalidOperationException("float64 to float64");
+                case FpuValueType.Word: WriteFPR_D(dest, (int)ReadFPR_W(source)); break;
+                case FpuValueType.Doubleword: WriteFPR_D(dest, (long)ReadFPR_DW(source)); break;
+                default: throw new InvalidOperationException("cannot convert to reserved format");
             }
         }
 
-        private void ConvertFromUInt32(int source, int dest, ExecutionFlags flags)
+        private void ConvertToFixed32(FpuValueType format, int source, int dest)
         {
-            if ((flags & ExecutionFlags.DataS) == ExecutionFlags.DataS)
-            {
-                WriteFPR_SNR(dest, (int)ReadFPR_W(source));
-            }
-            else if ((flags & ExecutionFlags.DataD) == ExecutionFlags.DataD)
-            {
-                WriteFPR_DNR(dest, (int)ReadFPR_W(source));
-            }
-            else if ((flags & ExecutionFlags.Data64) == ExecutionFlags.Data64)
-            {
-                // TODO: Throw invalid exception
-                throw new InvalidOperationException("word to word");
-            }
-            else
-            {
-                // TODO: Throw invalid exception
-                throw new InvalidOperationException("word to dword");
+            switch (format) {
+                case FpuValueType.FSingle: WriteFPR_DW(dest, 0); WriteFPR_W(dest, (uint)(int)ReadFPR_S(source)); break;
+                case FpuValueType.FDouble: WriteFPR_W(dest, (uint)(int)ReadFPR_D(source)); break;
+                case FpuValueType.Word: throw new InvalidOperationException("u32 to u32");
+                case FpuValueType.Doubleword: throw new InvalidOperationException("u32 to u64");
+                default: throw new InvalidOperationException("cannot convert to reserved format");
             }
         }
 
-        private void ConvertFromUInt64(int source, int dest, ExecutionFlags flags)
+        private void ConvertToFixed64(FpuValueType format, int source, int dest)
         {
-            if ((flags & ExecutionFlags.DataS) == ExecutionFlags.DataS)
-            {
-                WriteFPR_SNR(dest, (long)ReadFPR_DW(source));
-            }
-            else if ((flags & ExecutionFlags.DataD) == ExecutionFlags.DataD)
-            {
-                WriteFPR_DNR(dest, (long)ReadFPR_DW(source));
-            }
-            else if ((flags & ExecutionFlags.Data64) == ExecutionFlags.Data64)
-            {
-                // TODO: Throw invalid exception
-                throw new InvalidOperationException("word to word");
-            }
-            else
-            {
-                // TODO: Throw invalid exception
-                throw new InvalidOperationException("word to dword");
+            switch (format) {
+                case FpuValueType.FSingle: WriteFPR_DW(dest, (ulong)(int)ReadFPR_S(source)); break;
+                case FpuValueType.FDouble: WriteFPR_DW(dest, (ulong)(long)ReadFPR_D(source)); break;
+                case FpuValueType.Word: throw new InvalidOperationException("u32 to u64");
+                case FpuValueType.Doubleword: throw new InvalidOperationException("u64 to u64");
+                default: throw new InvalidOperationException("cannot convert to reserved format");
             }
         }
 
@@ -807,7 +791,18 @@ namespace cor64.Mips.R4300I
                 shiftAmount = inst.ShiftAmount;
             }
 
-            uint value = ReadGPR32(inst.Target);
+            ulong value;
+
+            bool isSigned;
+
+            if (IsOperation64) {
+                value = ReadGPR64(inst.Target);
+                isSigned = (value & 0x4000000000000000) == 0x4000000000000000;
+            }
+            else {
+                value = ReadGPR32(inst.Target);
+                isSigned = (value & 0x80000000) == 0x80000000;
+            }
 
             if (inst.Op.ArithmeticType == ArithmeticOp.LSHIFT)
             {
@@ -815,11 +810,18 @@ namespace cor64.Mips.R4300I
             }
             else
             {
-                bool sign = ((value >> 31) == 1);
+                // Unsigned always inserts 0s
+                if (inst.IsUnsigned())
+                    value &= 0xFFFFFFFFU;
 
+                // Do a 64-bit shift
                 value >>= shiftAmount;
 
-                if (sign && !inst.IsUnsigned())
+                // Force the value to be 32-bit
+                value &= 0xFFFFFFFFU;
+
+                // Sign extend
+                if (!inst.IsUnsigned() && isSigned)
                 {
                     /* Sign extend */
                     value |= ~(~0U >> shiftAmount);
@@ -861,11 +863,11 @@ namespace cor64.Mips.R4300I
             }
             else
             {
-                bool sign = ((value >> 63) == 1);
+                bool isSigned = (value & 0x4000000000000000) == 0x4000000000000000;
 
                 value >>= shiftAmount;
 
-                if (sign && !inst.IsUnsigned())
+                if (!inst.IsUnsigned() && isSigned)
                 {
                     /* Sign extend */
                     value |= ~(~0UL >> shiftAmount);
@@ -1064,7 +1066,8 @@ namespace cor64.Mips.R4300I
                             value = ReadFPR_DW(inst.FloatSource);
                         }
                         else {
-                            value = ReadFPR_W(inst.FloatSource);
+                            // 32-bit value must be sign extended
+                            value = (ulong)(long)(int)ReadFPR_W(inst.FloatSource);
                         }
 
                         break;
@@ -1078,13 +1081,22 @@ namespace cor64.Mips.R4300I
                             return;
                         }
 
-                        value = State.FCR.Value;
-
-                        /* If running 64-bit mode, then sign extend */
-                        if (IsOperation64)
-                        {
-                            value = (ulong)(int)(uint)value;
+                        // FPU co-processor revision info
+                        if (inst.Destination == 0) {
+                            value = 0xA00U;
                         }
+
+                        if (inst.Destination == 31) {
+
+                            value = State.FCR.Value;
+
+                            /* If running 64-bit mode, then sign extend */
+                            if (IsOperation64)
+                            {
+                                value = (ulong)(int)(uint)value;
+                            }
+                        }
+
 
                         break;
                     }
@@ -1112,7 +1124,25 @@ namespace cor64.Mips.R4300I
                     }
                 case RegBoundType.Cp0:
                     {
-                        Cop0.CpuRegisterWrite(inst.Destination, value);
+                        int index = inst.Destination;
+
+                        if (index == CTS.CP0_REG_CONTEXT) {
+                            value &= 0xFFFFFFFFFF800000UL;
+                        }
+
+                        if (index == CTS.CP0_REG_XCONTEXT) {
+                            value &= 0xFFFFFFFE00000000UL;
+                        }
+
+                        if (index == CTS.CP0_REG_BADVADDR) {
+                            break;
+                        }
+
+                        if (index == CTS.CP0_REG_LLADDR) {
+                            value &= 0xFFFFFFFFU;
+                        }
+
+                        Cop0.CpuRegisterWrite(index, value);
                         break;
                     }
                 case RegBoundType.Cp1:
@@ -1140,7 +1170,9 @@ namespace cor64.Mips.R4300I
                             return;
                         }
 
-                        State.FCR.Value = (uint)value;
+                        if (inst.Destination == 31)
+                            State.FCR.Value = (uint)value;
+
                         break;
                     }
             }
@@ -1150,55 +1182,83 @@ namespace cor64.Mips.R4300I
         {
             bool isLikely = inst.IsLikely();
             bool isLink = inst.IsLink();
-            TargetAddress = CoreUtils.ComputeBranchPC(IsOperation64, PC, CoreUtils.ComputeBranchTargetOffset(inst.Immediate));
+
+            // The delay slot RA side effect
+            if (BU_ExecuteBranchDelay ) {
+                if (isLink) {
+                    Writeback64(31, (ulong)(BU_TargetAddress + 4));
+                }
+
+                return;
+            }
+
             ulong source = ReadGPR64(inst.Source);
             ulong target = ReadGPR64(inst.Target);
 
-            TakeBranch = ComputeBranchCondition(IsOperation64, source, target, inst.Op.XferTarget, inst.Op.ArithmeticType);
+            BU_ConditionalPending = ComputeBranchCondition(IsOperation64, source, target, inst.Op.XferTarget, inst.Op.ArithmeticType);
+
+            if (BU_ConditionalPending) {
+                BU_TargetAddress = CoreUtils.ComputeBranchPC(IsOperation64, PC, CoreUtils.ComputeBranchTargetOffset(inst.Immediate));
+            }
 
             if (isLink)
             {
-                Writeback64(31, PC + 8);
+                Writeback64(31, (ulong)(PC + 8));
             }
 
             #if !OPTIMAL
-            Debugger.CheckBranchBreakpoints((uint)TargetAddress, TakeBranch);
+            Debugger.CheckBranchBreakpoints((uint)BU_TargetAddress, BU_ConditionalPending);
             #endif
 
-            // Branch delay is always taken for non-likely else, if likely, then condition must be true
-            BranchDelay = !isLikely || (TakeBranch && isLikely);
-            NullifyNext = !TakeBranch && !BranchDelay;
+            // Nullify the delay slot if likely branch not taken
+            BU_NullifyNext = isLikely && !BU_ConditionalPending;
 
-            if (NullifyNext) {
-                Console.ResetColor();
-            }
+            // Always indicate the delay slot if next
+            BU_DelaySlotNext = true;
         }
 
         public override void Jump(DecodedInstruction inst)
         {
             bool isLink = inst.IsLink();
             bool isRegister = inst.IsRegister();
-            BranchDelay = true;
-            TargetAddress = CoreUtils.ComputeTargetPC(isRegister, PC, ReadGPR64(inst.Source), inst.Inst.target);
-            UnconditionalJump = true;
+
+            if (BU_ExecuteBranchDelay) {
+                // Jump doesn't execute but there is a side-effect for the RA
+
+                if (isLink) {
+                    if (isRegister && inst.Destination != 0) {
+                        Writeback64(inst.Destination, (ulong)(BU_TargetAddress + 4));
+                    }
+                    else {
+                        Writeback64(31,  (ulong)(BU_TargetAddress + 4));
+                    }
+                }
+
+                return;
+            }
+
+
+            BU_TargetAddress = CoreUtils.ComputeTargetPC(isRegister, PC, (long)ReadGPR64(inst.Source), inst.Inst.target);
+            BU_UnconditionalPending = true;
+            BU_DelaySlotNext = true;
 
             if (isLink)
             {
                 // TODO: The recompiler will need this fix
-                if (isRegister && (inst.Target & 0b11) != 0) {
-                    Writeback64(inst.Target, PC + 8);
+                if (isRegister && inst.Destination != 0) {
+                    Writeback64(inst.Destination,  (ulong)(PC + 8));
                 }
                 else {
-                    Writeback64(31, PC + 8);
+                    Writeback64(31,  (ulong)(PC + 8));
                 }
             }
 
             #if !OPTIMAL
-            Debugger.CheckBranchBreakpoints((uint)TargetAddress, true);
+            Debugger.CheckBranchBreakpoints((uint)BU_TargetAddress, true);
 
-            if (!isRegister && (uint)TargetAddress == (uint)PC && !m_WarnInfiniteJump)
+            if (!isRegister && (uint)BU_TargetAddress == (uint)PC && !m_WarnInfiniteJump)
             {
-                Log.Warn("An unconditional infinite jump was hit: " + inst.Address.ToString("X8"));
+                Log.Warn("An unconditional infinite jump was hit: " + m_LastFetchAddress.ToString("X8"));
                 m_WarnInfiniteJump = true;
             }
 
@@ -1207,9 +1267,10 @@ namespace cor64.Mips.R4300I
 
         public override void Store(DecodedInstruction inst)
         {
-            ulong address = 0;
+            long address = 0;
             int size = inst.DataSize();
             ExecutionFlags flags = inst.Op.Flags;
+            bool LLMode = (flags & ExecutionFlags.Link) == ExecutionFlags.Link;
 
             if (!IsOperation64 && size == 8)
             {
@@ -1217,33 +1278,36 @@ namespace cor64.Mips.R4300I
                 return;
             }
 
+            /* Conditional store notes:
+             * The LLBit must be set a Load linked operation before this type of operation
+             * TODO: When ERET instruction is supported, it causes any conditional store to fail afterwards
+             */
+
+            if (LLMode && State.LLBit) return;
+
             if (!IsOperation64)
             {
                 int baseAddress = (int)ReadGPR32(inst.Source);
                 int offset = (short)inst.Immediate;
-                address = (ulong)(baseAddress + offset);
+                address = baseAddress + offset;
             }
             else
             {
                 long baseAddress = (long)ReadGPR64(inst.Source);
                 long offset = (short)inst.Immediate;
-                address = (ulong)(baseAddress + offset);
+                address = baseAddress + offset;
             }
 
-            switch (size)
+            /* Always 32-bit address */
+            address &= 0xFFFFFFFFU;
+
+            /* Virtual To Physical */
+            if (!TryVirtToPhys(false, address, out address))
             {
-                default: throw new InvalidOperationException("How did this happen?");
-                case 1: m_DataMemory.Data8 = (byte)ReadGPR64(inst.Target); break;
-                case 2: m_DataMemory.Data16 = (ushort)ReadGPR64(inst.Target); break;
-                case 4: m_DataMemory.Data32 = (uint)ReadGPR32(inst.Target); break;
-                case 8: m_DataMemory.Data64 = ReadGPR64(inst.Target); break;
+                // Exception raised during fetch stage
+                // Return right away, let the exception handler work on the next step
+                return;
             }
-
-            // just for debugging
-            // if (size == 4 && (uint)address == 0x80400000) {
-            //     Console.WriteLine("MY DEBUG WRITE: {0:X8} {0}", m_DataMemory.Data32);
-            //     return;
-            // }
 
             try
             {
@@ -1256,24 +1320,20 @@ namespace cor64.Mips.R4300I
                         case 4:
                             {
                                 int index = (int)((uint)address & 3);
-                                m_DataMemory.ReadData((long)address & ~3, 4);
-                                uint val = m_DataMemory.Data32;
+                                uint val = PhysicalMemory.U32(address & ~3);
                                 val &= CTS.SWL_MASK[index];
-                                val |= (ReadGPR32(inst.Target) >> CTS.SWL_SHIFT[index]);
-                                m_DataMemory.Data32 = val;
-                                m_DataMemory.WriteData((long)address, 4);
+                                val |= ReadGPR32(inst.Target) >> CTS.SWL_SHIFT[index];
+                                PhysicalMemory.U32(address & ~3, val);
                                 break;
                             }
 
                         case 8:
                             {
                                 int index = (int)((uint)address & 7);
-                                m_DataMemory.ReadData((long)address & ~7, 8);
-                                ulong val = m_DataMemory.Data64;
+                                ulong val = PhysicalMemory.U64(address & ~7);
                                 val &= CTS.SDL_MASK[index];
-                                val |= (ReadGPR64(inst.Target) >> CTS.SDL_SHIFT[index]);
-                                m_DataMemory.Data64 = val;
-                                m_DataMemory.WriteData((long)address, 8);
+                                val |= ReadGPR64(inst.Target) >> CTS.SDL_SHIFT[index];
+                                PhysicalMemory.U64(address & ~7, val);
                                 break;
                             }
                     }
@@ -1287,45 +1347,33 @@ namespace cor64.Mips.R4300I
                         case 4:
                             {
                                 int index = (int)((uint)address & 3);
-                                m_DataMemory.ReadData((long)address & ~3, 4);
-                                uint val = m_DataMemory.Data32;
+                                uint val = PhysicalMemory.U32(address & ~3);
                                 val &= CTS.SWR_MASK[index];
-                                val |= (ReadGPR32(inst.Target) << CTS.SWR_SHIFT[index]);
-                                m_DataMemory.Data32 = val;
-                                m_DataMemory.WriteData((long)address, 4);
+                                val |= ReadGPR32(inst.Target) << CTS.SWR_SHIFT[index];
+                                PhysicalMemory.U32(address & ~3, val);
                                 break;
                             }
 
                         case 8:
                             {
                                 int index = (int)((uint)address & 7);
-                                m_DataMemory.ReadData((long)address & ~7, 8);
-                                ulong val = m_DataMemory.Data64;
+                                ulong val = PhysicalMemory.U64(address & ~7);
                                 val &= CTS.SDR_MASK[index];
-                                val |= (ReadGPR64(inst.Target) << CTS.SDR_SHIFT[index]);
-                                m_DataMemory.Data64 = val;
-                                m_DataMemory.WriteData((long)address, 8);
+                                val |= ReadGPR64(inst.Target) << CTS.SDR_SHIFT[index];
+                                PhysicalMemory.U64(address & ~7, val);
                                 break;
                             }
                     }
                 }
                 else
                 {
-                    /* Conditional store notes:
-                     * The LLBit must be set a Load linked operation before this type of operation
-                     * TODO: When ERET instruction is supported, it causes any conditional store to fail afterwards
-                     */
-
-                    bool LLMode = (flags & ExecutionFlags.Link) == ExecutionFlags.Link;
-
-                    if (!LLMode || (LLMode && State.LLBit))
+                    switch (size)
                     {
-                        m_DataMemory.WriteData((long)address, size);
-
-                        //if (m_Debug && inst.Target == 31)
-                        //{
-                        //    AddInstructionNote(String.Format("Stored return address {0:X8} into memory", m_DataMemory.Data32));
-                        //}
+                        default: throw new InvalidOperationException("How did this happen?");
+                        case 1: PhysicalMemory.U8(address, (byte)ReadGPR64(inst.Target)); break;
+                        case 2: PhysicalMemory.U16(address, (ushort)ReadGPR64(inst.Target)); break;
+                        case 4: PhysicalMemory.U32(address, (uint)ReadGPR32(inst.Target)); break;
+                        case 8: PhysicalMemory.U64(address, ReadGPR64(inst.Target)); break;
                     }
 
                     /* Store conditional */
@@ -1333,6 +1381,23 @@ namespace cor64.Mips.R4300I
                     {
                         Writeback64(inst.Target, State.LLBit ? 1U : 0U);
                     }
+
+                    // n64_systemtest isviewer
+                    #if ENABLE_ISVIEWER
+                    if (size == 4 && address == MemHelper.VirtualToPhysical(0xB3FF0014)) {
+                        int len = PhysicalMemory.S32(address);
+
+                        if (len > 0) {
+                            long addr = MemHelper.VirtualToPhysical(0xB3FF0020);
+
+                            for (int i = 0; i < len; i++) {
+                                char readChar = (char)PhysicalMemory.U8(addr + i);
+                                if (readChar == '\0') break;
+                                Console.Write(readChar);
+                            }
+                        }
+                    }
+                    #endif
                 }
             }
             catch (MipsException e)
@@ -1344,7 +1409,7 @@ namespace cor64.Mips.R4300I
         public override void Load(DecodedInstruction inst)
         {
             /* Modes: Upper Immediate, Unsigned / Signed (8, 16, 32, 64), Left / Right (32, 64), Load Linked */
-            ulong address = 0;
+            long address = 0;
             int size = 0;
 
             bool upperImm = inst.IsImmediate();
@@ -1352,6 +1417,9 @@ namespace cor64.Mips.R4300I
             bool left = inst.IsLeft();
             bool right = inst.IsRight();
             bool unsigned = inst.IsUnsigned();
+
+            uint read32 = 0;
+            ulong read64 = 0;
 
             try
             {
@@ -1378,13 +1446,24 @@ namespace cor64.Mips.R4300I
                     {
                         int baseAddress = (int)ReadGPR32(inst.Source);
                         int offset = (short)inst.Immediate;
-                        address = (ulong)(baseAddress + offset);
+                        address = baseAddress + offset;
                     }
                     else
                     {
                         long baseAddress = (long)ReadGPR64(inst.Source);
                         long offset = (short)inst.Immediate;
-                        address = (ulong)(baseAddress + offset);
+                        address = baseAddress + offset;
+                    }
+
+                    /* Always 32-bit address */
+                    address &= 0xFFFFFFFFU;
+
+                    /* Virtual To Physical */
+                    if (!TryVirtToPhys(false, address, out address))
+                    {
+                        // Exception raised during fetch stage
+                        // Return right away, let the exception handler work on the next step
+                        return;
                     }
 
                     // REF: https://www2.cs.duke.edu/courses/cps104/fall02/homework/lwswlr.html
@@ -1399,22 +1478,22 @@ namespace cor64.Mips.R4300I
                             case 4:
                                 {
                                     int index = (int)((uint)address & 3);
-                                    m_DataMemory.ReadData((long)address & ~3, 4);
+                                    read32 = PhysicalMemory.U32(address & ~3);
                                     uint val = ReadGPR32(inst.Target);
                                     val &= CTS.LWL_MASK[index];
-                                    val |= (m_DataMemory.Data32 << CTS.LWL_SHIFT[index]);
-                                    m_DataMemory.Data32 = val;
+                                    val |= read32 << CTS.LWL_SHIFT[index];
+                                    read32 = val;
                                     break;
                                 }
 
                             case 8:
                                 {
                                     int index = (int)((uint)address & 7);
-                                    m_DataMemory.ReadData((long)address & ~7, 8);
+                                    read64 = PhysicalMemory.U64(address & ~7);
                                     ulong val = ReadGPR64(inst.Target);
                                     val &= CTS.LDL_MASK[index];
-                                    val |= (m_DataMemory.Data64 << CTS.LDL_SHIFT[index]);
-                                    m_DataMemory.Data64 = val;
+                                    val |= read64 << CTS.LDL_SHIFT[index];
+                                    read64 = val;
                                     break;
                                 }
                         }
@@ -1428,22 +1507,22 @@ namespace cor64.Mips.R4300I
                             case 4:
                                 {
                                     int index = (int)((uint)address & 3);
-                                    m_DataMemory.ReadData((long)address & ~3, 4);
+                                    read32 = PhysicalMemory.U32(address & ~3);
                                     uint val = ReadGPR32(inst.Target);
                                     val &= CTS.LWR_MASK[index];
-                                    val |= (m_DataMemory.Data32 >> CTS.LWR_SHIFT[index]);
-                                    m_DataMemory.Data32 = val;
+                                    val |= read32 >> CTS.LWR_SHIFT[index];
+                                    read32 = val;
                                     break;
                                 }
 
                             case 8:
                                 {
                                     int index = (int)((uint)address & 7);
-                                    m_DataMemory.ReadData((long)address & ~7, 8);
+                                    read64 = PhysicalMemory.U64(address & ~7);
                                     ulong val = ReadGPR64(inst.Target);
                                     val &= CTS.LDR_MASK[index];
-                                    val |= (m_DataMemory.Data64 >> CTS.LDR_SHIFT[index]);
-                                    m_DataMemory.Data64 = val;
+                                    val |= read64 >> CTS.LDR_SHIFT[index];
+                                    read64 = val;
                                     break;
                                 }
                         }
@@ -1455,18 +1534,33 @@ namespace cor64.Mips.R4300I
                             State.LLBit = true;
                         }
 
-                        m_DataMemory.ReadData((long)address, size);
+                        if (size == 4) {
+                            read32 = PhysicalMemory.U32(address);
+                        }
+                        else if (size == 8) {
+                            read64 = PhysicalMemory.U64(address);
+                        }
                     }
+
+                    #if TESTING
+                    StringBuilder sb = new StringBuilder();
+                    sb.Append("LOAD ...");
+                    for (int i = 0; i < 8; i++) {
+                        sb.Append(PhysicalMemory.DirectReadByte(address + i).ToString("X2"));
+                    }
+                    sb.Append("...");
+                    Console.WriteLine(sb.ToString());
+                    #endif
 
                     if (unsigned)
                     {
                         switch (size)
                         {
                             default: throw new InvalidOperationException("How did this happen (unsigned)?");
-                            case 1: Writeback64(inst.Target, m_DataMemory.Data8); break;
-                            case 2: Writeback64(inst.Target, m_DataMemory.Data16); break;
-                            case 4: Writeback64(inst.Target, m_DataMemory.Data32); break;
-                            case 8: Writeback64(inst.Target, m_DataMemory.Data64); break;
+                            case 1: Writeback64(inst.Target, PhysicalMemory.U8(address)); break;
+                            case 2: Writeback64(inst.Target, PhysicalMemory.U16(address)); break;
+                            case 4: Writeback64(inst.Target, read32); break;
+                            case 8: Writeback64(inst.Target, read64); break;
                         }
                     }
                     else
@@ -1474,10 +1568,10 @@ namespace cor64.Mips.R4300I
                         switch (size)
                         {
                             default: throw new InvalidOperationException("How did this happen?");
-                            case 1: Writeback64(inst.Target, (ulong)(sbyte)m_DataMemory.Data8); break;
-                            case 2: Writeback64(inst.Target, (ulong)(short)m_DataMemory.Data16); break;
-                            case 4: Writeback64(inst.Target, (ulong)(int)m_DataMemory.Data32); break;
-                            case 8: Writeback64(inst.Target, (ulong)(long)m_DataMemory.Data64); break;
+                            case 1: Writeback64(inst.Target, (ulong)(sbyte)PhysicalMemory.U8(address)); break;
+                            case 2: Writeback64(inst.Target, (ulong)(short)PhysicalMemory.U16(address)); break;
+                            case 4: Writeback64(inst.Target, (ulong)(int)read32); break;
+                            case 8: Writeback64(inst.Target, (ulong)(long)read64); break;
                         }
                     }
                 }
@@ -1504,15 +1598,24 @@ namespace cor64.Mips.R4300I
 
                 long baseAddress = (long)ReadGPR64(inst.Source);
                 long offset = (short)inst.Immediate;
-                var address = (ulong)(baseAddress + offset);
+                var address = baseAddress + offset;
 
-                m_DataMemory.ReadData((long)address, size);
+                /* Always 32-bit address */
+                address &= 0xFFFFFFFFU;
+
+                /* Virtual To Physical */
+                if (!TryVirtToPhys(false, address, out address))
+                {
+                    // Exception raised during fetch stage
+                    // Return right away, let the exception handler work on the next step
+                    return;
+                }
 
                 switch (size)
                 {
                     default: throw new InvalidOperationException("Unsupported FPU Load Size: " + size.ToString());
-                    case 4: WriteFPR_W(inst.FloatTarget, m_DataMemory.Data32); break;
-                    case 8: WriteFPR_DW(inst.FloatTarget, m_DataMemory.Data64); break;
+                    case 4: WriteFPR_W(inst.FloatTarget, PhysicalMemory.U32(address)); break;
+                    case 8: WriteFPR_DW(inst.FloatTarget, PhysicalMemory.U64(address)); break;
                 }
 
                 /* If loading a doubleword and FR = 0, we don't care, we bypass 32-bit stuff */
@@ -1531,18 +1634,27 @@ namespace cor64.Mips.R4300I
 
             long baseAddress = (long)ReadGPR64(inst.Source);
             long offset = (short)inst.Immediate;
-            var address = (ulong)(baseAddress + offset);
+            long address = baseAddress + offset;
 
-            switch (size)
+            /* Always 32-bit address */
+            address &= 0xFFFFFFFFU;
+
+            /* Virtual To Physical */
+            if (!TryVirtToPhys(false, address, out address))
             {
-                default: throw new InvalidOperationException("Unsupported FPU Store Size: " + size.ToString());
-                case 4: m_DataMemory.Data32 = ReadFPR_W(inst.FloatTarget); break;
-                case 8: m_DataMemory.Data64 = ReadFPR_DW(inst.FloatTarget); break;
+                // Exception raised during fetch stage
+                // Return right away, let the exception handler work on the next step
+                return;
             }
 
             try
             {
-                m_DataMemory.WriteData((long)address, size);
+                switch (size)
+                {
+                    default: throw new InvalidOperationException("Unsupported FPU Store Size: " + size.ToString());
+                    case 4: PhysicalMemory.U32(address, ReadFPR_W(inst.FloatTarget)); break;
+                    case 8: PhysicalMemory.U64(address, ReadFPR_DW(inst.FloatTarget)); break;
+                }
             }
             catch (MipsException e)
             {
@@ -1648,11 +1760,7 @@ namespace cor64.Mips.R4300I
 
         public override void Mov(DecodedInstruction inst)
         {
-            if (inst.Format == FpuValueType.FSingle)
-            {
-                WriteFPR_S(inst.FloatDest, ReadFPR_S(inst.FloatSource));
-            }
-            else if (inst.Format == FpuValueType.FDouble)
+            if (inst.Format == FpuValueType.FDouble || inst.Format == FpuValueType.FSingle)
             {
                 WriteFPR_D(inst.FloatDest, ReadFPR_D(inst.FloatSource));
             }
@@ -1708,29 +1816,32 @@ namespace cor64.Mips.R4300I
 
         public override void Truncate(DecodedInstruction inst)
         {
-            double roundedValue;
+            double value;
 
-            if (inst.Format == FpuValueType.FSingle)
-            {
-                roundedValue = Math.Truncate(ReadFPR_S(inst.FloatSource));
+            if (inst.Format == FpuValueType.FDouble) {
+                value = ReadFPR_D(inst.FloatSource);
             }
-            else if (inst.Format == FpuValueType.FDouble)
+            else if (inst.Format == FpuValueType.FSingle) {
+                value = ReadFPR_S(inst.FloatSource);
+            }
+            else {
+                SetExceptionState(FpuExceptionFlags.Unimplemented);
+                return;
+            }
+
+            if (inst.Op.Flags == ExecutionFlags.Data32)
             {
-                roundedValue = Math.Truncate(ReadFPR_D(inst.FloatSource));
+                WriteFPR_DW(inst.FloatDest, 0);
+                WriteFPR_W(inst.FloatDest, (uint)(float)Math.Truncate(value));
+            }
+            else if (inst.Op.Flags == ExecutionFlags.Data64)
+            {
+                WriteFPR_DW(inst.FloatDest, (ulong)(double)Math.Truncate(value));
             }
             else
             {
                 SetExceptionState(FpuExceptionFlags.Unimplemented);
                 return;
-            }
-
-            if (inst.IsData32())
-            {
-                WriteFPR_W(inst.FloatDest, (uint)roundedValue);
-            }
-            else
-            {
-                WriteFPR_DW(inst.FloatDest, (ulong)roundedValue);
             }
         }
 
@@ -1764,41 +1875,49 @@ namespace cor64.Mips.R4300I
 
         public  override void Floor(DecodedInstruction inst)
         {
-            double roundedValue;
+            decimal fprValue;
 
-            if (inst.Format == FpuValueType.FSingle)
-            {
-                roundedValue = Math.Floor(ReadFPR_S(inst.FloatSource));
+            if (inst.Format == FpuValueType.FDouble) fprValue = new decimal(ReadFPR_D(inst.FloatSource));
+            else if (inst.Format == FpuValueType.FSingle) fprValue = new decimal(ReadFPR_S(inst.FloatSource));
+            else {
+                SetExceptionState(FpuExceptionFlags.Unimplemented);
+                return;
             }
-            else if (inst.Format == FpuValueType.FDouble)
+
+            if (inst.Op.Flags == ExecutionFlags.Data32)
             {
-                roundedValue = Math.Floor(ReadFPR_D(inst.FloatSource));
+                WriteFPR_DW(inst.FloatDest, 0);
+                WriteFPR_W(inst.FloatDest, (uint)(float)Math.Floor(fprValue));
+            }
+            else if (inst.Op.Flags == ExecutionFlags.Data64)
+            {
+                WriteFPR_DW(inst.FloatDest, (ulong)(double)Math.Floor(fprValue));
             }
             else
             {
                 SetExceptionState(FpuExceptionFlags.Unimplemented);
                 return;
             }
-
-            if (inst.IsData32())
-            {
-                WriteFPR_W(inst.FloatDest, (uint)roundedValue);
-            }
-            else
-            {
-                WriteFPR_DW(inst.FloatDest, (ulong)roundedValue);
-            }
         }
 
         public override void Convert(DecodedInstruction inst)
         {
-            switch (inst.Format)
-            {
-                case FpuValueType.FSingle: ConvertFromSingle(inst.FloatSource, inst.FloatDest, inst.Op.Flags); break;
-                case FpuValueType.FDouble: ConvertFromDouble(inst.FloatSource, inst.FloatDest, inst.Op.Flags); break;
-                case FpuValueType.Word: ConvertFromUInt32(inst.FloatSource, inst.FloatDest, inst.Op.Flags); break;
-                case FpuValueType.Doubleword: ConvertFromUInt64(inst.FloatSource, inst.FloatDest, inst.Op.Flags); break;
-                default: SetExceptionState(FpuExceptionFlags.Unimplemented); break;
+            // Console.WriteLine("Convert To {6}: S:{0} T:{1} D:{2} FS:{3} FT:{4} FD:{5}", inst.Source, inst.Target, inst.Destination, inst.FloatSource, inst.FloatTarget, inst.FloatDest, inst.Format.ToString());
+
+            if (inst.Op.Flags == ExecutionFlags.DataS) {
+                ConvertToSingle(inst.Format, inst.FloatSource, inst.FloatDest);
+            }
+            else if (inst.Op.Flags == ExecutionFlags.DataD) {
+                ConvertToDouble(inst.Format, inst.FloatSource, inst.FloatDest);
+            }
+            else if (inst.Op.Flags == ExecutionFlags.Data32) {
+                ConvertToFixed32(inst.Format, inst.FloatSource, inst.FloatDest);
+            }
+            else if (inst.Op.Flags == ExecutionFlags.Data64) {
+                ConvertToFixed64(inst.Format, inst.FloatSource, inst.FloatDest);
+            }
+            else {
+                SetExceptionState(FpuExceptionFlags.Unimplemented);
             }
         }
 

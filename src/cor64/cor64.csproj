@@ -1,60 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net5.0</TargetFramework>
+    <TargetFramework>net7.0</TargetFramework>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <OutputPath>../../bin</OutputPath>
+  </PropertyGroup>
+  <PropertyGroup>
+    <!-- <DefineConstants>$(DefineConstants);HOST_LITTLE_ENDIAN</DefineConstants> -->
+    <!-- <DefineConstants>$(DefineConstants);LITTLE_ENDIAN_EXECUTION</DefineConstants> -->
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="BassSharp\Table\*.md" />
     <EmbeddedResource Include="BassSharp\Table\*.arch" />
   </ItemGroup>
-  <!-- Emulator debugging compiler flags -->
-  <PropertyGroup>
-    <!-- Little Endian is experimental -->
-    <!-- <DefineConstants>$(DefineConstants);LITTLE_ENDIAN</DefineConstants> -->
-    
-    <!-- <DefineConstants>$(DefineConstants);DEBUG_COPROCESSOR</DefineConstants> -->
-    <!-- <DefineConstants>$(DefineConstants);DEBUG_CAUSE_REG</DefineConstants> -->
-    <!-- <DefineConstants>$(DefineConstants);DEBUG_MIPS_TIMER</DefineConstants> -->
-    <!-- <DefineConstants>$(DefineConstants);DEBUG_INTERRUPTS</DefineConstants> -->
-    <!-- <DefineConstants>$(DefineConstants);VERY_DELAYED_INTERRUPTS</DefineConstants> -->
-    <!-- <DefineConstants>$(DefineConstants);DEBUG_STATUS_REGISTER</DefineConstants> -->
-    <!-- <DefineConstants>$(DefineConstants);TIMESTAMPS_IN_LOG</DefineConstants> -->
-    <!-- <DefineConstants>$(DefineConstants);FILTER_RCP_INTERRUPTS</DefineConstants> -->
-    <!-- <DefineConstants>$(DefineConstants);DEBUG_MI</DefineConstants> -->
-    <!-- <DefineConstants>$(DefineConstants);DEBUG_INTERRUPTS_PENDING</DefineConstants> -->
-    <!-- <DefineConstants>$(DefineConstants);HACK_FASTER_TIMER</DefineConstants> -->
-    <!-- <DefineConstants>$(DefineConstants);DEBUG_TRACE_LOG</DefineConstants> -->
-    <!-- <DefineConstants>$(DefineConstants);DEBUG_TRACE_LOG_GEN</DefineConstants> -->
-    <!-- <DefineConstants>$(DefineConstants);TRACE_LOG_HALT</DefineConstants> -->
-    <!-- <DefineConstants>$(DefineConstants);SAFE_MEMORY_ACCESS</DefineConstants> -->
-    <!-- <DefineConstants>$(DefineConstants);CPU_PROFILER</DefineConstants> -->
-    <!-- <DefineConstants>$(DefineConstants);CPU_FORCE_32</DefineConstants> -->
-    <!-- <DefineConstants>$(DefineConstants);DEBUG_ADDRESS_CHECKING</DefineConstants> -->
-    <!-- <DefineConstants>$(DefineConstants);DEBUG_DMA_HEX</DefineConstants> -->
-    <!-- <DefineConstants>$(DefineConstants);DEBUG_DMA_CMDS</DefineConstants> -->
-    <!-- <DefineConstants>$(DefineConstants);DEBUG_RDP_COMMANDS</DefineConstants> -->
-    <!-- <DefineConstants>$(DefineConstants);DEBUG_RDP_TRI_COMMANDS</DefineConstants> -->
-    <!-- <DefineConstants>$(DefineConstants);CHECK_ADDRESS_LEN</DefineConstants> -->
-    <!-- <DefineConstants>$(DefineConstants);DEBUG_ERET</DefineConstants> -->
-    <!-- <DefineConstants>$(DefineConstants);DEBUG_EPC</DefineConstants>  -->
-    <!-- <DefineConstants>$(DefineConstants);DEBUG_TLB</DefineConstants> -->
-    <!-- <DefineConstants>$(DefineConstants);DEBUG_TLB_TRANSLATE</DefineConstants> -->
-    <!-- <DefineConstants>$(DefineConstants);DEBUG_TLB_ENTRYHI</DefineConstants> -->
-
-    <!-- These 2 break unit tests -->
-    <!-- <DefineConstants>$(DefineConstants);CPU_CHECK_RESERVED</DefineConstants> -->
-    <DefineConstants>$(DefineConstants);CPU_ALWAYS_64</DefineConstants>
-    <!-- /// -->
-
-    <!-- <DefineConstants>$(DefineConstants);DEBUG_OS</DefineConstants> -->
-    <DefineConstants>$(DefineConstants);DISABLE_CPU_HOOKS</DefineConstants>
-    <!-- <DefineConstants>$(DefineConstants);FPU_DEBUG_INST</DefineConstants> -->
-    <!-- <DefineConstants>$(DefineConstants);DISABLE_TLB_SUPPORT</DefineConstants> -->
-    <!-- <DefineConstants>$(DefineConstants);FORCE_FPU_32</DefineConstants> -->
-    <DefineConstants>$(DefineConstants);FASTER_VI</DefineConstants>
-  </PropertyGroup>
   <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>

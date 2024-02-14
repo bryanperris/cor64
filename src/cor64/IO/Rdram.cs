@@ -8,91 +8,42 @@ using System.Threading.Tasks;
 
 namespace cor64.IO
 {
-    public class Rdram : BlockDevice
+    public class Rdram : N64MemoryDevice
     {
         private const int NORMAL_SIZE = 4 * 1024 * 1024;
         private const int MAXSIZE = 2 * NORMAL_SIZE;
 
-        private readonly UnmanagedBuffer m_Ram = new UnmanagedBuffer(MAXSIZE);
-        private readonly UnmanagedBuffer m_HiddenRam = new UnmanagedBuffer(NORMAL_SIZE);
-        private readonly UnmanagedBuffer m_DummyRead = new UnmanagedBuffer(4);
-        private readonly UnmanagedBuffer m_DummyWrite = new UnmanagedBuffer(4);
+        private readonly UnmanagedBuffer m_Ram = new(MAXSIZE);
+        private readonly UnmanagedBuffer m_HiddenRam = new(NORMAL_SIZE);
 
-        public override long Size => 0x03EFFFFF + 1;
+        public Rdram(N64MemoryController controller) : base(controller, 0x3F00000) {
+
+        }
 
         public IntPtr GetRamPointer(int offset)
         {
             return m_Ram.GetPointer().Offset(offset);
         }
 
-        public sealed override void Read(long position, byte[] buffer, int offset, int count)
-        {
-            int memOffset = (int)position;
-            var ptr = m_Ram.GetPointer().Offset(memOffset);
-
-            // XXX: This check ensures RDRAM boundary correctly functions
-            if (position >= MAXSIZE)
-            {
-                return;
+        protected override N64AlignedPtr DynamicReadMap(int offset) {
+            if (offset < MAXSIZE) {
+                return N64AlignedPtr.FromPtr(m_Ram.GetPointer() + offset);
             }
 
-            Marshal.Copy(ptr, buffer, offset, count);
+            return N64AlignedPtr.DUMMY;
         }
 
-        public sealed override void Write(long position, byte[] buffer, int offset, int count)
-        {
-            int memOffset = (int)position;
-            var ptr = m_Ram.GetPointer().Offset(memOffset);
-
-            // XXX: This check ensures RDRAM boundary correctly functions
-            if (position >= MAXSIZE)
-            {
-                return;
+        protected override N64AlignedPtr DynamicWriteMap(int offset) {
+            if (offset < MAXSIZE) {
+                return N64AlignedPtr.FromPtr(m_Ram.GetPointer() + offset);
             }
 
-            Marshal.Copy(buffer, offset, ptr, count);
+            return N64AlignedPtr.DUMMY;
         }
 
-        public override IntPtr[] GetReadPointerMap()
-        {
-            var map = new IntPtr[Size / 4];
-
-            for (int i = 0; i < map.Length; i++)
-            {
-                int pos = i * 4;
-
-                if (pos < MAXSIZE)
-                {
-                    map[i] = IntPtr.Add(m_Ram.GetPointer(), pos);
-                }
-                else
-                {
-                    map[i] = m_DummyRead.GetPointer();
-                }
-            }
-
-            return map;
-        }
-
-        public override IntPtr[] GetWritePointerMap()
-        {
-            var map = new IntPtr[Size / 4];
-
-            for (int i = 0; i < map.Length; i++)
-            {
-                int pos = i * 4;
-
-                if (pos < MAXSIZE)
-                {
-                    map[i] = IntPtr.Add(m_Ram.GetPointer(), pos);
-                }
-                else
-                {
-                    map[i] = m_DummyWrite.GetPointer();
-                }
-            }
-
-            return map;
+        public void Clear() {
+            m_Ram.Clear();
+            m_HiddenRam.Clear();
         }
 
         // The hidden bits (9th bit on RDRAM bus) is used by the RDP Zbuffer
@@ -106,5 +57,7 @@ namespace cor64.IO
         }
 
         public int HiddenLength => m_HiddenRam.Size;
+
+        public override string Name => "RDRAM";
     }
 }
